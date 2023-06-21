@@ -1,0 +1,15 @@
+[package]
+name = "embedded-bacnet"
+authors = ["David Haig"]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/ninjasource/embedded-bacnet.git"
+description = "A bacnet library for embedded systems (no_std)"
+keywords = ["bacnet", "embedded", "no_std"]
+categories = ["embedded", "no-std", "network-programming"]
+readme = "README.md"
+
+[dependencies]
+heapless = "0.7.16"
+arrayref = "0.3.7"
