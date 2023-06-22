@@ -1,17 +1,18 @@
 use crate::common::helper::{Buffer, Reader};
 
-use super::{i_am::IAm, who_is::WhoIs};
+use super::{i_am::IAm, read_property::ReadProperty, who_is::WhoIs};
 
 // Application Layer Protocol Data Unit
 #[derive(Debug)]
 pub enum ApplicationPdu {
     ConfirmedRequest(ConfirmedRequest),
     UnconfirmedRequest(UnconfirmedRequest),
+    ComplexAck(ComplexAck),
     // add more here
 }
 
 #[repr(u8)]
-pub enum PduType {
+pub enum ApduType {
     ConfirmedServiceRequest = 0,
     UnconfirmedServiceRequest = 1,
     SimpleAck = 2,
@@ -22,7 +23,7 @@ pub enum PduType {
     Abort = 7,
 }
 
-impl From<u8> for PduType {
+impl From<u8> for ApduType {
     fn from(value: u8) -> Self {
         match value {
             0 => Self::ConfirmedServiceRequest,
@@ -38,6 +39,7 @@ impl From<u8> for PduType {
     }
 }
 
+// preshifted by 4 bits
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum MaxSegments {
@@ -48,7 +50,7 @@ pub enum MaxSegments {
     _16 = 0x40,
     _32 = 0x50,
     _64 = 0x60,
-    _65 = 0x70,
+    _65 = 0x70, // default
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -59,7 +61,7 @@ pub enum MaxAdpu {
     _206 = 0x02,
     _480 = 0x03,
     _1024 = 0x04,
-    _1476 = 0x05,
+    _1476 = 0x05, // default
 }
 
 #[derive(Debug)]
@@ -127,26 +129,79 @@ pub enum ConfirmedServiceChoice {
     MaxBacnetConfirmedService = 34,
 }
 
+impl From<u8> for ConfirmedServiceChoice {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::AcknowledgeAlarm,
+            1 => Self::CovNotification,
+            2 => Self::EventNotification,
+            3 => Self::GetAlarmSummary,
+            4 => Self::GetEnrollmentSummary,
+            5 => Self::SubscribeCov,
+            6 => Self::AtomicReadFile,
+            7 => Self::AtomicWriteFile,
+            8 => Self::AddListElement,
+            9 => Self::RemoveListElement,
+            10 => Self::CreateObject,
+            11 => Self::DeleteObject,
+            12 => Self::ReadProperty,
+            13 => Self::ReadPropConditional,
+            14 => Self::ReadPropMultiple,
+            15 => Self::WriteProperty,
+            16 => Self::WritePropMultiple,
+            17 => Self::DeviceCommunicationControl,
+            18 => Self::PrivateTransfer,
+            19 => Self::TextMessage,
+            20 => Self::ReinitializeDevice,
+            21 => Self::VtOpen,
+            22 => Self::VtClose,
+            23 => Self::VtData,
+            24 => Self::Authenticate,
+            25 => Self::RequestKey,
+            26 => Self::ReadRange,
+            27 => Self::LifeSafetyOperation,
+            28 => Self::SubscribeCovProperty,
+            29 => Self::GetEventInformation,
+            30 => Self::SubscribeCovPropertyMultiple,
+            31 => Self::CovNotificationMultiple,
+            32 => Self::AuditNotification,
+            33 => Self::AuditLogQuery,
+            34 => Self::MaxBacnetConfirmedService,
+            _ => panic!("invalid confirmed service choice"),
+        }
+    }
+}
+
 impl ApplicationPdu {
     pub fn encode(&self, buffer: &mut Buffer) {
         match self {
             ApplicationPdu::ConfirmedRequest(req) => req.encode(buffer),
             ApplicationPdu::UnconfirmedRequest(req) => req.encode(buffer),
+            ApplicationPdu::ComplexAck(_) => todo!(),
         };
     }
 
     pub fn decode(reader: &mut Reader) -> Self {
         let byte0 = reader.read_byte();
-        let pdu_type: PduType = (byte0 >> 4).into();
+        let pdu_type: ApduType = (byte0 >> 4).into();
+        let pdu_flags = byte0 & 0x0F;
+        let _segmented_message = (pdu_flags & PduFlags::SegmentedMessage as u8) > 0;
+        let _more_follows = (pdu_flags & PduFlags::MoreFollows as u8) > 0;
+        let _segmented_response_accepted =
+            (pdu_flags & PduFlags::SegmentedResponseAccepted as u8) > 0;
 
         match pdu_type {
-            PduType::ConfirmedServiceRequest => {
+            ApduType::ConfirmedServiceRequest => {
                 let apdu = ConfirmedRequest::decode(reader);
                 ApplicationPdu::ConfirmedRequest(apdu)
             }
-            PduType::UnconfirmedServiceRequest => {
+            ApduType::UnconfirmedServiceRequest => {
                 let apdu = UnconfirmedRequest::decode(reader);
                 ApplicationPdu::UnconfirmedRequest(apdu)
+            }
+            ApduType::ComplexAck => {
+                let adpu = ComplexAck::decode(reader);
+                ApplicationPdu::ComplexAck(adpu)
             }
             _ => unimplemented!(),
         }
@@ -155,13 +210,83 @@ impl ApplicationPdu {
 
 #[derive(Debug)]
 pub struct ConfirmedRequest {
-    service_choice: ConfirmedServiceChoice,
-    invoke_id: u8,
+    pub max_segments: MaxSegments, // default 65
+    pub max_adpu: MaxAdpu,         // default 1476
+    pub invoke_id: u8,             // starts at 0
+    pub sequence_num: u8,          // default to 0
+    pub proposed_window_size: u8,  // default to 0
+    pub service: ConfirmedRequestSerivice,
+}
+
+#[derive(Debug)]
+pub struct ComplexAck {
+    pub invoke_id: u8, // starts at 0
+    pub service: ConfirmedRequestSerivice,
+}
+
+impl ComplexAck {
+    pub fn decode(reader: &mut Reader) -> Self {
+        let invoke_id = reader.read_byte();
+        let choice = reader.read_byte().into();
+
+        let service = match choice {
+            ConfirmedServiceChoice::ReadProperty => {
+                let apdu = ReadProperty::decode(reader);
+                ConfirmedRequestSerivice::ReadProperty(apdu)
+            }
+            _ => unimplemented!(),
+        };
+
+        Self { invoke_id, service }
+    }
+}
+
+#[derive(Debug)]
+pub enum ConfirmedRequestSerivice {
+    ReadProperty(ReadProperty),
+    // add more here
+}
+
+enum PduFlags {
+    Server = 0b0001,
+    SegmentedResponseAccepted = 0b0010,
+    MoreFollows = 0b0100,
+    SegmentedMessage = 0b1000,
 }
 
 impl ConfirmedRequest {
+    pub fn new(invoke_id: u8, service: ConfirmedRequestSerivice) -> Self {
+        Self {
+            max_segments: MaxSegments::_65,
+            max_adpu: MaxAdpu::_1476,
+            invoke_id,
+            sequence_num: 0,
+            proposed_window_size: 0,
+            service,
+        }
+    }
+
     pub fn encode(&self, buffer: &mut Buffer) {
-        buffer.push((PduType::ConfirmedServiceRequest as u8) << 4);
+        let max_segments_flag = match self.max_segments {
+            MaxSegments::_0 => 0,
+            _ => PduFlags::SegmentedResponseAccepted as u8,
+        };
+
+        let control = ((ApduType::ConfirmedServiceRequest as u8) << 4) | max_segments_flag;
+        buffer.push(control);
+        buffer.push(self.max_segments as u8 | self.max_adpu as u8);
+        buffer.push(self.invoke_id);
+
+        // TODO: handle Segment pdu
+
+        let service_choice = match self.service {
+            ConfirmedRequestSerivice::ReadProperty(_) => ConfirmedServiceChoice::ReadProperty,
+        };
+        buffer.push(service_choice as u8);
+
+        match &self.service {
+            ConfirmedRequestSerivice::ReadProperty(service) => service.encode(buffer),
+        };
     }
 
     pub fn decode(_reader: &mut Reader) -> Self {
@@ -177,7 +302,7 @@ pub enum UnconfirmedRequest {
 
 impl UnconfirmedRequest {
     pub fn encode(&self, buffer: &mut Buffer) {
-        buffer.push((PduType::UnconfirmedServiceRequest as u8) << 4);
+        buffer.push((ApduType::UnconfirmedServiceRequest as u8) << 4);
 
         match &self {
             Self::IAm(_) => todo!(),

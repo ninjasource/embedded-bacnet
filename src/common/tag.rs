@@ -1,4 +1,4 @@
-use super::helper::{encode_u16, encode_u32, Buffer, Reader};
+use super::helper::{Buffer, Reader};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TagType {
@@ -57,38 +57,45 @@ impl Tag {
     }
 
     pub fn encode(&self, context_specific: bool, buffer: &mut Buffer) {
-        let mut byte0 = 0;
-        let mut byte1 = 0;
+        let mut buf: [u8; 10] = [0; 10];
+        let mut len = 1;
 
         if context_specific {
-            byte0 |= 0x8;
+            buf[0] |= 0b1000
         }
 
         if self.number <= 14 {
-            byte0 |= self.number << 4;
+            buf[0] |= self.number << 4;
         } else {
-            byte0 |= 0xF0;
-            byte1 = self.number;
+            buf[0] |= 0xF0;
+            buf[1] = self.number;
+            len += 1;
         }
 
         if self.value <= 4 {
-            byte0 |= self.value as u8;
-            buffer.push(byte0);
-            buffer.push(byte1);
+            buf[0] |= self.value as u8;
         } else {
-            byte0 |= 5;
-            buffer.push(byte0);
-            buffer.push(byte1);
+            buf[0] |= 5;
+
             if self.value <= 253 {
-                buffer.push(self.value as u8);
+                buf[len] = self.value as u8;
+                len += 1;
             } else if self.value < u16::MAX as u32 {
-                buffer.push(254);
-                encode_u16(buffer, self.value as u16);
+                buf[len] = self.value as u8;
+                len += 1;
+                let tmp = u16::to_be_bytes(self.value as u16);
+                buf[len..len + tmp.len()].copy_from_slice(&tmp);
+                len += tmp.len();
             } else {
-                buffer.push(255);
-                encode_u32(buffer, self.value);
+                buf[len] = self.value as u8;
+                len += 1;
+                let tmp = u32::to_be_bytes(self.value);
+                buf[len..len + tmp.len()].copy_from_slice(&tmp);
+                len += tmp.len();
             }
         }
+
+        buffer.extend_from_slice(&buf[..len]);
     }
 
     pub fn decode(reader: &mut Reader) -> Self {

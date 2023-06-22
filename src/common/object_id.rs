@@ -1,11 +1,8 @@
 use super::{
     error::Error,
     helper::{decode_unsigned, Buffer, Reader},
+    spec::{BACNET_INSTANCE_BITS, BACNET_MAX_INSTANCE, BACNET_MAX_OBJECT},
 };
-
-pub const BACNET_MAX_INSTANCE: u32 = 0x3FFFFF;
-pub const BACNET_INSTANCE_BITS: u32 = 22;
-pub const BACNET_MAX_OBJECT: u32 = 0x3FF;
 
 #[derive(Debug)]
 pub struct ObjectId {

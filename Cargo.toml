@@ -13,3 +13,5 @@ readme = "README.md"
 [dependencies]
 heapless = "0.7.16"
 arrayref = "0.3.7"
+log = "0.4.19"
+simple_logger = "4.2.0"
