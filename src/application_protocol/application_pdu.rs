@@ -1,6 +1,11 @@
 use crate::common::helper::{Buffer, Reader};
 
-use super::{i_am::IAm, read_property::ReadProperty, who_is::WhoIs};
+use super::{
+    i_am::IAm,
+    read_property::{ReadProperty, ReadPropertyResponse},
+    read_property_multiple::ReadPropertyMultiple,
+    who_is::WhoIs,
+};
 
 // Application Layer Protocol Data Unit
 #[derive(Debug)]
@@ -220,8 +225,8 @@ pub struct ConfirmedRequest {
 
 #[derive(Debug)]
 pub struct ComplexAck {
-    pub invoke_id: u8, // starts at 0
-    pub service: ConfirmedRequestSerivice,
+    pub invoke_id: u8,
+    pub service: ComplexAckService,
 }
 
 impl ComplexAck {
@@ -231,8 +236,8 @@ impl ComplexAck {
 
         let service = match choice {
             ConfirmedServiceChoice::ReadProperty => {
-                let apdu = ReadProperty::decode(reader);
-                ConfirmedRequestSerivice::ReadProperty(apdu)
+                let apdu = ReadPropertyResponse::decode(reader);
+                ComplexAckService::ReadProperty(apdu)
             }
             _ => unimplemented!(),
         };
@@ -242,8 +247,16 @@ impl ComplexAck {
 }
 
 #[derive(Debug)]
+pub enum ComplexAckService {
+    ReadProperty(ReadPropertyResponse),
+    //  ReadPropertyMultiple(ReadPropertyResponse),
+    // add more here
+}
+
+#[derive(Debug)]
 pub enum ConfirmedRequestSerivice {
     ReadProperty(ReadProperty),
+    ReadPropertyMultiple(ReadPropertyMultiple),
     // add more here
 }
 
@@ -279,13 +292,15 @@ impl ConfirmedRequest {
 
         // TODO: handle Segment pdu
 
-        let service_choice = match self.service {
-            ConfirmedRequestSerivice::ReadProperty(_) => ConfirmedServiceChoice::ReadProperty,
-        };
-        buffer.push(service_choice as u8);
-
         match &self.service {
-            ConfirmedRequestSerivice::ReadProperty(service) => service.encode(buffer),
+            ConfirmedRequestSerivice::ReadProperty(service) => {
+                buffer.push(ConfirmedServiceChoice::ReadProperty as u8);
+                service.encode(buffer)
+            }
+            ConfirmedRequestSerivice::ReadPropertyMultiple(service) => {
+                buffer.push(ConfirmedServiceChoice::ReadPropMultiple as u8);
+                service.encode(buffer)
+            }
         };
     }
 

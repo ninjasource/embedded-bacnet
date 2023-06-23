@@ -37,7 +37,7 @@ impl IAm {
                 "expected unsigned_int tag type for IAm max_apdu field",
             ));
         }
-        let max_apdu = decode_unsigned(reader, tag.value)?;
+        let max_apdu = decode_unsigned(reader, tag.value);
         let max_apdu = max_apdu as usize;
 
         // parse a tag then segmentation
@@ -47,7 +47,7 @@ impl IAm {
                 "expected enumerated tag type for IAm segmentation field",
             ));
         }
-        let segmentation = decode_unsigned(reader, tag.value)?;
+        let segmentation = decode_unsigned(reader, tag.value) as u32;
         let segmentation = segmentation.try_into()?;
 
         // parse a tag then vendor_id
@@ -57,7 +57,7 @@ impl IAm {
                 "expected unsigned_int type for IAm vendor_id field",
             ));
         }
-        let vendor_id = decode_unsigned(reader, tag.value)?;
+        let vendor_id = decode_unsigned(reader, tag.value) as u32;
         if vendor_id > u16::MAX as u32 {
             return Err(Error::InvalidValue("vendor_id out of range for IAm"));
         }

@@ -11,6 +11,10 @@ pub struct ObjectId {
 }
 
 impl ObjectId {
+    pub fn new(object_type: ObjectType, id: u32) -> Self {
+        Self { object_type, id }
+    }
+
     pub fn encode(&self, buffer: &mut Buffer) {
         let value = ((self.object_type as u32 & BACNET_MAX_OBJECT) << BACNET_INSTANCE_BITS)
             | (self.id & BACNET_MAX_INSTANCE);
@@ -18,7 +22,7 @@ impl ObjectId {
     }
 
     pub fn decode(reader: &mut Reader, size: u32) -> Result<Self, Error> {
-        let value = decode_unsigned(reader, size)?;
+        let value = decode_unsigned(reader, size) as u32;
         let object_type = value >> BACNET_INSTANCE_BITS & BACNET_MAX_OBJECT;
         let object_type = ObjectType::from(object_type);
         let id = value & BACNET_MAX_INSTANCE;
