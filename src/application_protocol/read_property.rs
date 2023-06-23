@@ -12,13 +12,13 @@ use crate::common::{
 };
 
 #[derive(Debug)]
-pub struct ReadPropertyResponse {
+pub struct ReadPropertyAck {
     pub object_id: ObjectId,
     pub property_id: PropertyId,
     pub properties: Vec<ObjectId, 512>,
 }
 
-impl ReadPropertyResponse {
+impl ReadPropertyAck {
     pub fn decode(reader: &mut Reader) -> Self {
         let object_id = decode_context_object_id(reader);
         let (tag_num, property_id) = decode_context_enumerated(reader);

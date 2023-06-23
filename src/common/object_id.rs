@@ -35,62 +35,62 @@ impl ObjectId {
 #[repr(u32)]
 pub enum ObjectType {
     ObjectAnalogInput = 0,
-    ObjectAnalogOutput,
-    ObjectAnalogValue,
-    ObjectBinaryInput,
-    ObjectBinaryOutput,
-    ObjectBinaryValue,
-    ObjectCalendar,
-    ObjectCommand,
-    ObjectDevice,
-    ObjectEventEnrollment,
-    ObjectFile,
-    ObjectGroup,
-    ObjectLoop,
-    ObjectMultiStateInput,
-    ObjectMultiStateOutput,
-    ObjectNotificationClass,
-    ObjectProgram,
-    ObjectSchedule,
-    ObjectAveraging,
-    ObjectMultiStateValue,
-    ObjectTrendlog,
-    ObjectLifeSafetyPoint,
-    ObjectLifeSafetyZone,
-    ObjectAccumulator,
-    ObjectPulseConverter,
-    ObjectEventLog,
-    ObjectGlobalGroup,
-    ObjectTrendLogMultiple,
-    ObjectLoadControl,
-    ObjectStructuredView,
-    ObjectAccessDoor,
-    ObjectTimer,
-    ObjectAccessCredential, // addendum 2008-j
-    ObjectAccessPoint,
-    ObjectAccessRights,
-    ObjectAccessUser,
-    ObjectAccessZone,
-    ObjectCredentialDataInput,   // authentication-factor-input
-    ObjectNetworkSecurity,       // Addendum 2008-g
-    ObjectBitstringValue,        // Addendum 2008-w
-    ObjectCharacterstringValue,  // Addendum 2008-w
-    ObjectDatePatternValue,      // Addendum 2008-w
-    ObjectDateValue,             // Addendum 2008-w
-    ObjectDatetimePatternValue,  // Addendum 2008-w
-    ObjectDatetimeValue,         // Addendum 2008-w
-    ObjectIntegerValue,          // Addendum 2008-w
-    ObjectLargeAnalogValue,      // Addendum 2008-w
-    ObjectOctetstringValue,      // Addendum 2008-w
-    ObjectPositiveIntegerValue,  // Addendum 2008-w
-    ObjectTimePatternValue,      // Addendum 2008-w
-    ObjectTimeValue,             // Addendum 2008-w
-    ObjectNotificationForwarder, // Addendum 2010-af
-    ObjectAlertEnrollment,       // Addendum 2010-af
-    ObjectChannel,               // Addendum 2010-aa
-    ObjectLightingOutput,        // Addendum 2010-i
-    ObjectBinaryLightingOutput,  // Addendum 135-2012az
-    ObjectNetworkPort,           // Addendum 135-2012az
+    ObjectAnalogOutput = 1,
+    ObjectAnalogValue = 2,
+    ObjectBinaryInput = 3,
+    ObjectBinaryOutput = 4,
+    ObjectBinaryValue = 5,
+    ObjectCalendar = 6,
+    ObjectCommand = 7,
+    ObjectDevice = 8,
+    ObjectEventEnrollment = 9,
+    ObjectFile = 10,
+    ObjectGroup = 11,
+    ObjectLoop = 12,
+    ObjectMultiStateInput = 13,
+    ObjectMultiStateOutput = 14,
+    ObjectNotificationClass = 15,
+    ObjectProgram = 16,
+    ObjectSchedule = 17,
+    ObjectAveraging = 18,
+    ObjectMultiStateValue = 19,
+    ObjectTrendlog = 20,
+    ObjectLifeSafetyPoint = 21,
+    ObjectLifeSafetyZone = 22,
+    ObjectAccumulator = 23,
+    ObjectPulseConverter = 24,
+    ObjectEventLog = 25,
+    ObjectGlobalGroup = 26,
+    ObjectTrendLogMultiple = 27,
+    ObjectLoadControl = 28,
+    ObjectStructuredView = 29,
+    ObjectAccessDoor = 30,
+    ObjectTimer = 31,
+    ObjectAccessCredential = 32, // addendum 2008-j
+    ObjectAccessPoint = 33,
+    ObjectAccessRights = 34,
+    ObjectAccessUser = 35,
+    ObjectAccessZone = 36,
+    ObjectCredentialDataInput = 37,   // authentication-factor-input
+    ObjectNetworkSecurity = 38,       // Addendum 2008-g
+    ObjectBitstringValue = 39,        // Addendum 2008-w
+    ObjectCharacterstringValue = 40,  // Addendum 2008-w
+    ObjectDatePatternValue = 41,      // Addendum 2008-w
+    ObjectDateValue = 42,             // Addendum 2008-w
+    ObjectDatetimePatternValue = 43,  // Addendum 2008-w
+    ObjectDatetimeValue = 44,         // Addendum 2008-w
+    ObjectIntegerValue = 45,          // Addendum 2008-w
+    ObjectLargeAnalogValue = 46,      // Addendum 2008-w
+    ObjectOctetstringValue = 47,      // Addendum 2008-w
+    ObjectPositiveIntegerValue = 48,  // Addendum 2008-w
+    ObjectTimePatternValue = 49,      // Addendum 2008-w
+    ObjectTimeValue = 50,             // Addendum 2008-w
+    ObjectNotificationForwarder = 51, // Addendum 2010-af
+    ObjectAlertEnrollment = 52,       // Addendum 2010-af
+    ObjectChannel = 53,               // Addendum 2010-aa
+    ObjectLightingOutput = 54,        // Addendum 2010-i
+    ObjectBinaryLightingOutput = 55,  // Addendum 135-2012az
+    ObjectNetworkPort = 56,           // Addendum 135-2012az
     // Enumerated values 0-127 are reserved for definition by ASHRAE.
     // Enumerated values 128-1023 may be used by others subject to
     // the procedures and constraints described in Clause 23.

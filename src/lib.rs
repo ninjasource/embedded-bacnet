@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 #![no_std]
 
+extern crate alloc;
+
 // This library supports the IP version of bacnet and this is how the network packet is wrapped:
 //
 // UdpPacket

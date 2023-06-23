@@ -33,6 +33,10 @@ pub struct Reader {
 }
 
 impl Reader {
+    pub fn eof(&self) -> bool {
+        self.index == self.buf.len()
+    }
+
     pub fn new(payload: &[u8]) -> Self {
         let mut buf: Vec<u8, 1024> = Vec::new();
         buf.extend_from_slice(payload).unwrap();

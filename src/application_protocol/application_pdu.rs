@@ -2,8 +2,8 @@ use crate::common::helper::{Buffer, Reader};
 
 use super::{
     i_am::IAm,
-    read_property::{ReadProperty, ReadPropertyResponse},
-    read_property_multiple::ReadPropertyMultiple,
+    read_property::{ReadProperty, ReadPropertyAck},
+    read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleAck},
     who_is::WhoIs,
 };
 
@@ -236,8 +236,12 @@ impl ComplexAck {
 
         let service = match choice {
             ConfirmedServiceChoice::ReadProperty => {
-                let apdu = ReadPropertyResponse::decode(reader);
+                let apdu = ReadPropertyAck::decode(reader);
                 ComplexAckService::ReadProperty(apdu)
+            }
+            ConfirmedServiceChoice::ReadPropMultiple => {
+                let apdu = ReadPropertyMultipleAck::decode(reader);
+                ComplexAckService::ReadPropertyMultiple(apdu)
             }
             _ => unimplemented!(),
         };
@@ -248,8 +252,8 @@ impl ComplexAck {
 
 #[derive(Debug)]
 pub enum ComplexAckService {
-    ReadProperty(ReadPropertyResponse),
-    //  ReadPropertyMultiple(ReadPropertyResponse),
+    ReadProperty(ReadPropertyAck),
+    ReadPropertyMultiple(ReadPropertyMultipleAck),
     // add more here
 }
 

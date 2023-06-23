@@ -28,7 +28,7 @@ fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
 
     // broadcast_who_is()
-    // read_property_list()
+    //read_property_list()
     read_property_multiple()
 }
 
@@ -37,8 +37,8 @@ fn read_property_multiple() -> Result<(), Error> {
 
     // encode packet
     let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 2);
-    let mut property_ids = heapless::Vec::new();
-    property_ids.push(PropertyId::PropAll).unwrap();
+    let mut property_ids = Vec::new();
+    property_ids.push(PropertyId::PropPresentValue);
     let rpm = ReadPropertyMultiple::new(object_id, property_ids);
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
