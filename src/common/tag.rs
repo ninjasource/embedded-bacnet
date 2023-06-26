@@ -1,27 +1,34 @@
 use super::helper::{Buffer, Reader};
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum TagType {
-    Null,
-    Boolean,
-    UnsignedInt,
-    SignedInt,
-    Real,
-    Double,
-    OctetString,
-    CharacterString,
-    BitString,
-    Enumerated,
-    Date,
-    Time,
-    ObjectId,
-    Reserve1,
-    Reserve2,
-    Reserve3,
-    Unknown,
+// byte0:
+// bits 7-4 tag_num
+// bit  3   class (0 = application tag_num, 1 = context specific tag_num)
+// bits 2-0 length / value / type
+//
+// Can use additional bytes as specified in bits 2-0 above
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
+pub enum ApplicationTagNumber {
+    Null = 0,
+    Boolean = 1,
+    UnsignedInt = 2,
+    SignedInt = 3,
+    Real = 4,
+    Double = 5,
+    OctetString = 6,
+    CharacterString = 7,
+    BitString = 8,
+    Enumerated = 9,
+    Date = 10,
+    Time = 11,
+    ObjectId = 12,
+    Reserve1 = 13,
+    Reserve2 = 14,
+    Reserve3 = 15,
 }
 
-impl From<u8> for TagType {
+impl From<u8> for ApplicationTagNumber {
     fn from(tag_number: u8) -> Self {
         match tag_number {
             0 => Self::Null,
@@ -40,36 +47,48 @@ impl From<u8> for TagType {
             13 => Self::Reserve1,
             14 => Self::Reserve2,
             15 => Self::Reserve3,
-            _ => Self::Unknown,
+            _ => unreachable!(), // tag_number is only 4 bits
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum TagNumber {
+    Application(ApplicationTagNumber),
+    ContextSpecific(u8),
 }
 
 #[derive(Debug)]
 pub struct Tag {
-    pub number: u8,
+    pub number: TagNumber,
     pub value: u32,
 }
 
 impl Tag {
-    pub fn new(number: u8, value: u32) -> Self {
+    pub fn new(number: TagNumber, value: u32) -> Self {
         Self { number, value }
     }
 
-    pub fn encode(&self, context_specific: bool, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Buffer) {
         let mut buf: [u8; 10] = [0; 10];
         let mut len = 1;
 
-        if context_specific {
-            buf[0] |= 0b1000
-        }
+        match &self.number {
+            TagNumber::Application(num) => {
+                buf[0] |= (*num as u8) << 4;
+            }
+            TagNumber::ContextSpecific(num) => {
+                let num = *num;
+                buf[0] |= 0b1000; // set class to context specific
 
-        if self.number <= 14 {
-            buf[0] |= self.number << 4;
-        } else {
-            buf[0] |= 0xF0;
-            buf[1] = self.number;
-            len += 1;
+                if num <= 14 {
+                    buf[0] |= num << 4;
+                } else {
+                    buf[0] |= 0xF0;
+                    buf[1] = num;
+                    len += 1;
+                }
+            }
         }
 
         if self.value <= 4 {
@@ -129,41 +148,44 @@ impl Tag {
             Self { number, value }
         }
     }
-
-    pub fn tag_type(&self) -> TagType {
-        self.number.into()
-    }
 }
 
 // returns tag_number and byte0 because we need to reuse byte0 elsewhere
-fn decode_tag_number(reader: &mut Reader) -> (u8, u8) {
+fn decode_tag_number(reader: &mut Reader) -> (TagNumber, u8) {
     let byte0 = reader.read_byte();
 
-    if is_extended_tag_number(byte0) {
-        let num = reader.read_byte();
-        (num, byte0)
+    if is_context_specific(byte0) {
+        // context specific tag num
+        if is_extended_tag_number(byte0) {
+            let num = reader.read_byte();
+            (TagNumber::ContextSpecific(num), byte0)
+        } else {
+            let num = byte0 >> 4;
+            (TagNumber::ContextSpecific(num), byte0)
+        }
     } else {
-        let num = byte0 >> 4;
-        (num, byte0)
+        // application tag num
+        let num = (byte0 >> 4).into();
+        (TagNumber::Application(num), byte0)
     }
 }
 
-fn is_extended_tag_number(tagnum: u8) -> bool {
-    tagnum & 0xF0 == 0xF0
+fn is_extended_tag_number(byte0: u8) -> bool {
+    byte0 & 0xF0 == 0xF0
 }
 
-fn is_extended_value(tagnum: u8) -> bool {
-    tagnum & 0x07 == 5
+fn is_extended_value(byte0: u8) -> bool {
+    byte0 & 0x07 == 0x05
 }
 
-fn is_context_specific(tagnum: u8) -> bool {
-    tagnum & 0x08 == 0x08
+fn is_context_specific(byte0: u8) -> bool {
+    byte0 & 0x08 == 0x08
 }
 
-fn is_opening_tag(tagnum: u8) -> bool {
-    tagnum & 0x07 == 6
+fn is_opening_tag(byte0: u8) -> bool {
+    byte0 & 0x07 == 0x06
 }
 
-fn is_closing_tag(tagnum: u8) -> bool {
-    tagnum & 0x07 == 7
+fn is_closing_tag(byte0: u8) -> bool {
+    byte0 & 0x07 == 0x07
 }

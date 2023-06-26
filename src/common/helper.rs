@@ -1,7 +1,7 @@
 use arrayref::array_ref;
 use heapless::Vec;
 
-use crate::common::tag::Tag;
+use crate::common::tag::{ApplicationTagNumber, Tag, TagNumber};
 
 use super::{error::Error, object_id::ObjectId, property_id::PropertyId};
 
@@ -113,14 +113,18 @@ pub fn parse_unsigned(bytes: &[u8], len: u32) -> Result<(&[u8], u32), Error> {
 
 pub fn decode_context_object_id(reader: &mut Reader) -> ObjectId {
     let tag = Tag::decode(reader);
-    assert_eq!(tag.number, 0, "unexpected object_id tag number");
+    assert_eq!(
+        tag.number,
+        TagNumber::Application(ApplicationTagNumber::ObjectId),
+        "unexpected object_id tag number"
+    );
 
     ObjectId::decode(reader, tag.value).unwrap()
 }
 
 pub fn encode_context_object_id(buffer: &mut Buffer, tag_number: u8, object_id: &ObjectId) {
-    let tag = Tag::new(tag_number, 4);
-    tag.encode(true, buffer);
+    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), 4);
+    tag.encode(buffer);
     object_id.encode(buffer);
 }
 
@@ -157,16 +161,16 @@ pub fn encode_context_unsigned(buffer: &mut Buffer, tag_number: u8, value: u32) 
         4
     };
 
-    let tag = Tag::new(tag_number, len);
-    tag.encode(true, buffer);
+    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
+    tag.encode(buffer);
     encode_unsigned(buffer, value as u64);
 }
 
-pub fn decode_context_enumerated(reader: &mut Reader) -> (u8, PropertyId) {
+pub fn decode_context_enumerated(reader: &mut Reader) -> (Tag, PropertyId) {
     let tag = Tag::decode(reader);
     let property_id: PropertyId = (decode_unsigned(reader, tag.value) as u32).into();
 
-    (tag.number, property_id)
+    (tag, property_id)
 }
 
 pub fn encode_context_enumerated(buffer: &mut Buffer, tag_number: u8, property_id: PropertyId) {
@@ -181,8 +185,8 @@ pub fn encode_context_enumerated(buffer: &mut Buffer, tag_number: u8, property_i
         4
     };
 
-    let tag = Tag::new(tag_number, len);
-    tag.encode(true, buffer);
+    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
+    tag.encode(buffer);
     encode_unsigned(buffer, value as u64);
 }
 

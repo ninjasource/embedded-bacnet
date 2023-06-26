@@ -3,7 +3,7 @@ use crate::common::{
     helper::{decode_unsigned, Reader},
     object_id::{ObjectId, ObjectType},
     spec::Segmentation,
-    tag::{Tag, TagType},
+    tag::{ApplicationTagNumber, Tag, TagNumber},
 };
 
 #[derive(Debug)]
@@ -18,7 +18,7 @@ impl IAm {
     pub fn decode(reader: &mut Reader) -> Result<Self, Error> {
         // parse a tag, starting from after the pdu type and service choice, then the object_id
         let tag = Tag::decode(reader);
-        if tag.tag_type() != TagType::ObjectId {
+        if tag.number != TagNumber::Application(ApplicationTagNumber::ObjectId) {
             return Err(Error::InvalidValue(
                 "expected object_id tag type for IAm device_id field",
             ));
@@ -32,7 +32,7 @@ impl IAm {
 
         // parse a tag then max_apgu
         let tag = Tag::decode(reader);
-        if tag.tag_type() != TagType::UnsignedInt {
+        if tag.number != TagNumber::Application(ApplicationTagNumber::UnsignedInt) {
             return Err(Error::InvalidValue(
                 "expected unsigned_int tag type for IAm max_apdu field",
             ));
@@ -42,7 +42,7 @@ impl IAm {
 
         // parse a tag then segmentation
         let tag = Tag::decode(reader);
-        if tag.tag_type() != TagType::Enumerated {
+        if tag.number != TagNumber::Application(ApplicationTagNumber::Enumerated) {
             return Err(Error::InvalidValue(
                 "expected enumerated tag type for IAm segmentation field",
             ));
@@ -52,7 +52,7 @@ impl IAm {
 
         // parse a tag then vendor_id
         let tag = Tag::decode(reader);
-        if tag.tag_type() != TagType::UnsignedInt {
+        if tag.number != TagNumber::Application(ApplicationTagNumber::UnsignedInt) {
             return Err(Error::InvalidValue(
                 "expected unsigned_int type for IAm vendor_id field",
             ));

@@ -8,7 +8,7 @@ use crate::common::{
     object_id::ObjectId,
     property_id::PropertyId,
     spec::BACNET_ARRAY_ALL,
-    tag::Tag,
+    tag::{Tag, TagNumber},
 };
 
 #[derive(Debug)]
@@ -21,19 +21,27 @@ pub struct ReadPropertyAck {
 impl ReadPropertyAck {
     pub fn decode(reader: &mut Reader) -> Self {
         let object_id = decode_context_object_id(reader);
-        let (tag_num, property_id) = decode_context_enumerated(reader);
-        assert_eq!(tag_num, 1, "invalid property id tag");
+        let (tag, property_id) = decode_context_enumerated(reader);
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(1),
+            "invalid property id tag"
+        );
 
         match property_id {
             PropertyId::PropObjectList => {
                 let tag = Tag::decode(reader);
-                assert_eq!(tag.number, 3, "expected opening tag");
+                assert_eq!(
+                    tag.number,
+                    TagNumber::ContextSpecific(3),
+                    "expected opening tag"
+                );
 
                 let mut properties = Vec::new();
 
                 loop {
                     let tag = Tag::decode(reader);
-                    if tag.number == 3 {
+                    if tag.number == TagNumber::ContextSpecific(3) {
                         // closing tag
                         break;
                     }
