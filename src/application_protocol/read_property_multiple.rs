@@ -104,7 +104,8 @@ impl ReadPropertyMultipleAck {
                     }
                 } else {
                     let tag = Tag::decode(reader);
-                    let value = ApplicationDataValue::decode(&tag, reader);
+                    let value =
+                        ApplicationDataValue::decode(&tag, &object_id, &property_id, reader);
                     let property_value = PropertyValue::PropValue(value);
 
                     let tag = Tag::decode(reader);

@@ -7,8 +7,9 @@ use embedded_bacnet::{
         application_pdu::{
             ApplicationPdu, ConfirmedRequest, ConfirmedRequestSerivice, UnconfirmedRequest,
         },
+        primitives::data_value::{ApplicationDataValue, Enumerated},
         read_property::ReadProperty,
-        read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleObject},
+        read_property_multiple::{PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject},
         who_is::WhoIs,
     },
     common::{
@@ -38,7 +39,7 @@ fn learn_controller() -> Result<(), Error> {
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
     // encode packet
-    let object_id = ObjectId::new(ObjectType::ObjectDevice, 20088);
+    let object_id = ObjectId::new(ObjectType::ObjectDevice, 79079);
     let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(read_property));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
@@ -60,28 +61,32 @@ fn learn_controller() -> Result<(), Error> {
     let mut buf = vec![0; 64 * 1024];
     let (n, peer) = socket.recv_from(&mut buf).unwrap();
     let payload = &buf[..n];
-    //println!("Received: {:02x?} from {:?}", payload, peer);
+    println!("Received: {:02x?} from {:?}", payload, peer);
     let mut reader = Reader::new(payload);
     let message = DataLink::decode(&mut reader);
     if let Some(ack) = message.get_read_property_ack() {
         // let mut objects = Vec::new();
         for item in &ack.properties {
             match item.object_type {
-                ObjectType::ObjectBinaryOutput | ObjectType::ObjectBinaryInput => {
+                ObjectType::ObjectBinaryOutput
+                | ObjectType::ObjectBinaryInput
+                | ObjectType::ObjectBinaryValue => {
                     let mut property_ids = Vec::new();
                     property_ids.push(PropertyId::PropObjectName);
                     property_ids.push(PropertyId::PropPresentValue);
+                    property_ids.push(PropertyId::PropStatusFlags);
                     let rpm = ReadPropertyMultipleObject::new(*item, property_ids);
-
                     get_multi(rpm, &socket)?;
                 }
-                ObjectType::ObjectAnalogInput | ObjectType::ObjectAnalogOutput => {
+                ObjectType::ObjectAnalogInput
+                | ObjectType::ObjectAnalogOutput
+                | ObjectType::ObjectAnalogValue => {
                     let mut property_ids = Vec::new();
                     property_ids.push(PropertyId::PropObjectName);
                     property_ids.push(PropertyId::PropPresentValue);
                     property_ids.push(PropertyId::PropUnits);
+                    property_ids.push(PropertyId::PropStatusFlags);
                     let rpm = ReadPropertyMultipleObject::new(*item, property_ids);
-
                     get_multi(rpm, &socket)?;
                 }
                 _ => {}
@@ -91,6 +96,8 @@ fn learn_controller() -> Result<(), Error> {
             // if objects.len() > 18 {
             //     break;
             // }
+
+            // break;
         }
 
         /*
@@ -114,6 +121,27 @@ fn learn_controller() -> Result<(), Error> {
     Ok(())
 }
 
+fn get_multi_all(rpm: ReadPropertyMultipleObject, socket: &UdpSocket) -> Result<(), Error> {
+    let rpm = ReadPropertyMultiple::new(vec![rpm]);
+    //println!("len: {} {:?}", rpm.objects.len(), rpm);
+    let buffer = read_property_multiple_to_bytes(rpm);
+    let addr = format!("192.168.1.249:{}", 0xBAC0);
+    socket.send_to(buffer.to_bytes(), &addr)?;
+
+    let mut buf = vec![0; 1024];
+
+    let (n, peer) = socket.recv_from(&mut buf).unwrap();
+    let payload = &buf[..n];
+    let mut reader = Reader::new(payload);
+    let message = DataLink::decode(&mut reader);
+
+    if let Some(ack) = message.get_read_property_multiple_ack() {
+        println!("{:?}", ack);
+    }
+
+    Ok(())
+}
+
 fn get_multi(rpm: ReadPropertyMultipleObject, socket: &UdpSocket) -> Result<(), Error> {
     let rpm = ReadPropertyMultiple::new(vec![rpm]);
     //println!("len: {} {:?}", rpm.objects.len(), rpm);
@@ -131,14 +159,43 @@ fn get_multi(rpm: ReadPropertyMultipleObject, socket: &UdpSocket) -> Result<(), 
 
     if let Some(ack) = message.get_read_property_multiple_ack() {
         //println!("{:?}", ack);
+        //return Ok(());
         let object = &ack.objects[0];
         match object.results.len() {
-            2 => println!("{}: {}", object.results[0].value, object.results[1].value),
-            3 => println!(
-                "{}: {} {}",
-                object.results[0].value, object.results[1].value, object.results[2].value
-            ),
-            _ => {}
+            3 => {
+                let value = match &object.results[1].value {
+                    PropertyValue::PropValue(ApplicationDataValue::Enumerated(
+                        Enumerated::Binary(x),
+                    )) => format!("{x:?}"),
+                    x => format!("{x:?}"),
+                };
+                println!(
+                    "{:?}({}) {}: {}",
+                    object.object_id.object_type,
+                    object.object_id.id,
+                    object.results[0].value,
+                    value
+                );
+            }
+            4 => {
+                let units = match &object.results[2].value {
+                    PropertyValue::PropValue(ApplicationDataValue::Enumerated(
+                        Enumerated::Units(x),
+                    )) => format!("{x:?}"),
+                    _ => format!(""),
+                };
+                println!(
+                    "{:?}({}) {}: {} {}",
+                    object.object_id.object_type,
+                    object.object_id.id,
+                    object.results[0].value,
+                    object.results[1].value,
+                    units
+                );
+            }
+            _ => {
+                println!("none")
+            }
         }
         //  ack.objects[0].results[0].value
     }

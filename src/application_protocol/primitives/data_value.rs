@@ -4,8 +4,9 @@ use alloc::{borrow::ToOwned, string::String};
 
 use crate::common::{
     helper::{decode_unsigned, Reader},
-    object_id::ObjectId,
+    object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
+    spec::{Binary, EngineeringUnits},
     tag::{ApplicationTagNumber, Tag, TagNumber},
 };
 
@@ -18,9 +19,16 @@ pub enum ApplicationDataValue {
     Time(Time),
     ObjectId(ObjectId),
     CharacterString(CharacterString),
-    Enumerated(PropertyId),
+    Enumerated(Enumerated),
     BitString(BitString),
     UnsignedInt(u32),
+}
+
+#[derive(Debug)]
+pub enum Enumerated {
+    Units(EngineeringUnits),
+    Binary(Binary),
+    Unknown(u32),
 }
 
 #[derive(Debug)]
@@ -81,7 +89,12 @@ impl CharacterString {
 }
 
 impl ApplicationDataValue {
-    pub fn decode(tag: &Tag, reader: &mut Reader) -> Self {
+    pub fn decode(
+        tag: &Tag,
+        object_id: &ObjectId,
+        property_id: &PropertyId,
+        reader: &mut Reader,
+    ) -> Self {
         let tag_num = match tag.number {
             TagNumber::Application(x) => x,
             TagNumber::ContextSpecific(_) => panic!("application tag number expected"),
@@ -101,8 +114,25 @@ impl ApplicationDataValue {
                 ApplicationDataValue::CharacterString(text)
             }
             ApplicationTagNumber::Enumerated => {
-                let property_id: PropertyId = (decode_unsigned(reader, tag.value) as u32).into();
-                ApplicationDataValue::Enumerated(property_id)
+                let value = decode_unsigned(reader, tag.value) as u32;
+                let value = match property_id {
+                    PropertyId::PropUnits => {
+                        let units = value.try_into().unwrap();
+                        Enumerated::Units(units)
+                    }
+                    PropertyId::PropPresentValue => match object_id.object_type {
+                        ObjectType::ObjectBinaryInput
+                        | ObjectType::ObjectBinaryOutput
+                        | ObjectType::ObjectBinaryValue => {
+                            let binary = value.try_into().unwrap();
+                            Enumerated::Binary(binary)
+                        }
+                        _ => Enumerated::Unknown(value),
+                    },
+
+                    _ => Enumerated::Unknown(value),
+                };
+                ApplicationDataValue::Enumerated(value)
             }
             ApplicationTagNumber::BitString => {
                 let bit_string = BitString::decode(reader, tag.value);
