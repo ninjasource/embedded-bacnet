@@ -4,7 +4,7 @@ use super::{
     spec::{BACNET_INSTANCE_BITS, BACNET_MAX_INSTANCE, BACNET_MAX_OBJECT},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ObjectId {
     pub object_type: ObjectType,
     pub id: u32,

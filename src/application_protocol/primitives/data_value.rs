@@ -1,4 +1,4 @@
-use core::str::from_utf8;
+use core::{fmt::Display, str::from_utf8};
 
 use alloc::{borrow::ToOwned, string::String};
 
@@ -42,6 +42,18 @@ pub struct Time {
 #[derive(Debug)]
 pub struct CharacterString {
     pub inner: String,
+}
+
+impl Display for ApplicationDataValue {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ApplicationDataValue::Real(x) => write!(f, "{}", x),
+            ApplicationDataValue::Double(x) => write!(f, "{}", x),
+            ApplicationDataValue::CharacterString(x) => write!(f, "{}", &x.inner),
+            ApplicationDataValue::Boolean(x) => write!(f, "{}", x),
+            x => write!(f, "{:?}", x),
+        }
+    }
 }
 
 #[derive(Debug)]

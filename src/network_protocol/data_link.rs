@@ -1,6 +1,13 @@
-use crate::common::helper::{Buffer, Reader};
+use crate::{
+    application_protocol::{
+        application_pdu::{ApplicationPdu, ComplexAckService},
+        read_property::ReadPropertyAck,
+        read_property_multiple::ReadPropertyMultipleAck,
+    },
+    common::helper::{Buffer, Reader},
+};
 
-use super::network_pdu::NetworkPdu;
+use super::network_pdu::{NetworkMessage, NetworkPdu};
 
 // Bacnet Virtual Link Control
 #[derive(Debug)]
@@ -21,6 +28,39 @@ impl DataLink {
 
     pub fn new(function: DataLinkFunction) -> Self {
         Self { function }
+    }
+
+    fn get_ack(&self) -> Option<&ComplexAckService> {
+        match &self.function {
+            DataLinkFunction::OriginalUnicastNpdu(x) => match &x.network_message {
+                NetworkMessage::Apdu(apdu) => match &apdu {
+                    ApplicationPdu::ComplexAck(ack) => Some(&ack.service),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    pub fn get_read_property_ack(&self) -> Option<&ReadPropertyAck> {
+        match self.get_ack() {
+            Some(ack) => match ack {
+                ComplexAckService::ReadProperty(ack) => Some(ack),
+                _ => None,
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_read_property_multiple_ack(&self) -> Option<&ReadPropertyMultipleAck> {
+        match self.get_ack() {
+            Some(ack) => match ack {
+                ComplexAckService::ReadPropertyMultiple(ack) => Some(ack),
+                _ => None,
+            },
+            None => None,
+        }
     }
 
     pub fn encode(&self, buffer: &mut Buffer) {

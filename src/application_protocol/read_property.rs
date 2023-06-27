@@ -1,9 +1,9 @@
-use heapless::Vec;
+use alloc::vec::Vec;
 
 use crate::common::{
     helper::{
-        decode_context_enumerated, decode_context_object_id, encode_context_enumerated,
-        encode_context_object_id, encode_context_unsigned, Buffer, Reader,
+        decode_context_enumerated, encode_context_enumerated, encode_context_object_id,
+        encode_context_unsigned, Buffer, Reader,
     },
     object_id::ObjectId,
     property_id::PropertyId,
@@ -15,12 +15,18 @@ use crate::common::{
 pub struct ReadPropertyAck {
     pub object_id: ObjectId,
     pub property_id: PropertyId,
-    pub properties: Vec<ObjectId, 512>,
+    pub properties: Vec<ObjectId>,
 }
 
 impl ReadPropertyAck {
     pub fn decode(reader: &mut Reader) -> Self {
-        let object_id = decode_context_object_id(reader);
+        let tag = Tag::decode(reader);
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(0),
+            "invalid object id tag"
+        );
+        let object_id = ObjectId::decode(reader, tag.value).unwrap();
         let (tag, property_id) = decode_context_enumerated(reader);
         assert_eq!(
             tag.number,
@@ -47,7 +53,7 @@ impl ReadPropertyAck {
                     }
 
                     let object_id = ObjectId::decode(reader, tag.value).unwrap();
-                    properties.push(object_id).unwrap();
+                    properties.push(object_id);
                 }
 
                 return Self {

@@ -1,3 +1,5 @@
+use core::fmt::Display;
+
 use alloc::{string::String, vec::Vec};
 
 use crate::{
@@ -36,6 +38,15 @@ pub enum PropertyValue {
     PropValue(ApplicationDataValue),
     PropDescription(String),
     PropObjectName(String),
+}
+
+impl Display for PropertyValue {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match &self {
+            Self::PropValue(x) => write!(f, "{}", x),
+            _ => write!(f, "property value unprintable",),
+        }
+    }
 }
 
 impl ReadPropertyMultipleAck {
@@ -124,37 +135,52 @@ impl ReadPropertyMultipleAck {
 
 #[derive(Debug)]
 pub struct ReadPropertyMultiple {
-    pub object_id: ObjectId, // e.g ObjectDevice:20088
-    pub property_ids: Vec<PropertyId>,
+    pub objects: Vec<ReadPropertyMultipleObject>,
     pub array_index: u32, // use BACNET_ARRAY_ALL for all
 }
 
-impl ReadPropertyMultiple {
+#[derive(Debug)]
+pub struct ReadPropertyMultipleObject {
+    pub object_id: ObjectId, // e.g ObjectDevice:20088
+    pub property_ids: Vec<PropertyId>,
+}
+
+impl ReadPropertyMultipleObject {
     pub fn new(object_id: ObjectId, property_ids: Vec<PropertyId>) -> Self {
         Self {
             object_id,
             property_ids,
+        }
+    }
+}
+
+impl ReadPropertyMultiple {
+    pub fn new(objects: Vec<ReadPropertyMultipleObject>) -> Self {
+        Self {
+            objects,
             array_index: BACNET_ARRAY_ALL,
         }
     }
 
     pub fn encode(&self, buffer: &mut Buffer) {
-        // object_id
-        encode_context_object_id(buffer, 0, &self.object_id);
+        for object in &self.objects {
+            // object_id
+            encode_context_object_id(buffer, 0, &object.object_id);
 
-        encode_opening_tag(buffer, 1);
+            encode_opening_tag(buffer, 1);
 
-        for property_id in &self.property_ids {
-            // property_id
-            encode_context_enumerated(buffer, 0, *property_id);
+            for property_id in &object.property_ids {
+                // property_id
+                encode_context_enumerated(buffer, 0, *property_id);
 
-            // array_index
-            if self.array_index != BACNET_ARRAY_ALL {
-                encode_context_unsigned(buffer, 1, self.array_index);
+                // array_index
+                if self.array_index != BACNET_ARRAY_ALL {
+                    encode_context_unsigned(buffer, 1, self.array_index);
+                }
             }
-        }
 
-        encode_closing_tag(buffer, 1);
+            encode_closing_tag(buffer, 1);
+        }
     }
 
     pub fn decode(_reader: &mut Reader) -> Self {
