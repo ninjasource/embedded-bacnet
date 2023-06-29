@@ -11,6 +11,8 @@ categories = ["embedded", "no-std", "network-programming"]
 readme = "README.md"
 
 [dependencies]
-arrayref = "0.3.7"
-log = "0.4.19"
+arrayref = { version = "0.3.7", default-features = false }
+log = { version = "0.4.19", default-features = false }
+
+[dev-dependencies]
 simple_logger = "4.2.0"
