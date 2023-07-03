@@ -4,7 +4,10 @@ use crate::{
         read_property::ReadPropertyAck,
         read_property_multiple::ReadPropertyMultipleAck,
     },
-    common::helper::{Buffer, Reader},
+    common::{
+        error::Error,
+        helper::{Buffer, Reader},
+    },
 };
 
 use super::network_pdu::{NetworkMessage, NetworkPdu};
@@ -81,17 +84,19 @@ impl DataLink {
         }
     }
 
-    pub fn decode(reader: &mut Reader) -> Self {
+    pub fn decode(reader: &mut Reader) -> Result<Self, Error> {
         let bvll_type = reader.read_byte();
         if bvll_type != Self::BVLL_TYPE_BACNET_IP {
             panic!("only BACNET_IP supported");
         }
 
         let npdu_type = reader.read_byte();
-        let _len: u16 = u16::from_be_bytes(reader.read_bytes());
-        let npdu = NetworkPdu::decode(reader);
+        let len: u16 = u16::from_be_bytes(reader.read_bytes());
+        reader.set_len(len as usize)?;
 
-        match npdu_type {
+        let npdu = NetworkPdu::decode(reader)?;
+
+        let data_link = match npdu_type {
             Self::BVLC_ORIGINAL_BROADCAST_NPDU => Self {
                 function: DataLinkFunction::OriginalBroadcastNpdu(npdu),
             },
@@ -99,7 +104,9 @@ impl DataLink {
                 function: DataLinkFunction::OriginalUnicastNpdu(npdu),
             },
             _ => todo!(),
-        }
+        };
+
+        Ok(data_link)
     }
 
     fn update_len(buffer: &mut Buffer) {

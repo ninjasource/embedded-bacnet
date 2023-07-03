@@ -1,11 +1,12 @@
-#![allow(dead_code, unreachable_code, unused_variables)]
+//#![allow(dead_code, unreachable_code, unused_variables)]
+#![allow(dead_code)]
 
-use std::{io::Error, net::UdpSocket};
+use std::{collections::HashMap, io::Error, net::UdpSocket};
 
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::{ApplicationPdu, ConfirmedRequest, ConfirmedRequestSerivice},
-        primitives::data_value::{ApplicationDataValue, Enumerated},
+        primitives::data_value::{ApplicationDataValue, BitString, Enumerated},
         read_property::ReadProperty,
         read_property_multiple::{PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject},
     },
@@ -13,14 +14,14 @@ use embedded_bacnet::{
         helper::{Buffer, Reader},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
+        spec::{Binary, EngineeringUnits, StatusFlags},
     },
     network_protocol::{
         data_link::{DataLink, DataLinkFunction},
         network_pdu::{MessagePriority, NetworkMessage, NetworkPdu},
     },
 };
-
-// This is a demo application showcasing some of the functionality of this bacnet library
+use flagset::FlagSet;
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
@@ -52,164 +53,195 @@ fn main() -> Result<(), Error> {
     let payload = &buf[..n];
     println!("Received: {:02x?} from {:?}", payload, peer);
     let mut reader = Reader::new(payload);
-    let message = DataLink::decode(&mut reader);
+    let message = DataLink::decode(&mut reader).unwrap();
+
     if let Some(ack) = message.get_read_property_ack() {
-        // let mut objects = Vec::new();
+        let mut map = HashMap::new();
+
+        // put all object in their respective bins by object type
         for item in &ack.properties {
             match item.object_type {
                 ObjectType::ObjectBinaryOutput
                 | ObjectType::ObjectBinaryInput
+                | ObjectType::ObjectBinaryValue
+                | ObjectType::ObjectAnalogInput
+                | ObjectType::ObjectAnalogOutput
+                | ObjectType::ObjectAnalogValue => {
+                    let list = map.entry(item.object_type as u32).or_insert(vec![]);
+                    list.push(item);
+                }
+                _ => {}
+            }
+        }
+
+        for (object_type, ids) in map.iter() {
+            let object_type = ObjectType::from(*object_type);
+            match object_type {
+                ObjectType::ObjectBinaryInput
+                | ObjectType::ObjectBinaryOutput
                 | ObjectType::ObjectBinaryValue => {
-                    let mut property_ids = Vec::new();
-                    property_ids.push(PropertyId::PropObjectName);
-                    property_ids.push(PropertyId::PropPresentValue);
-                    property_ids.push(PropertyId::PropStatusFlags);
-                    let rpm = ReadPropertyMultipleObject::new(*item, property_ids);
-                    get_multi(rpm, &socket)?;
+                    for chunk in ids.as_slice().chunks(10).into_iter() {
+                        let _values = get_multi_binary(&socket, chunk)?;
+                        println!("{:?}", _values);
+                    }
                 }
                 ObjectType::ObjectAnalogInput
                 | ObjectType::ObjectAnalogOutput
                 | ObjectType::ObjectAnalogValue => {
-                    let mut property_ids = Vec::new();
-                    property_ids.push(PropertyId::PropObjectName);
-                    property_ids.push(PropertyId::PropPresentValue);
-                    property_ids.push(PropertyId::PropUnits);
-                    property_ids.push(PropertyId::PropStatusFlags);
-                    let rpm = ReadPropertyMultipleObject::new(*item, property_ids);
-                    get_multi(rpm, &socket)?;
+                    for chunk in ids.as_slice().chunks(10).into_iter() {
+                        let _values = get_multi_analog(&socket, chunk)?;
+                        println!("{:?}", _values);
+                    }
                 }
                 _ => {}
-            };
-
-            // any more than this and things go wrong
-            // if objects.len() > 18 {
-            //     break;
-            // }
-
-            // break;
-        }
-
-        /*
-        let rpm = ReadPropertyMultiple::new(objects);
-        //println!("len: {} {:?}", rpm.objects.len(), rpm);
-        let buffer = read_property_multiple_to_bytes(rpm);
-
-        socket.send_to(buffer.to_bytes(), &addr)?;
-
-        let (n, peer) = socket.recv_from(&mut buf).unwrap();
-        let payload = &buf[..n];
-        //println!("Received: {:02x?} from {:?}", payload, peer);
-        let mut reader = Reader::new(payload);
-        let message = DataLink::decode(&mut reader);
-        println!("{message:?}");
-        */
-    }
-
-    //println!("Decoded:  {:?}\n", message);
-
-    Ok(())
-}
-
-fn get_multi_all(rpm: ReadPropertyMultipleObject, socket: &UdpSocket) -> Result<(), Error> {
-    let rpm = ReadPropertyMultiple::new(vec![rpm]);
-    //println!("len: {} {:?}", rpm.objects.len(), rpm);
-    let buffer = read_property_multiple_to_bytes(rpm);
-    let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(buffer.to_bytes(), &addr)?;
-
-    let mut buf = vec![0; 1024];
-
-    let (n, peer) = socket.recv_from(&mut buf).unwrap();
-    let payload = &buf[..n];
-    let mut reader = Reader::new(payload);
-    let message = DataLink::decode(&mut reader);
-
-    if let Some(ack) = message.get_read_property_multiple_ack() {
-        println!("{:?}", ack);
-    }
-
-    Ok(())
-}
-
-fn get_multi(rpm: ReadPropertyMultipleObject, socket: &UdpSocket) -> Result<(), Error> {
-    let rpm = ReadPropertyMultiple::new(vec![rpm]);
-    //println!("len: {} {:?}", rpm.objects.len(), rpm);
-    let buffer = read_property_multiple_to_bytes(rpm);
-    let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(buffer.to_bytes(), &addr)?;
-
-    let mut buf = vec![0; 1024];
-
-    let (n, peer) = socket.recv_from(&mut buf).unwrap();
-    let payload = &buf[..n];
-    //println!("Received: {:02x?} from {:?}", payload, peer);
-    let mut reader = Reader::new(payload);
-    let message = DataLink::decode(&mut reader);
-
-    if let Some(ack) = message.get_read_property_multiple_ack() {
-        //println!("{:?}", ack);
-        //return Ok(());
-        let object = &ack.objects[0];
-        match object.results.len() {
-            3 => {
-                let value = match &object.results[1].value {
-                    PropertyValue::PropValue(ApplicationDataValue::Enumerated(
-                        Enumerated::Binary(x),
-                    )) => format!("{x:?}"),
-                    x => format!("{x:?}"),
-                };
-                println!(
-                    "{:?}({}) {}: {}",
-                    object.object_id.object_type,
-                    object.object_id.id,
-                    object.results[0].value,
-                    value
-                );
-            }
-            4 => {
-                let units = match &object.results[2].value {
-                    PropertyValue::PropValue(ApplicationDataValue::Enumerated(
-                        Enumerated::Units(x),
-                    )) => format!("{x:?}"),
-                    _ => format!(""),
-                };
-                println!(
-                    "{:?}({}) {}: {} {}",
-                    object.object_id.object_type,
-                    object.object_id.id,
-                    object.results[0].value,
-                    object.results[1].value,
-                    units
-                );
-            }
-            _ => {
-                println!("none")
             }
         }
-        //  ack.objects[0].results[0].value
     }
 
     Ok(())
 }
 
-struct AnalogInputOutput {
-    pub id: u32,
+#[derive(Debug)]
+struct AnalogValue {
+    pub id: ObjectId,
     pub name: String,
-    pub unit: String,
     pub value: f32,
+    pub units: EngineeringUnits,
+    pub status_flags: FlagSet<StatusFlags>,
 }
 
-struct DigitalInputOutput {
-    pub id: u32,
+#[derive(Debug)]
+struct BinaryValue {
+    pub id: ObjectId,
     pub name: String,
     pub value: bool,
+    pub status_flags: FlagSet<StatusFlags>,
 }
 
-struct Controller {
-    pub analog_inputs: Vec<AnalogInputOutput>,
-    pub analog_outputs: Vec<AnalogInputOutput>,
-    pub digital_inputs: Vec<DigitalInputOutput>,
-    pub digital_outputs: Vec<DigitalInputOutput>,
+fn get_multi_binary(
+    socket: &UdpSocket,
+    object_ids: &[&ObjectId],
+) -> Result<Vec<BinaryValue>, Error> {
+    let items = object_ids
+        .iter()
+        .map(|x| {
+            let mut property_ids = Vec::new();
+            property_ids.push(PropertyId::PropObjectName);
+            property_ids.push(PropertyId::PropPresentValue);
+            property_ids.push(PropertyId::PropStatusFlags);
+            ReadPropertyMultipleObject::new(**x, property_ids)
+        })
+        .collect();
+
+    let message = send_and_recv(items, socket)?;
+
+    if let Some(ack) = message.get_read_property_multiple_ack() {
+        let items = ack
+            .objects
+            .iter()
+            .map(|x| {
+                assert_eq!(x.results.len(), 3);
+                let name = x.results[0].value.to_string();
+                let value = match x.results[1].value {
+                    PropertyValue::PropValue(ApplicationDataValue::Enumerated(
+                        Enumerated::Binary(Binary::On),
+                    )) => true,
+                    _ => false,
+                };
+                let status_flags = match x.results[2].value {
+                    PropertyValue::PropValue(ApplicationDataValue::BitString(
+                        BitString::StatusFlags(x),
+                    )) => x,
+                    _ => unreachable!(),
+                };
+
+                BinaryValue {
+                    id: x.object_id,
+                    name,
+                    value,
+                    status_flags,
+                }
+            })
+            .collect();
+
+        return Ok(items);
+    }
+
+    Ok(vec![])
+}
+
+fn get_multi_analog(
+    socket: &UdpSocket,
+    object_ids: &[&ObjectId],
+) -> Result<Vec<AnalogValue>, Error> {
+    let items = object_ids
+        .iter()
+        .map(|x| {
+            let mut property_ids = Vec::new();
+            property_ids.push(PropertyId::PropObjectName);
+            property_ids.push(PropertyId::PropPresentValue);
+            property_ids.push(PropertyId::PropUnits);
+            property_ids.push(PropertyId::PropStatusFlags);
+            ReadPropertyMultipleObject::new(**x, property_ids)
+        })
+        .collect();
+
+    let message = send_and_recv(items, socket)?;
+
+    if let Some(ack) = message.get_read_property_multiple_ack() {
+        let items = ack
+            .objects
+            .iter()
+            .map(|x| {
+                assert_eq!(x.results.len(), 4);
+                let name = x.results[0].value.to_string();
+                let value = match x.results[1].value {
+                    PropertyValue::PropValue(ApplicationDataValue::Real(val)) => val,
+                    _ => unreachable!(),
+                };
+                let units = match &x.results[2].value {
+                    PropertyValue::PropValue(ApplicationDataValue::Enumerated(
+                        Enumerated::Units(u),
+                    )) => u.clone(),
+                    _ => unreachable!(),
+                };
+                let status_flags = match x.results[3].value {
+                    PropertyValue::PropValue(ApplicationDataValue::BitString(
+                        BitString::StatusFlags(x),
+                    )) => x,
+                    _ => unreachable!(),
+                };
+
+                AnalogValue {
+                    id: x.object_id,
+                    name,
+                    value,
+                    units,
+                    status_flags,
+                }
+            })
+            .collect();
+
+        return Ok(items);
+    }
+
+    Ok(vec![])
+}
+
+fn send_and_recv(
+    items: Vec<ReadPropertyMultipleObject>,
+    socket: &UdpSocket,
+) -> Result<DataLink, Error> {
+    let rpm = ReadPropertyMultiple::new(items);
+    let buffer = read_property_multiple_to_bytes(rpm);
+    let addr = format!("192.168.1.249:{}", 0xBAC0);
+    socket.send_to(buffer.to_bytes(), &addr)?;
+    let mut buf = vec![0; 16 * 1024];
+    let (n, _) = socket.recv_from(&mut buf).unwrap();
+    let payload = &buf[..n];
+    let mut reader = Reader::new(payload);
+    let message = DataLink::decode(&mut reader).unwrap();
+    Ok(message)
 }
 
 fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple) -> Buffer {

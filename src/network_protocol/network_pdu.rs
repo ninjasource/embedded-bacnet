@@ -1,6 +1,9 @@
 use crate::{
     application_protocol::application_pdu::ApplicationPdu,
-    common::helper::{Buffer, Reader},
+    common::{
+        error::Error,
+        helper::{Buffer, Reader},
+    },
 };
 
 // Network Layer Protocol Data Unit
@@ -158,7 +161,7 @@ impl NetworkPdu {
         };
     }
 
-    pub fn decode(reader: &mut Reader) -> Self {
+    pub fn decode(reader: &mut Reader) -> Result<Self, Error> {
         // ignore version
         let _version = reader.read_byte();
 
@@ -200,17 +203,17 @@ impl NetworkPdu {
                 Err(custom_message_type) => NetworkMessage::CustomMessageType(custom_message_type),
             }
         } else {
-            let apdu = ApplicationPdu::decode(reader);
+            let apdu = ApplicationPdu::decode(reader)?;
             NetworkMessage::Apdu(apdu)
         };
 
-        Self {
+        Ok(Self {
             dst,
             src,
             expect_reply,
             message_priority,
             network_message,
-        }
+        })
     }
 
     fn calculate_control(&self) -> u8 {

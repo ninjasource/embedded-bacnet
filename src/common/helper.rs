@@ -30,36 +30,64 @@ impl Buffer {
 pub struct Reader {
     buf: Vec<u8>,
     index: usize,
+    len: usize,
 }
 
 impl Reader {
     pub fn eof(&self) -> bool {
-        self.index == self.buf.len()
+        self.index == self.len
     }
 
     pub fn new(payload: &[u8]) -> Self {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(payload);
-        Self { buf, index: 0 }
+        Self {
+            buf,
+            index: 0,
+            len: usize::MAX - 1000,
+        }
+    }
+
+    pub fn set_len(&mut self, len: usize) -> Result<(), Error> {
+        if len > self.buf.len() {
+            Err(Error::Length(
+                "read buffer too small to fit entire bacnet payload",
+            ))
+        } else {
+            self.len = len;
+            Ok(())
+        }
     }
 
     pub fn read_byte(&mut self) -> u8 {
-        let byte = self.buf[self.index];
-        self.index += 1;
-        byte
+        if self.eof() {
+            panic!("read_byte attempt to read past end of buffer");
+        } else {
+            let byte = self.buf[self.index];
+            self.index += 1;
+            byte
+        }
     }
 
     pub fn read_bytes<const COUNT: usize>(&mut self) -> [u8; COUNT] {
-        let mut tmp: [u8; COUNT] = [0; COUNT];
-        tmp.copy_from_slice(&self.buf[self.index..self.index + COUNT]);
-        self.index += COUNT;
-        tmp
+        if self.index + COUNT >= self.len {
+            panic!("read_bytes attempt to read past end of buffer");
+        } else {
+            let mut tmp: [u8; COUNT] = [0; COUNT];
+            tmp.copy_from_slice(&self.buf[self.index..self.index + COUNT]);
+            self.index += COUNT;
+            tmp
+        }
     }
 
     pub fn read_slice<'a>(&'a mut self, len: usize) -> &'a [u8] {
-        let slice = &self.buf[self.index..self.index + len];
-        self.index += len;
-        slice
+        if self.index + len >= self.len {
+            panic!("read_slice attempt to read past end of buffer");
+        } else {
+            let slice = &self.buf[self.index..self.index + len];
+            self.index += len;
+            slice
+        }
     }
 }
 

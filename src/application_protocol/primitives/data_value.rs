@@ -1,12 +1,14 @@
 use core::{fmt::Display, str::from_utf8};
 
-use alloc::{borrow::ToOwned, string::String};
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use flagset::{FlagSet, Flags};
 
 use crate::common::{
+    error::Error,
     helper::{decode_unsigned, Reader},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
-    spec::{Binary, EngineeringUnits},
+    spec::{Binary, EngineeringUnits, StatusFlags},
     tag::{ApplicationTagNumber, Tag, TagNumber},
 };
 
@@ -65,13 +67,37 @@ impl Display for ApplicationDataValue {
 }
 
 #[derive(Debug)]
-pub struct BitString {}
+pub enum BitString {
+    StatusFlags(FlagSet<StatusFlags>),
+    Custom(CustomBitStream),
+}
+
+#[derive(Debug)]
+pub struct CustomBitStream {
+    pub unused_bits: u8,
+    pub bits: Vec<u8>,
+}
 
 impl BitString {
-    pub fn decode(reader: &mut Reader, len: u32) -> Self {
-        // TODO: do something with the data
-        let _ = reader.read_slice(len as usize);
-        Self {}
+    pub fn decode(reader: &mut Reader, property_id: PropertyId, len: u32) -> Result<Self, Error> {
+        let unused_bits = reader.read_byte();
+        match property_id {
+            PropertyId::PropStatusFlags => {
+                let status_flags = Self::decode_byte_flag(reader.read_byte())?;
+                Ok(Self::StatusFlags(status_flags))
+            }
+            _ => {
+                let bits = reader.read_slice(len as usize).to_vec();
+                Ok(Self::Custom(CustomBitStream { unused_bits, bits }))
+            }
+        }
+    }
+
+    fn decode_byte_flag<T: Flags>(byte: T::Type) -> Result<FlagSet<T>, Error> {
+        match FlagSet::new(byte) {
+            Ok(x) => Ok(x),
+            Err(_) => Err(Error::InvalidValue("invalid flag bitstream")),
+        }
     }
 }
 
@@ -135,7 +161,7 @@ impl ApplicationDataValue {
                 ApplicationDataValue::Enumerated(value)
             }
             ApplicationTagNumber::BitString => {
-                let bit_string = BitString::decode(reader, tag.value);
+                let bit_string = BitString::decode(reader, *property_id, tag.value).unwrap();
                 ApplicationDataValue::BitString(bit_string)
             }
             ApplicationTagNumber::Boolean => {

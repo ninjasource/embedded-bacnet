@@ -1,3 +1,5 @@
+use flagset::flags;
+
 use super::error::Error;
 
 pub const BACNET_MAX_OBJECT: u32 = 0x3FF;
@@ -53,7 +55,7 @@ impl TryFrom<u32> for Binary {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 pub enum EngineeringUnits {
     // Enumerated values 0-255 are reserved for definition by ASHRAE.
@@ -636,3 +638,72 @@ impl TryFrom<u32> for EngineeringUnits {
         }
     }
 }
+
+// start of bit string enumerations
+
+// touch gfx studio
+
+flags! {
+    pub enum StatusFlags: u8 {
+        InAlarm = 0b1000_0000,
+        Fault = 0b0100_0000,
+        Overridden = 0b0010_0000,
+        OutOfService = 0b0001_0000,
+    }
+}
+
+pub enum LogStatus {
+    LogDisabled = 0,
+    BufferPurged = 1,
+    LogInterrupted = 2,
+}
+
+pub enum LoggingType {
+    Polled = 0,
+    Cov = 1,
+    Triggered = 2,
+}
+
+pub enum AcknowledgmentFilter {
+    All = 0,
+    Acked = 1,
+    NotAcked = 2,
+}
+
+pub enum EventStateFilter {
+    Offnormal = 0,
+    Fault = 1,
+    Normal = 2,
+    All = 3,
+    Active = 4,
+}
+
+pub enum SelectionLogic {
+    And = 0,
+    Or = 1,
+    All = 2,
+}
+
+pub enum RelationSpecifier {
+    Equal = 0,
+    NotEqual = 1,
+    LessThan = 2,
+    GreaterThan = 3,
+    LessThanOrEqual = 4,
+    GreaterThanOrEqual = 5,
+}
+
+pub enum CommunicationEnableDisable {
+    Enable = 0,
+    Disable = 1,
+    DisableInitiation = 2,
+}
+
+pub enum MessagePriority {
+    Normal = 0,
+    Urgent = 1,
+    CriticalEquipment = 2,
+    LifeSafety = 3,
+}
+
+// end of bit string enumerations

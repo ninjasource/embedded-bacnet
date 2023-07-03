@@ -1,4 +1,7 @@
-use crate::common::helper::{Buffer, Reader};
+use crate::common::{
+    error::Error,
+    helper::{Buffer, Reader},
+};
 
 use super::{
     i_am::IAm,
@@ -186,27 +189,31 @@ impl ApplicationPdu {
         };
     }
 
-    pub fn decode(reader: &mut Reader) -> Self {
+    pub fn decode(reader: &mut Reader) -> Result<Self, Error> {
         let byte0 = reader.read_byte();
         let pdu_type: ApduType = (byte0 >> 4).into();
         let pdu_flags = byte0 & 0x0F;
-        let _segmented_message = (pdu_flags & PduFlags::SegmentedMessage as u8) > 0;
+        let segmented_message = (pdu_flags & PduFlags::SegmentedMessage as u8) > 0;
         let _more_follows = (pdu_flags & PduFlags::MoreFollows as u8) > 0;
         let _segmented_response_accepted =
             (pdu_flags & PduFlags::SegmentedResponseAccepted as u8) > 0;
 
+        if segmented_message {
+            return Err(Error::SegmentationNotSupported);
+        }
+
         match pdu_type {
             ApduType::ConfirmedServiceRequest => {
                 let apdu = ConfirmedRequest::decode(reader);
-                ApplicationPdu::ConfirmedRequest(apdu)
+                Ok(ApplicationPdu::ConfirmedRequest(apdu))
             }
             ApduType::UnconfirmedServiceRequest => {
                 let apdu = UnconfirmedRequest::decode(reader);
-                ApplicationPdu::UnconfirmedRequest(apdu)
+                Ok(ApplicationPdu::UnconfirmedRequest(apdu))
             }
             ApduType::ComplexAck => {
-                let adpu = ComplexAck::decode(reader);
-                ApplicationPdu::ComplexAck(adpu)
+                let adpu = ComplexAck::decode(reader)?;
+                Ok(ApplicationPdu::ComplexAck(adpu))
             }
             _ => unimplemented!(),
         }
@@ -230,7 +237,7 @@ pub struct ComplexAck {
 }
 
 impl ComplexAck {
-    pub fn decode(reader: &mut Reader) -> Self {
+    pub fn decode(reader: &mut Reader) -> Result<Self, Error> {
         let invoke_id = reader.read_byte();
         let choice = reader.read_byte().into();
 
@@ -243,10 +250,10 @@ impl ComplexAck {
                 let apdu = ReadPropertyMultipleAck::decode(reader);
                 ComplexAckService::ReadPropertyMultiple(apdu)
             }
-            _ => unimplemented!(),
+            s => return Err(Error::UnimplementedConfirmedServiceChoice(s)),
         };
 
-        Self { invoke_id, service }
+        Ok(Self { invoke_id, service })
     }
 }
 

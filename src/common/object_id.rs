@@ -31,7 +31,7 @@ impl ObjectId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[repr(u32)]
 pub enum ObjectType {
     ObjectAnalogInput = 0,
