@@ -5,7 +5,7 @@ use std::{collections::HashMap, io::Error, net::UdpSocket};
 
 use embedded_bacnet::{
     application_protocol::{
-        application_pdu::{ApplicationPdu, ConfirmedRequest, ConfirmedRequestSerivice},
+        application_pdu::{ConfirmedRequest, ConfirmedRequestSerivice},
         primitives::data_value::{ApplicationDataValue, BitString, Enumerated},
         read_property::ReadProperty,
         read_property_multiple::{PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject},
@@ -16,10 +16,7 @@ use embedded_bacnet::{
         property_id::PropertyId,
         spec::{Binary, EngineeringUnits, StatusFlags},
     },
-    network_protocol::{
-        data_link::{DataLink, DataLinkFunction},
-        network_pdu::{MessagePriority, NetworkMessage, NetworkPdu},
-    },
+    network_protocol::data_link::DataLink,
 };
 use flagset::FlagSet;
 
@@ -32,12 +29,7 @@ fn main() -> Result<(), Error> {
     let object_id = ObjectId::new(ObjectType::ObjectDevice, 79079);
     let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(read_property));
-    let apdu = ApplicationPdu::ConfirmedRequest(req);
-    let src = None;
-    let dst = None;
-    let message = NetworkMessage::Apdu(apdu);
-    let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
+    let data_link = DataLink::new_confirmed_req(req);
     let mut buffer = Buffer::new();
     data_link.encode(&mut buffer);
 
@@ -246,12 +238,7 @@ fn send_and_recv(
 
 fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple) -> Buffer {
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
-    let apdu = ApplicationPdu::ConfirmedRequest(req);
-    let src = None;
-    let dst = None;
-    let message = NetworkMessage::Apdu(apdu);
-    let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
+    let data_link = DataLink::new_confirmed_req(req);
     let mut buffer = Buffer::new();
     data_link.encode(&mut buffer);
     buffer

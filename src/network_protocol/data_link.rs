@@ -1,6 +1,6 @@
 use crate::{
     application_protocol::{
-        application_pdu::{ApplicationPdu, ComplexAckService},
+        application_pdu::{ApplicationPdu, ComplexAckService, ConfirmedRequest},
         read_property::ReadPropertyAck,
         read_property_multiple::ReadPropertyMultipleAck,
     },
@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use super::network_pdu::{NetworkMessage, NetworkPdu};
+use super::network_pdu::{MessagePriority, NetworkMessage, NetworkPdu};
 
 // Bacnet Virtual Link Control
 #[derive(Debug)]
@@ -31,6 +31,13 @@ impl DataLink {
 
     pub fn new(function: DataLinkFunction) -> Self {
         Self { function }
+    }
+
+    pub fn new_confirmed_req(req: ConfirmedRequest) -> Self {
+        let apdu = ApplicationPdu::ConfirmedRequest(req);
+        let message = NetworkMessage::Apdu(apdu);
+        let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
+        DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu))
     }
 
     fn get_ack(&self) -> Option<&ComplexAckService> {
