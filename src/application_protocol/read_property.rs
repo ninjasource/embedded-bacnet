@@ -1,5 +1,3 @@
-use alloc::vec::Vec;
-
 use crate::common::{
     helper::{
         decode_context_enumerated, encode_context_enumerated, encode_context_object_id,
@@ -15,7 +13,6 @@ use crate::common::{
 pub struct ReadPropertyAck {
     pub object_id: ObjectId,
     pub property_id: PropertyId,
-    pub properties: Vec<ObjectId>,
 }
 
 impl ReadPropertyAck {
@@ -43,27 +40,24 @@ impl ReadPropertyAck {
                     "expected opening tag"
                 );
 
-                let mut properties = Vec::new();
-
-                loop {
-                    let tag = Tag::decode(reader, buf);
-                    if tag.number == TagNumber::ContextSpecific(3) {
-                        // closing tag
-                        break;
-                    }
-
-                    let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
-                    properties.push(object_id);
-                }
-
                 return Self {
                     object_id,
                     property_id,
-                    properties,
                 };
             }
             _ => unimplemented!(),
         }
+    }
+
+    pub fn decode_next(&self, reader: &mut Reader, buf: &[u8]) -> Option<ObjectId> {
+        let tag = Tag::decode(reader, buf);
+        if tag.number == TagNumber::ContextSpecific(3) {
+            // closing tag
+            return None;
+        }
+
+        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
+        Some(object_id)
     }
 }
 

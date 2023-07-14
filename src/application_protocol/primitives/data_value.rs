@@ -1,6 +1,5 @@
 use core::{fmt::Display, str::from_utf8};
 
-use alloc::vec::Vec;
 use flagset::{FlagSet, Flags};
 
 use crate::common::{
@@ -22,7 +21,7 @@ pub enum ApplicationDataValue<'a> {
     ObjectId(ObjectId),
     CharacterString(CharacterString<'a>),
     Enumerated(Enumerated),
-    BitString(BitString),
+    BitString(BitString<'a>),
     UnsignedInt(u32),
 }
 
@@ -67,23 +66,23 @@ impl<'a> Display for ApplicationDataValue<'a> {
 }
 
 #[derive(Debug)]
-pub enum BitString {
+pub enum BitString<'a> {
     StatusFlags(FlagSet<StatusFlags>),
-    Custom(CustomBitStream),
+    Custom(CustomBitStream<'a>),
 }
 
 #[derive(Debug)]
-pub struct CustomBitStream {
+pub struct CustomBitStream<'a> {
     pub unused_bits: u8,
-    pub bits: Vec<u8>,
+    pub bits: &'a [u8],
 }
 
-impl BitString {
+impl<'a> BitString<'a> {
     pub fn decode(
         property_id: PropertyId,
         len: u32,
         reader: &mut Reader,
-        buf: &[u8],
+        buf: &'a [u8],
     ) -> Result<Self, Error> {
         let unused_bits = reader.read_byte(buf);
         match property_id {
@@ -92,7 +91,7 @@ impl BitString {
                 Ok(Self::StatusFlags(status_flags))
             }
             _ => {
-                let bits = reader.read_slice(len as usize, buf).to_vec();
+                let bits = reader.read_slice(len as usize, buf);
                 Ok(Self::Custom(CustomBitStream { unused_bits, bits }))
             }
         }

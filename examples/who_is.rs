@@ -25,7 +25,8 @@ fn main() -> Result<(), Error> {
     let npdu = NetworkPdu::new(src, dst, false, MessagePriority::Normal, message);
     let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu(npdu));
 
-    let mut buffer = Buffer::new();
+    let mut buffer = vec![0; 16 * 1024];
+    let mut buffer = Buffer::new(&mut buffer);
     data_link.encode(&mut buffer);
 
     let buf = buffer.to_bytes();

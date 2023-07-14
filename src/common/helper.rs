@@ -1,29 +1,31 @@
-use alloc::vec::Vec;
 use arrayref::array_ref;
 
+use super::{error::Error, object_id::ObjectId, property_id::PropertyId};
 use crate::common::tag::{Tag, TagNumber};
 
-use super::{error::Error, object_id::ObjectId, property_id::PropertyId};
-
-pub struct Buffer {
-    pub buf: Vec<u8>,
+pub struct Buffer<'a> {
+    pub buf: &'a mut [u8],
+    pub index: usize,
 }
 
-impl Buffer {
-    pub fn new() -> Self {
-        Self { buf: Vec::new() }
+impl<'a> Buffer<'a> {
+    pub fn new(buf: &'a mut [u8]) -> Self {
+        Self { buf, index: 0 }
     }
 
     pub fn push(&mut self, item: u8) {
-        self.buf.push(item)
+        self.buf[self.index] = item;
+        self.index += 1;
     }
 
     pub fn extend_from_slice(&mut self, src: &[u8]) {
-        self.buf.extend_from_slice(src)
+        assert!(src.len() <= self.buf.len() - self.index);
+        self.buf[self.index..self.index + src.len()].copy_from_slice(src);
+        self.index += src.len();
     }
 
-    pub fn to_bytes<'a>(&'a self) -> &'a [u8] {
-        &self.buf
+    pub fn to_bytes(&self) -> &[u8] {
+        &self.buf[..self.index]
     }
 }
 
@@ -136,18 +138,6 @@ pub fn parse_unsigned(bytes: &[u8], len: u32) -> Result<(&[u8], u32), Error> {
     };
     Ok((&bytes[len..], val))
 }
-
-/*
-pub fn decode_context_object_id(reader: &mut Reader) -> ObjectId {
-    let tag = Tag::decode(reader);
-    assert_eq!(
-        tag.number,
-        TagNumber::Application(ApplicationTagNumber::ObjectId),
-        "unexpected object_id tag number"
-    );
-
-    ObjectId::decode(reader, tag.value).unwrap()
-}*/
 
 pub fn encode_context_object_id(buffer: &mut Buffer, tag_number: u8, object_id: &ObjectId) {
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), 4);

@@ -14,26 +14,26 @@ use super::network_pdu::{MessagePriority, NetworkMessage, NetworkPdu};
 
 // Bacnet Virtual Link Control
 #[derive(Debug)]
-pub struct DataLink {
-    pub function: DataLinkFunction,
+pub struct DataLink<'a> {
+    pub function: DataLinkFunction<'a>,
 }
 
 #[derive(Debug)]
-pub enum DataLinkFunction {
-    OriginalBroadcastNpdu(NetworkPdu),
-    OriginalUnicastNpdu(NetworkPdu),
+pub enum DataLinkFunction<'a> {
+    OriginalBroadcastNpdu(NetworkPdu<'a>),
+    OriginalUnicastNpdu(NetworkPdu<'a>),
 }
 
-impl DataLink {
+impl<'a> DataLink<'a> {
     const BVLL_TYPE_BACNET_IP: u8 = 0x81;
     const BVLC_ORIGINAL_UNICAST_NPDU: u8 = 10;
     const BVLC_ORIGINAL_BROADCAST_NPDU: u8 = 11;
 
-    pub fn new(function: DataLinkFunction) -> Self {
+    pub fn new(function: DataLinkFunction<'a>) -> Self {
         Self { function }
     }
 
-    pub fn new_confirmed_req(req: ConfirmedRequest) -> Self {
+    pub fn new_confirmed_req(req: ConfirmedRequest<'a>) -> Self {
         let apdu = ApplicationPdu::ConfirmedRequest(req);
         let message = NetworkMessage::Apdu(apdu);
         let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
@@ -117,7 +117,7 @@ impl DataLink {
     }
 
     fn update_len(buffer: &mut Buffer) {
-        let len = buffer.buf.len() as u16;
+        let len = buffer.index as u16;
         let src = len.to_be_bytes();
         buffer.buf[2..4].copy_from_slice(&src);
     }

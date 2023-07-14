@@ -8,12 +8,12 @@ use crate::{
 
 // Network Layer Protocol Data Unit
 #[derive(Debug)]
-pub struct NetworkPdu {
+pub struct NetworkPdu<'a> {
     pub src: Option<SourceAddress>,
     pub dst: Option<DestinationAddress>,
     pub expect_reply: bool,
     pub message_priority: MessagePriority,
-    pub network_message: NetworkMessage,
+    pub network_message: NetworkMessage<'a>,
 }
 
 // NOTE: this is actually a control flag
@@ -50,8 +50,8 @@ enum ControlFlags {
 }
 
 #[derive(Debug)]
-pub enum NetworkMessage {
-    Apdu(ApplicationPdu),
+pub enum NetworkMessage<'a> {
+    Apdu(ApplicationPdu<'a>),
     MessageType(MessageType),
     CustomMessageType(u8),
 }
@@ -114,7 +114,7 @@ impl TryFrom<u8> for MessageType {
     }
 }
 
-impl NetworkPdu {
+impl<'a> NetworkPdu<'a> {
     const VERSION: u8 = 0x01; // ASHRAE 135-1995
 
     pub fn new(
@@ -122,7 +122,7 @@ impl NetworkPdu {
         dst: Option<DestinationAddress>,
         expect_reply: bool,
         message_priority: MessagePriority,
-        message: NetworkMessage,
+        message: NetworkMessage<'a>,
     ) -> Self {
         Self {
             src,

@@ -30,7 +30,8 @@ fn main() -> Result<(), Error> {
     let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(read_property));
     let data_link = DataLink::new_confirmed_req(req);
-    let mut buffer = Buffer::new();
+    let mut buf = vec![0; 16 * 1024];
+    let mut buffer = Buffer::new(&mut buf);
     data_link.encode(&mut buffer);
 
     // send packet
@@ -50,8 +51,8 @@ fn main() -> Result<(), Error> {
     if let Some(ack) = message.get_read_property_ack() {
         let mut map = HashMap::new();
 
-        // put all object in their respective bins by object type
-        for item in &ack.properties {
+        // put all objects in their respective bins by object type
+        while let Some(item) = ack.decode_next(&mut reader, &buf) {
             match item.object_type {
                 ObjectType::ObjectBinaryOutput
                 | ObjectType::ObjectBinaryInput
@@ -112,21 +113,23 @@ struct BinaryValue {
 
 fn get_multi_binary(
     socket: &UdpSocket,
-    object_ids: &[&ObjectId],
+    object_ids: &[ObjectId],
 ) -> Result<Vec<BinaryValue>, Error> {
-    let items = object_ids
+    let property_ids = [
+        PropertyId::PropObjectName,
+        PropertyId::PropPresentValue,
+        PropertyId::PropStatusFlags,
+    ];
+
+    let items: Vec<ReadPropertyMultipleObject> = object_ids
         .iter()
-        .map(|x| {
-            let mut property_ids = Vec::new();
-            property_ids.push(PropertyId::PropObjectName);
-            property_ids.push(PropertyId::PropPresentValue);
-            property_ids.push(PropertyId::PropStatusFlags);
-            ReadPropertyMultipleObject::new(**x, property_ids)
-        })
+        .map(|x| ReadPropertyMultipleObject::new(*x, &property_ids))
         .collect();
 
-    let rpm = ReadPropertyMultiple::new(items);
-    let buffer = read_property_multiple_to_bytes(rpm);
+    let rpm = ReadPropertyMultiple::new(&items);
+    let mut buf = vec![0; 16 * 1024];
+    let mut buffer = Buffer::new(&mut buf);
+    read_property_multiple_to_bytes(rpm, &mut buffer);
     let addr = format!("192.168.1.249:{}", 0xBAC0);
     socket.send_to(buffer.to_bytes(), &addr)?;
     let mut buf = vec![0; 16 * 1024];
@@ -173,22 +176,24 @@ fn get_multi_binary(
 
 fn get_multi_analog(
     socket: &UdpSocket,
-    object_ids: &[&ObjectId],
+    object_ids: &[ObjectId],
 ) -> Result<Vec<AnalogValue>, Error> {
-    let items = object_ids
+    let property_ids = [
+        PropertyId::PropObjectName,
+        PropertyId::PropPresentValue,
+        PropertyId::PropUnits,
+        PropertyId::PropStatusFlags,
+    ];
+
+    let items: Vec<ReadPropertyMultipleObject> = object_ids
         .iter()
-        .map(|x| {
-            let mut property_ids = Vec::new();
-            property_ids.push(PropertyId::PropObjectName);
-            property_ids.push(PropertyId::PropPresentValue);
-            property_ids.push(PropertyId::PropUnits);
-            property_ids.push(PropertyId::PropStatusFlags);
-            ReadPropertyMultipleObject::new(**x, property_ids)
-        })
+        .map(|x| ReadPropertyMultipleObject::new(*x, &property_ids))
         .collect();
 
-    let rpm = ReadPropertyMultiple::new(items);
-    let buffer = read_property_multiple_to_bytes(rpm);
+    let rpm = ReadPropertyMultiple::new(&items);
+    let mut buf = vec![0; 16 * 1024];
+    let mut buffer = Buffer::new(&mut buf);
+    read_property_multiple_to_bytes(rpm, &mut buffer);
     let addr = format!("192.168.1.249:{}", 0xBAC0);
     socket.send_to(buffer.to_bytes(), &addr)?;
     let mut buf = vec![0; 16 * 1024];
@@ -236,26 +241,8 @@ fn get_multi_analog(
     Ok(vec![])
 }
 
-fn send_and_recv(
-    items: Vec<ReadPropertyMultipleObject>,
-    socket: &UdpSocket,
-) -> Result<DataLink, Error> {
-    let rpm = ReadPropertyMultiple::new(items);
-    let buffer = read_property_multiple_to_bytes(rpm);
-    let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(buffer.to_bytes(), &addr)?;
-    let mut buf = vec![0; 16 * 1024];
-    let (n, _) = socket.recv_from(&mut buf).unwrap();
-    let buf = &buf[..n];
-    let mut reader = Reader::new(buf.len());
-    let message = DataLink::decode(&mut reader, buf).unwrap();
-    Ok(message)
-}
-
-fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple) -> Buffer {
+fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple, buffer: &mut Buffer) {
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
     let data_link = DataLink::new_confirmed_req(req);
-    let mut buffer = Buffer::new();
-    data_link.encode(&mut buffer);
-    buffer
+    data_link.encode(buffer);
 }

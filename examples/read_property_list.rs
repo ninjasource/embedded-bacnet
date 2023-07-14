@@ -30,7 +30,8 @@ fn main() -> Result<(), Error> {
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
     let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
-    let mut buffer = Buffer::new();
+    let mut buffer = vec![0; 16 * 1024];
+    let mut buffer = Buffer::new(&mut buffer);
     data_link.encode(&mut buffer);
 
     // send packet

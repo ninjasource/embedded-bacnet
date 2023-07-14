@@ -1,10 +1,13 @@
-# embedded-bacnet
+# Embedded Bacnet
+
+![an obscure reference to a movie](logo.svg)
 
 A library to read and write bacnet packets for embedded devices. Bacnet is a protocol used for building automation and control. 
 The official spec is unfortunately behind a paywall and so this implementation has been cobbled together by cross referencing multiple code implementations.
 The most comprehensive implementation and documentation I have found to be here: https://bacnet.sourceforge.net/ for which I am very grateful.
 
 You can use this library to send and receive bacnet packets. However, the entire spec has not been implemented, only the bits I found most important. Use the link above if you want a comprehensive implementation.
+
 
 ## How it works
 

@@ -1,7 +1,5 @@
 use core::fmt::Display;
 
-use alloc::{string::String, vec::Vec};
-
 use crate::{
     application_protocol::primitives::data_value::ApplicationDataValue,
     common::{
@@ -17,14 +15,11 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct ReadPropertyMultipleAck {
-    // pub objects: Vec<ObjectWithResults>,
-}
+pub struct ReadPropertyMultipleAck {}
 
 #[derive(Debug)]
 pub struct ObjectWithResults {
     pub object_id: ObjectId,
-    // pub results: Vec<PropertyResult>,
 }
 
 impl ObjectWithResults {
@@ -97,7 +92,7 @@ pub struct PropertyResult<'a> {
 pub enum PropertyValue<'a> {
     PropValue(ApplicationDataValue<'a>),
     PropDescription(&'a str),
-    PropObjectName(String),
+    PropObjectName(&'a str),
 }
 
 impl<'a> Display for PropertyValue<'a> {
@@ -123,7 +118,6 @@ impl ReadPropertyMultipleAck {
         );
         let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
 
-        //let object_id = decode_context_object_id(reader);
         let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
@@ -137,19 +131,19 @@ impl ReadPropertyMultipleAck {
 }
 
 #[derive(Debug)]
-pub struct ReadPropertyMultiple {
-    pub objects: Vec<ReadPropertyMultipleObject>,
+pub struct ReadPropertyMultiple<'a> {
     pub array_index: u32, // use BACNET_ARRAY_ALL for all
+    pub objects: &'a [ReadPropertyMultipleObject<'a>],
 }
 
 #[derive(Debug)]
-pub struct ReadPropertyMultipleObject {
+pub struct ReadPropertyMultipleObject<'a> {
     pub object_id: ObjectId, // e.g ObjectDevice:20088
-    pub property_ids: Vec<PropertyId>,
+    pub property_ids: &'a [PropertyId],
 }
 
-impl ReadPropertyMultipleObject {
-    pub fn new(object_id: ObjectId, property_ids: Vec<PropertyId>) -> Self {
+impl<'a> ReadPropertyMultipleObject<'a> {
+    pub fn new(object_id: ObjectId, property_ids: &'a [PropertyId]) -> Self {
         Self {
             object_id,
             property_ids,
@@ -157,8 +151,8 @@ impl ReadPropertyMultipleObject {
     }
 }
 
-impl ReadPropertyMultiple {
-    pub fn new(objects: Vec<ReadPropertyMultipleObject>) -> Self {
+impl<'a> ReadPropertyMultiple<'a> {
+    pub fn new(objects: &'a [ReadPropertyMultipleObject]) -> Self {
         Self {
             objects,
             array_index: BACNET_ARRAY_ALL,
@@ -166,13 +160,13 @@ impl ReadPropertyMultiple {
     }
 
     pub fn encode(&self, buffer: &mut Buffer) {
-        for object in &self.objects {
+        for object in self.objects {
             // object_id
             encode_context_object_id(buffer, 0, &object.object_id);
 
             encode_opening_tag(buffer, 1);
 
-            for property_id in &object.property_ids {
+            for property_id in object.property_ids {
                 // property_id
                 encode_context_enumerated(buffer, 0, *property_id);
 

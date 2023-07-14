@@ -12,8 +12,8 @@ use super::{
 
 // Application Layer Protocol Data Unit
 #[derive(Debug)]
-pub enum ApplicationPdu {
-    ConfirmedRequest(ConfirmedRequest),
+pub enum ApplicationPdu<'a> {
+    ConfirmedRequest(ConfirmedRequest<'a>),
     UnconfirmedRequest(UnconfirmedRequest),
     ComplexAck(ComplexAck),
     // add more here
@@ -180,7 +180,7 @@ impl From<u8> for ConfirmedServiceChoice {
     }
 }
 
-impl ApplicationPdu {
+impl<'a> ApplicationPdu<'a> {
     pub fn encode(&self, buffer: &mut Buffer) {
         match self {
             ApplicationPdu::ConfirmedRequest(req) => req.encode(buffer),
@@ -221,13 +221,13 @@ impl ApplicationPdu {
 }
 
 #[derive(Debug)]
-pub struct ConfirmedRequest {
+pub struct ConfirmedRequest<'a> {
     pub max_segments: MaxSegments, // default 65
     pub max_adpu: MaxAdpu,         // default 1476
     pub invoke_id: u8,             // starts at 0
     pub sequence_num: u8,          // default to 0
     pub proposed_window_size: u8,  // default to 0
-    pub service: ConfirmedRequestSerivice,
+    pub service: ConfirmedRequestSerivice<'a>,
 }
 
 #[derive(Debug)]
@@ -247,7 +247,6 @@ impl ComplexAck {
                 ComplexAckService::ReadProperty(apdu)
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
-                //let apdu: ReadPropertyMultipleAck = ReadPropertyMultipleAck::decode(reader);
                 ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck {})
             }
             s => return Err(Error::UnimplementedConfirmedServiceChoice(s)),
@@ -265,9 +264,9 @@ pub enum ComplexAckService {
 }
 
 #[derive(Debug)]
-pub enum ConfirmedRequestSerivice {
+pub enum ConfirmedRequestSerivice<'a> {
     ReadProperty(ReadProperty),
-    ReadPropertyMultiple(ReadPropertyMultiple),
+    ReadPropertyMultiple(ReadPropertyMultiple<'a>),
     // add more here
 }
 
@@ -278,8 +277,8 @@ enum PduFlags {
     SegmentedMessage = 0b1000,
 }
 
-impl ConfirmedRequest {
-    pub fn new(invoke_id: u8, service: ConfirmedRequestSerivice) -> Self {
+impl<'a> ConfirmedRequest<'a> {
+    pub fn new(invoke_id: u8, service: ConfirmedRequestSerivice<'a>) -> Self {
         Self {
             max_segments: MaxSegments::_65,
             max_adpu: MaxAdpu::_1476,

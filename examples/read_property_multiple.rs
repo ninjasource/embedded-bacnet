@@ -22,10 +22,10 @@ fn main() -> Result<(), Error> {
 
     // encode packet
     let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 2);
-    let mut property_ids = Vec::new();
-    property_ids.push(PropertyId::PropPresentValue);
-    let rpm = ReadPropertyMultipleObject::new(object_id, property_ids);
-    let rpm = ReadPropertyMultiple::new(vec![rpm]);
+    let property_ids = [PropertyId::PropPresentValue];
+    let rpm = ReadPropertyMultipleObject::new(object_id, &property_ids);
+    let objects = [rpm];
+    let rpm = ReadPropertyMultiple::new(&objects);
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let src = None;
@@ -33,7 +33,8 @@ fn main() -> Result<(), Error> {
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
     let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
-    let mut buffer = Buffer::new();
+    let mut buffer = vec![0; 16 * 1024];
+    let mut buffer = Buffer::new(&mut buffer);
     data_link.encode(&mut buffer);
 
     // send packet
