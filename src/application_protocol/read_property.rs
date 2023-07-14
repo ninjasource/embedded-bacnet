@@ -19,15 +19,15 @@ pub struct ReadPropertyAck {
 }
 
 impl ReadPropertyAck {
-    pub fn decode(reader: &mut Reader) -> Self {
-        let tag = Tag::decode(reader);
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+        let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecific(0),
             "invalid object id tag"
         );
-        let object_id = ObjectId::decode(reader, tag.value).unwrap();
-        let (tag, property_id) = decode_context_enumerated(reader);
+        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
+        let (tag, property_id) = decode_context_enumerated(reader, buf);
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecific(1),
@@ -36,7 +36,7 @@ impl ReadPropertyAck {
 
         match property_id {
             PropertyId::PropObjectList => {
-                let tag = Tag::decode(reader);
+                let tag = Tag::decode(reader, buf);
                 assert_eq!(
                     tag.number,
                     TagNumber::ContextSpecific(3),
@@ -46,13 +46,13 @@ impl ReadPropertyAck {
                 let mut properties = Vec::new();
 
                 loop {
-                    let tag = Tag::decode(reader);
+                    let tag = Tag::decode(reader, buf);
                     if tag.number == TagNumber::ContextSpecific(3) {
                         // closing tag
                         break;
                     }
 
-                    let object_id = ObjectId::decode(reader, tag.value).unwrap();
+                    let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
                     properties.push(object_id);
                 }
 

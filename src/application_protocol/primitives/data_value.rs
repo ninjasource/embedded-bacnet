@@ -1,6 +1,6 @@
 use core::{fmt::Display, str::from_utf8};
 
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use alloc::vec::Vec;
 use flagset::{FlagSet, Flags};
 
 use crate::common::{
@@ -79,15 +79,20 @@ pub struct CustomBitStream {
 }
 
 impl BitString {
-    pub fn decode(reader: &mut Reader, property_id: PropertyId, len: u32) -> Result<Self, Error> {
-        let unused_bits = reader.read_byte();
+    pub fn decode(
+        property_id: PropertyId,
+        len: u32,
+        reader: &mut Reader,
+        buf: &[u8],
+    ) -> Result<Self, Error> {
+        let unused_bits = reader.read_byte(buf);
         match property_id {
             PropertyId::PropStatusFlags => {
-                let status_flags = Self::decode_byte_flag(reader.read_byte())?;
+                let status_flags = Self::decode_byte_flag(reader.read_byte(buf))?;
                 Ok(Self::StatusFlags(status_flags))
             }
             _ => {
-                let bits = reader.read_slice(len as usize).to_vec();
+                let bits = reader.read_slice(len as usize, buf).to_vec();
                 Ok(Self::Custom(CustomBitStream { unused_bits, bits }))
             }
         }
@@ -102,12 +107,12 @@ impl BitString {
 }
 
 impl<'a> CharacterString<'a> {
-    pub fn decode(reader: &'a mut Reader, len: u32) -> Self {
-        let character_set = reader.read_byte();
+    pub fn decode(len: u32, reader: &mut Reader, buf: &'a [u8]) -> Self {
+        let character_set = reader.read_byte(buf);
         if character_set != 0 {
             unimplemented!("non-utf8 characterset not supported")
         }
-        let slice = reader.read_slice(len as usize - 1);
+        let slice = reader.read_slice(len as usize - 1, buf);
         CharacterString {
             inner: from_utf8(slice).unwrap(),
         }
@@ -119,7 +124,8 @@ impl<'a> ApplicationDataValue<'a> {
         tag: &Tag,
         object_id: &ObjectId,
         property_id: &PropertyId,
-        reader: &'a mut Reader,
+        reader: &mut Reader,
+        buf: &'a [u8],
     ) -> Self {
         let tag_num = match tag.number {
             TagNumber::Application(x) => x,
@@ -129,18 +135,18 @@ impl<'a> ApplicationDataValue<'a> {
         match tag_num {
             ApplicationTagNumber::Real => {
                 assert_eq!(tag.value, 4, "read tag should have length of 4");
-                ApplicationDataValue::Real(f32::from_be_bytes(reader.read_bytes()))
+                ApplicationDataValue::Real(f32::from_be_bytes(reader.read_bytes(buf)))
             }
             ApplicationTagNumber::ObjectId => {
-                let object_id = ObjectId::decode(reader, tag.value).unwrap();
+                let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
                 ApplicationDataValue::ObjectId(object_id)
             }
             ApplicationTagNumber::CharacterString => {
-                let text = CharacterString::decode(reader, tag.value);
+                let text = CharacterString::decode(tag.value, reader, buf);
                 ApplicationDataValue::CharacterString(text)
             }
             ApplicationTagNumber::Enumerated => {
-                let value = decode_unsigned(reader, tag.value) as u32;
+                let value = decode_unsigned(tag.value, reader, buf) as u32;
                 let value = match property_id {
                     PropertyId::PropUnits => {
                         let units = value.try_into().unwrap();
@@ -161,7 +167,7 @@ impl<'a> ApplicationDataValue<'a> {
                 ApplicationDataValue::Enumerated(value)
             }
             ApplicationTagNumber::BitString => {
-                let bit_string = BitString::decode(reader, *property_id, tag.value).unwrap();
+                let bit_string = BitString::decode(*property_id, tag.value, reader, buf).unwrap();
                 ApplicationDataValue::BitString(bit_string)
             }
             ApplicationTagNumber::Boolean => {
@@ -169,7 +175,7 @@ impl<'a> ApplicationDataValue<'a> {
                 ApplicationDataValue::Boolean(value)
             }
             ApplicationTagNumber::UnsignedInt => {
-                let value = decode_unsigned(reader, tag.value) as u32;
+                let value = decode_unsigned(tag.value, reader, buf) as u32;
                 ApplicationDataValue::UnsignedInt(value)
             }
 

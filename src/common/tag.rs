@@ -117,21 +117,21 @@ impl Tag {
         buffer.extend_from_slice(&buf[..len]);
     }
 
-    pub fn decode(reader: &mut Reader) -> Self {
-        let (number, byte0) = decode_tag_number(reader);
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+        let (number, byte0) = decode_tag_number(reader, buf);
 
         if is_extended_value(byte0) {
-            let byte = reader.read_byte();
+            let byte = reader.read_byte(buf);
             match byte {
                 // tagged as u32
                 255 => {
-                    let bytes = reader.read_bytes();
+                    let bytes = reader.read_bytes(buf);
                     let value = u32::from_be_bytes(bytes);
                     Self { number, value }
                 }
                 // tagged as u16
                 254 => {
-                    let bytes = reader.read_bytes();
+                    let bytes = reader.read_bytes(buf);
                     let value = u16::from_be_bytes(bytes) as u32;
                     Self { number, value }
                 }
@@ -151,13 +151,13 @@ impl Tag {
 }
 
 // returns tag_number and byte0 because we need to reuse byte0 elsewhere
-fn decode_tag_number(reader: &mut Reader) -> (TagNumber, u8) {
-    let byte0 = reader.read_byte();
+fn decode_tag_number(reader: &mut Reader, buf: &[u8]) -> (TagNumber, u8) {
+    let byte0 = reader.read_byte(buf);
 
     if is_context_specific(byte0) {
         // context specific tag num
         if is_extended_tag_number(byte0) {
-            let num = reader.read_byte();
+            let num = reader.read_byte(buf);
             (TagNumber::ContextSpecific(num), byte0)
         } else {
             let num = byte0 >> 4;

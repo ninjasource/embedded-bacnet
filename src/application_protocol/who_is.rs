@@ -10,7 +10,7 @@ impl WhoIs {
         buffer.push(UnconfirmedServiceChoice::WhoIs as u8)
     }
 
-    pub fn decode(_reader: &mut Reader) -> Self {
+    pub fn decode(_reader: &mut Reader, _buf: &[u8]) -> Self {
         Self {}
     }
 }

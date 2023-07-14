@@ -28,8 +28,12 @@ pub struct ObjectWithResults {
 }
 
 impl ObjectWithResults {
-    pub fn decode_next<'a>(&self, reader: &'a mut Reader) -> Option<PropertyResult<'a>> {
-        let tag = Tag::decode(reader);
+    pub fn decode_next<'a>(
+        &self,
+        reader: &mut Reader,
+        buf: &'a [u8],
+    ) -> Option<PropertyResult<'a>> {
+        let tag = Tag::decode(reader, buf);
         if tag.number == TagNumber::ContextSpecific(1) {
             // closing tag
             return None;
@@ -40,9 +44,9 @@ impl ObjectWithResults {
             TagNumber::ContextSpecific(2),
             "expected property identifier tag"
         );
-        let property_id: PropertyId = (decode_unsigned(reader, tag.value) as u32).into();
+        let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf) as u32).into();
 
-        let tag = Tag::decode(reader);
+        let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecific(4),
@@ -52,18 +56,19 @@ impl ObjectWithResults {
         let property_value = if property_id == PropertyId::PropEventTimeStamps {
             // hack to read past complicated timestamps
             loop {
-                let byte = reader.read_byte();
+                let byte = reader.read_byte(buf);
                 // read until we get to the closing tag
                 if byte == 0x4f {
                     break PropertyValue::PropValue(ApplicationDataValue::Boolean(false));
                 }
             }
         } else {
-            let tag = Tag::decode(reader);
-            let value = ApplicationDataValue::decode(&tag, &self.object_id, &property_id, reader);
+            let tag = Tag::decode(reader, buf);
+            let value =
+                ApplicationDataValue::decode(&tag, &self.object_id, &property_id, reader, buf);
             let property_value = PropertyValue::PropValue(value);
 
-            let tag = Tag::decode(reader);
+            let tag = Tag::decode(reader, buf);
             assert_eq!(
                 tag.number,
                 TagNumber::ContextSpecific(4),
@@ -105,21 +110,21 @@ impl<'a> Display for PropertyValue<'a> {
 }
 
 impl ReadPropertyMultipleAck {
-    pub fn decode_next(&self, reader: &mut Reader) -> Option<ObjectWithResults> {
+    pub fn decode_next(&self, reader: &mut Reader, buf: &[u8]) -> Option<ObjectWithResults> {
         if reader.eof() {
             return None;
         }
 
-        let tag = Tag::decode(reader);
+        let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecific(0),
             "expected object_id tag"
         );
-        let object_id = ObjectId::decode(reader, tag.value).unwrap();
+        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
 
         //let object_id = decode_context_object_id(reader);
-        let tag = Tag::decode(reader);
+        let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecific(1),

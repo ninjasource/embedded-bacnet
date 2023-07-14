@@ -91,17 +91,17 @@ impl DataLink {
         }
     }
 
-    pub fn decode(reader: &mut Reader) -> Result<Self, Error> {
-        let bvll_type = reader.read_byte();
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let bvll_type = reader.read_byte(buf);
         if bvll_type != Self::BVLL_TYPE_BACNET_IP {
             panic!("only BACNET_IP supported");
         }
 
-        let npdu_type = reader.read_byte();
-        let len: u16 = u16::from_be_bytes(reader.read_bytes());
+        let npdu_type = reader.read_byte(buf);
+        let len: u16 = u16::from_be_bytes(reader.read_bytes(buf));
         reader.set_len(len as usize)?;
 
-        let npdu = NetworkPdu::decode(reader)?;
+        let npdu = NetworkPdu::decode(reader, buf)?;
 
         let data_link = match npdu_type {
             Self::BVLC_ORIGINAL_BROADCAST_NPDU => Self {

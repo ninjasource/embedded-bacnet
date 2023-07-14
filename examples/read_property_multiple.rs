@@ -45,10 +45,10 @@ fn main() -> Result<(), Error> {
     // receive reply
     let mut buf = vec![0; 1024];
     let (n, peer) = socket.recv_from(&mut buf).unwrap();
-    let payload = &buf[..n];
-    println!("Received: {:02x?} from {:?}", payload, peer);
-    let mut reader = Reader::new(payload);
-    let message = DataLink::decode(&mut reader);
+    let buf = &buf[..n];
+    println!("Received: {:02x?} from {:?}", buf, peer);
+    let mut reader = Reader::new(buf.len());
+    let message = DataLink::decode(&mut reader, buf);
     println!("Decoded:  {:?}\n", message);
 
     Ok(())

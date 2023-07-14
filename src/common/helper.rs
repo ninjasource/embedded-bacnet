@@ -28,8 +28,8 @@ impl Buffer {
 }
 
 pub struct Reader {
-    buf: Vec<u8>,
     index: usize,
+    payload_len: usize,
     len: usize,
 }
 
@@ -38,18 +38,16 @@ impl Reader {
         self.index == self.len
     }
 
-    pub fn new(payload: &[u8]) -> Self {
-        let mut buf: Vec<u8> = Vec::new();
-        buf.extend_from_slice(payload);
+    pub fn new(payload_len: usize) -> Self {
         Self {
-            buf,
             index: 0,
+            payload_len,
             len: usize::MAX - 1000,
         }
     }
 
     pub fn set_len(&mut self, len: usize) -> Result<(), Error> {
-        if len > self.buf.len() {
+        if len > self.payload_len {
             Err(Error::Length(
                 "read buffer too small to fit entire bacnet payload",
             ))
@@ -59,32 +57,32 @@ impl Reader {
         }
     }
 
-    pub fn read_byte(&mut self) -> u8 {
+    pub fn read_byte(&mut self, buf: &[u8]) -> u8 {
         if self.eof() {
             panic!("read_byte attempt to read past end of buffer");
         } else {
-            let byte = self.buf[self.index];
+            let byte = buf[self.index];
             self.index += 1;
             byte
         }
     }
 
-    pub fn read_bytes<const COUNT: usize>(&mut self) -> [u8; COUNT] {
+    pub fn read_bytes<const COUNT: usize>(&mut self, buf: &[u8]) -> [u8; COUNT] {
         if self.index + COUNT >= self.len {
             panic!("read_bytes attempt to read past end of buffer");
         } else {
             let mut tmp: [u8; COUNT] = [0; COUNT];
-            tmp.copy_from_slice(&self.buf[self.index..self.index + COUNT]);
+            tmp.copy_from_slice(&buf[self.index..self.index + COUNT]);
             self.index += COUNT;
             tmp
         }
     }
 
-    pub fn read_slice<'a>(&'a mut self, len: usize) -> &'a [u8] {
+    pub fn read_slice<'a>(&mut self, len: usize, buf: &'a [u8]) -> &'a [u8] {
         if self.index + len >= self.len {
             panic!("read_slice attempt to read past end of buffer");
         } else {
-            let slice = &self.buf[self.index..self.index + len];
+            let slice = &buf[self.index..self.index + len];
             self.index += len;
             slice
         }
@@ -195,9 +193,9 @@ pub fn encode_context_unsigned(buffer: &mut Buffer, tag_number: u8, value: u32) 
     encode_unsigned(buffer, value as u64);
 }
 
-pub fn decode_context_enumerated(reader: &mut Reader) -> (Tag, PropertyId) {
-    let tag = Tag::decode(reader);
-    let property_id: PropertyId = (decode_unsigned(reader, tag.value) as u32).into();
+pub fn decode_context_enumerated(reader: &mut Reader, buf: &[u8]) -> (Tag, PropertyId) {
+    let tag = Tag::decode(reader, buf);
+    let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf) as u32).into();
 
     (tag, property_id)
 }
@@ -219,19 +217,19 @@ pub fn encode_context_enumerated(buffer: &mut Buffer, tag_number: u8, property_i
     encode_unsigned(buffer, value as u64);
 }
 
-pub fn decode_unsigned(reader: &mut Reader, len: u32) -> u64 {
+pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> u64 {
     match len {
-        1 => reader.read_byte() as u64,
-        2 => u16::from_be_bytes(reader.read_bytes()) as u64,
+        1 => reader.read_byte(buf) as u64,
+        2 => u16::from_be_bytes(reader.read_bytes(buf)) as u64,
         3 => {
-            let bytes: [u8; 3] = reader.read_bytes();
+            let bytes: [u8; 3] = reader.read_bytes(buf);
             let mut tmp: [u8; 4] = [0; 4];
             tmp[1..].copy_from_slice(&bytes);
             u32::from_be_bytes(tmp) as u64
         }
 
-        4 => u32::from_be_bytes(reader.read_bytes()) as u64,
-        8 => u64::from_be_bytes(reader.read_bytes()) as u64,
+        4 => u32::from_be_bytes(reader.read_bytes(buf)) as u64,
+        8 => u64::from_be_bytes(reader.read_bytes(buf)) as u64,
         _ => panic!("invalid unsigned len"),
     }
 }

@@ -38,8 +38,8 @@ fn main() -> Result<(), Error> {
         let (n, peer) = socket.recv_from(&mut buf).unwrap();
         let payload = &buf[..n];
         println!("Received: {:02x?} from {:?}", payload, peer);
-        let mut reader = Reader::new(payload);
-        let message = DataLink::decode(&mut reader);
+        let mut reader = Reader::new(payload.len());
+        let message = DataLink::decode(&mut reader, payload);
         println!("Decoded:  {:?}\n", message);
     }
 }

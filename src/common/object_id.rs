@@ -21,8 +21,8 @@ impl ObjectId {
         buffer.extend_from_slice(&value.to_be_bytes());
     }
 
-    pub fn decode(reader: &mut Reader, size: u32) -> Result<Self, Error> {
-        let value = decode_unsigned(reader, size) as u32;
+    pub fn decode(size: u32, reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let value = decode_unsigned(size, reader, buf) as u32;
         let object_type = value >> BACNET_INSTANCE_BITS & BACNET_MAX_OBJECT;
         let object_type = ObjectType::from(object_type);
         let id = value & BACNET_MAX_INSTANCE;

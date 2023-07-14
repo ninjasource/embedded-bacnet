@@ -189,8 +189,8 @@ impl ApplicationPdu {
         };
     }
 
-    pub fn decode(reader: &mut Reader) -> Result<Self, Error> {
-        let byte0 = reader.read_byte();
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let byte0 = reader.read_byte(buf);
         let pdu_type: ApduType = (byte0 >> 4).into();
         let pdu_flags = byte0 & 0x0F;
         let segmented_message = (pdu_flags & PduFlags::SegmentedMessage as u8) > 0;
@@ -204,15 +204,15 @@ impl ApplicationPdu {
 
         match pdu_type {
             ApduType::ConfirmedServiceRequest => {
-                let apdu = ConfirmedRequest::decode(reader);
+                let apdu = ConfirmedRequest::decode(reader, buf);
                 Ok(ApplicationPdu::ConfirmedRequest(apdu))
             }
             ApduType::UnconfirmedServiceRequest => {
-                let apdu = UnconfirmedRequest::decode(reader);
+                let apdu = UnconfirmedRequest::decode(reader, buf);
                 Ok(ApplicationPdu::UnconfirmedRequest(apdu))
             }
             ApduType::ComplexAck => {
-                let adpu = ComplexAck::decode(reader)?;
+                let adpu = ComplexAck::decode(reader, buf)?;
                 Ok(ApplicationPdu::ComplexAck(adpu))
             }
             _ => unimplemented!(),
@@ -237,13 +237,13 @@ pub struct ComplexAck {
 }
 
 impl ComplexAck {
-    pub fn decode(reader: &mut Reader) -> Result<Self, Error> {
-        let invoke_id = reader.read_byte();
-        let choice = reader.read_byte().into();
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let invoke_id = reader.read_byte(buf);
+        let choice = reader.read_byte(buf).into();
 
         let service = match choice {
             ConfirmedServiceChoice::ReadProperty => {
-                let apdu = ReadPropertyAck::decode(reader);
+                let apdu = ReadPropertyAck::decode(reader, buf);
                 ComplexAckService::ReadProperty(apdu)
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
@@ -315,7 +315,7 @@ impl ConfirmedRequest {
         };
     }
 
-    pub fn decode(_reader: &mut Reader) -> Self {
+    pub fn decode(_reader: &mut Reader, _buf: &[u8]) -> Self {
         unimplemented!()
     }
 }
@@ -336,15 +336,15 @@ impl UnconfirmedRequest {
         }
     }
 
-    pub fn decode(reader: &mut Reader) -> Self {
-        let choice: UnconfirmedServiceChoice = reader.read_byte().into();
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+        let choice: UnconfirmedServiceChoice = reader.read_byte(buf).into();
         match choice {
             UnconfirmedServiceChoice::IAm => {
-                let apdu = IAm::decode(reader).unwrap();
+                let apdu = IAm::decode(reader, buf).unwrap();
                 UnconfirmedRequest::IAm(apdu)
             }
             UnconfirmedServiceChoice::WhoIs => {
-                let apdu = WhoIs::decode(reader);
+                let apdu = WhoIs::decode(reader, buf);
                 UnconfirmedRequest::WhoIs(apdu)
             }
             _ => unimplemented!(),
