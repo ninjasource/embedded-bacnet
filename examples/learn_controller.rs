@@ -125,36 +125,45 @@ fn get_multi_binary(
         })
         .collect();
 
-    let message = send_and_recv(items, socket)?;
+    let rpm = ReadPropertyMultiple::new(items);
+    let buffer = read_property_multiple_to_bytes(rpm);
+    let addr = format!("192.168.1.249:{}", 0xBAC0);
+    socket.send_to(buffer.to_bytes(), &addr)?;
+    let mut buf = vec![0; 16 * 1024];
+    let (n, _) = socket.recv_from(&mut buf).unwrap();
+    let payload = &buf[..n];
+    let mut reader = Reader::new(payload);
+    let message = DataLink::decode(&mut reader).unwrap();
+
+    //let message = send_and_recv(items, socket)?;
 
     if let Some(ack) = message.get_read_property_multiple_ack() {
-        let items = ack
-            .objects
-            .iter()
-            .map(|x| {
-                assert_eq!(x.results.len(), 3);
-                let name = x.results[0].value.to_string();
-                let value = match x.results[1].value {
-                    PropertyValue::PropValue(ApplicationDataValue::Enumerated(
-                        Enumerated::Binary(Binary::On),
-                    )) => true,
-                    _ => false,
-                };
-                let status_flags = match x.results[2].value {
-                    PropertyValue::PropValue(ApplicationDataValue::BitString(
-                        BitString::StatusFlags(x),
-                    )) => x,
-                    _ => unreachable!(),
-                };
+        let mut items = vec![];
 
-                BinaryValue {
-                    id: x.object_id,
-                    name,
-                    value,
-                    status_flags,
-                }
-            })
-            .collect();
+        while let Some(x) = ack.decode_next(&mut reader) {
+            let name = x.decode_next(&mut reader).unwrap().value.to_string();
+            let value = match x.decode_next(&mut reader).unwrap().value {
+                PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Binary(
+                    Binary::On,
+                ))) => true,
+                _ => false,
+            };
+            let status_flags = match x.decode_next(&mut reader).unwrap().value {
+                PropertyValue::PropValue(ApplicationDataValue::BitString(
+                    BitString::StatusFlags(x),
+                )) => x,
+                _ => unreachable!(),
+            };
+
+            assert!(x.decode_next(&mut reader).is_none());
+
+            items.push(BinaryValue {
+                id: x.object_id,
+                name,
+                value,
+                status_flags,
+            });
+        }
 
         return Ok(items);
     }
@@ -178,41 +187,48 @@ fn get_multi_analog(
         })
         .collect();
 
-    let message = send_and_recv(items, socket)?;
+    let rpm = ReadPropertyMultiple::new(items);
+    let buffer = read_property_multiple_to_bytes(rpm);
+    let addr = format!("192.168.1.249:{}", 0xBAC0);
+    socket.send_to(buffer.to_bytes(), &addr)?;
+    let mut buf = vec![0; 16 * 1024];
+    let (n, _) = socket.recv_from(&mut buf).unwrap();
+    let payload = &buf[..n];
+    let mut reader = Reader::new(payload);
+    let message = DataLink::decode(&mut reader).unwrap();
 
     if let Some(ack) = message.get_read_property_multiple_ack() {
-        let items = ack
-            .objects
-            .iter()
-            .map(|x| {
-                assert_eq!(x.results.len(), 4);
-                let name = x.results[0].value.to_string();
-                let value = match x.results[1].value {
-                    PropertyValue::PropValue(ApplicationDataValue::Real(val)) => val,
-                    _ => unreachable!(),
-                };
-                let units = match &x.results[2].value {
-                    PropertyValue::PropValue(ApplicationDataValue::Enumerated(
-                        Enumerated::Units(u),
-                    )) => u.clone(),
-                    _ => unreachable!(),
-                };
-                let status_flags = match x.results[3].value {
-                    PropertyValue::PropValue(ApplicationDataValue::BitString(
-                        BitString::StatusFlags(x),
-                    )) => x,
-                    _ => unreachable!(),
-                };
+        let mut items = vec![];
 
-                AnalogValue {
-                    id: x.object_id,
-                    name,
-                    value,
-                    units,
-                    status_flags,
-                }
+        while let Some(x) = ack.decode_next(&mut reader) {
+            let name = x.decode_next(&mut reader).unwrap().value.to_string();
+            let value = match x.decode_next(&mut reader).unwrap().value {
+                PropertyValue::PropValue(ApplicationDataValue::Real(val)) => val,
+                _ => unreachable!(),
+            };
+            let units = match x.decode_next(&mut reader).unwrap().value {
+                PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Units(
+                    u,
+                ))) => u.clone(),
+                _ => unreachable!(),
+            };
+            let status_flags = match x.decode_next(&mut reader).unwrap().value {
+                PropertyValue::PropValue(ApplicationDataValue::BitString(
+                    BitString::StatusFlags(x),
+                )) => x,
+                _ => unreachable!(),
+            };
+
+            assert!(x.decode_next(&mut reader).is_none());
+
+            items.push(AnalogValue {
+                id: x.object_id,
+                name,
+                value,
+                units,
+                status_flags,
             })
-            .collect();
+        }
 
         return Ok(items);
     }

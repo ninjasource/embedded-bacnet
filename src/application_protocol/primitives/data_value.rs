@@ -13,14 +13,14 @@ use crate::common::{
 };
 
 #[derive(Debug)]
-pub enum ApplicationDataValue {
+pub enum ApplicationDataValue<'a> {
     Boolean(bool),
     Real(f32),
     Double(f64),
     Date(Date),
     Time(Time),
     ObjectId(ObjectId),
-    CharacterString(CharacterString),
+    CharacterString(CharacterString<'a>),
     Enumerated(Enumerated),
     BitString(BitString),
     UnsignedInt(u32),
@@ -50,11 +50,11 @@ pub struct Time {
 }
 
 #[derive(Debug)]
-pub struct CharacterString {
-    pub inner: String,
+pub struct CharacterString<'a> {
+    pub inner: &'a str,
 }
 
-impl Display for ApplicationDataValue {
+impl<'a> Display for ApplicationDataValue<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ApplicationDataValue::Real(x) => write!(f, "{}", x),
@@ -101,25 +101,25 @@ impl BitString {
     }
 }
 
-impl CharacterString {
-    pub fn decode(reader: &mut Reader, len: u32) -> Self {
+impl<'a> CharacterString<'a> {
+    pub fn decode(reader: &'a mut Reader, len: u32) -> Self {
         let character_set = reader.read_byte();
         if character_set != 0 {
             unimplemented!("non-utf8 characterset not supported")
         }
         let slice = reader.read_slice(len as usize - 1);
         CharacterString {
-            inner: from_utf8(slice).unwrap().to_owned(),
+            inner: from_utf8(slice).unwrap(),
         }
     }
 }
 
-impl ApplicationDataValue {
+impl<'a> ApplicationDataValue<'a> {
     pub fn decode(
         tag: &Tag,
         object_id: &ObjectId,
         property_id: &PropertyId,
-        reader: &mut Reader,
+        reader: &'a mut Reader,
     ) -> Self {
         let tag_num = match tag.number {
             TagNumber::Application(x) => x,

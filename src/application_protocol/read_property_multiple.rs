@@ -18,29 +18,84 @@ use crate::{
 
 #[derive(Debug)]
 pub struct ReadPropertyMultipleAck {
-    pub objects: Vec<ObjectWithResults>,
+    // pub objects: Vec<ObjectWithResults>,
 }
 
 #[derive(Debug)]
 pub struct ObjectWithResults {
     pub object_id: ObjectId,
-    pub results: Vec<PropertyResult>,
+    // pub results: Vec<PropertyResult>,
+}
+
+impl ObjectWithResults {
+    pub fn decode_next<'a>(&self, reader: &'a mut Reader) -> Option<PropertyResult<'a>> {
+        let tag = Tag::decode(reader);
+        if tag.number == TagNumber::ContextSpecific(1) {
+            // closing tag
+            return None;
+        }
+
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(2),
+            "expected property identifier tag"
+        );
+        let property_id: PropertyId = (decode_unsigned(reader, tag.value) as u32).into();
+
+        let tag = Tag::decode(reader);
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(4),
+            "expected opening tag"
+        );
+
+        let property_value = if property_id == PropertyId::PropEventTimeStamps {
+            // hack to read past complicated timestamps
+            loop {
+                let byte = reader.read_byte();
+                // read until we get to the closing tag
+                if byte == 0x4f {
+                    break PropertyValue::PropValue(ApplicationDataValue::Boolean(false));
+                }
+            }
+        } else {
+            let tag = Tag::decode(reader);
+            let value = ApplicationDataValue::decode(&tag, &self.object_id, &property_id, reader);
+            let property_value = PropertyValue::PropValue(value);
+
+            let tag = Tag::decode(reader);
+            assert_eq!(
+                tag.number,
+                TagNumber::ContextSpecific(4),
+                "expected closing tag"
+            );
+
+            property_value
+        };
+
+        let property_result = PropertyResult {
+            id: property_id,
+            value: property_value,
+        };
+
+        Some(property_result)
+    }
 }
 
 #[derive(Debug)]
-pub struct PropertyResult {
+pub struct PropertyResult<'a> {
     pub id: PropertyId,
-    pub value: PropertyValue,
+    pub value: PropertyValue<'a>,
 }
 
 #[derive(Debug)]
-pub enum PropertyValue {
-    PropValue(ApplicationDataValue),
-    PropDescription(String),
+pub enum PropertyValue<'a> {
+    PropValue(ApplicationDataValue<'a>),
+    PropDescription(&'a str),
     PropObjectName(String),
 }
 
-impl Display for PropertyValue {
+impl<'a> Display for PropertyValue<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match &self {
             Self::PropValue(x) => write!(f, "{}", x),
@@ -50,87 +105,29 @@ impl Display for PropertyValue {
 }
 
 impl ReadPropertyMultipleAck {
-    pub fn decode(reader: &mut Reader) -> Self {
-        let mut objects = Vec::new();
-
-        while !reader.eof() {
-            let tag = Tag::decode(reader);
-            assert_eq!(
-                tag.number,
-                TagNumber::ContextSpecific(0),
-                "expected object_id tag"
-            );
-            let object_id = ObjectId::decode(reader, tag.value).unwrap();
-
-            //let object_id = decode_context_object_id(reader);
-            let tag = Tag::decode(reader);
-            assert_eq!(
-                tag.number,
-                TagNumber::ContextSpecific(1),
-                "expected list of results opening tag"
-            );
-
-            let mut results = Vec::new();
-
-            loop {
-                let tag = Tag::decode(reader);
-                if tag.number == TagNumber::ContextSpecific(1) {
-                    // closing tag
-                    break;
-                }
-
-                assert_eq!(
-                    tag.number,
-                    TagNumber::ContextSpecific(2),
-                    "expected property identifier tag"
-                );
-                let property_id: PropertyId = (decode_unsigned(reader, tag.value) as u32).into();
-
-                let tag = Tag::decode(reader);
-                assert_eq!(
-                    tag.number,
-                    TagNumber::ContextSpecific(4),
-                    "expected opening tag"
-                );
-
-                let property_value = if property_id == PropertyId::PropEventTimeStamps {
-                    // hack to read past complicated timestamps
-                    loop {
-                        let byte = reader.read_byte();
-                        // read until we get to the closing tag
-                        if byte == 0x4f {
-                            break PropertyValue::PropValue(ApplicationDataValue::Boolean(false));
-                        }
-                    }
-                } else {
-                    let tag = Tag::decode(reader);
-                    let value =
-                        ApplicationDataValue::decode(&tag, &object_id, &property_id, reader);
-                    let property_value = PropertyValue::PropValue(value);
-
-                    let tag = Tag::decode(reader);
-                    assert_eq!(
-                        tag.number,
-                        TagNumber::ContextSpecific(4),
-                        "expected closing tag"
-                    );
-
-                    property_value
-                };
-
-                let property_result = PropertyResult {
-                    id: property_id,
-                    value: property_value,
-                };
-
-                results.push(property_result)
-            }
-
-            let object_with_results = ObjectWithResults { object_id, results };
-            objects.push(object_with_results);
+    pub fn decode_next(&self, reader: &mut Reader) -> Option<ObjectWithResults> {
+        if reader.eof() {
+            return None;
         }
 
-        Self { objects }
+        let tag = Tag::decode(reader);
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(0),
+            "expected object_id tag"
+        );
+        let object_id = ObjectId::decode(reader, tag.value).unwrap();
+
+        //let object_id = decode_context_object_id(reader);
+        let tag = Tag::decode(reader);
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(1),
+            "expected list of results opening tag"
+        );
+
+        let object_with_results = ObjectWithResults { object_id };
+        Some(object_with_results)
     }
 }
 

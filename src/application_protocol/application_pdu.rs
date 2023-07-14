@@ -247,8 +247,8 @@ impl ComplexAck {
                 ComplexAckService::ReadProperty(apdu)
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
-                let apdu = ReadPropertyMultipleAck::decode(reader);
-                ComplexAckService::ReadPropertyMultiple(apdu)
+                //let apdu: ReadPropertyMultipleAck = ReadPropertyMultipleAck::decode(reader);
+                ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck {})
             }
             s => return Err(Error::UnimplementedConfirmedServiceChoice(s)),
         };
