@@ -270,7 +270,7 @@ pub enum ConfirmedRequestSerivice<'a> {
     // add more here
 }
 
-enum PduFlags {
+pub enum PduFlags {
     Server = 0b0001,
     SegmentedResponseAccepted = 0b0010,
     MoreFollows = 0b0100,

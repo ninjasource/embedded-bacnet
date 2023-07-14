@@ -108,15 +108,6 @@ pub fn encode_u64(buffer: &mut Buffer, value: u64) {
     buffer.extend_from_slice(&value.to_be_bytes());
 }
 
-fn parse_enumerated<T, E>(bytes: &[u8], len: u32) -> Result<(&[u8], T), T::Error>
-where
-    T: TryFrom<u32>,
-{
-    let (bytes, value) = parse_unsigned(bytes, len).unwrap();
-    let value = T::try_from(value)?;
-    Ok((bytes, value))
-}
-
 pub fn parse_unsigned(bytes: &[u8], len: u32) -> Result<(&[u8], u32), Error> {
     let len = len as usize;
     if len > 4 || len == 0 {

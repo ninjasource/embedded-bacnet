@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![no_std]
 
 // This library supports the IP version of bacnet and this is how the network packet is wrapped:

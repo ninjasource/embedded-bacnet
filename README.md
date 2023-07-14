@@ -6,8 +6,10 @@ A library to read and write bacnet packets for embedded devices. Bacnet is a pro
 The official spec is unfortunately behind a paywall and so this implementation has been cobbled together by cross referencing multiple code implementations.
 The most comprehensive implementation and documentation I have found to be here: https://bacnet.sourceforge.net/ for which I am very grateful.
 
-You can use this library to send and receive bacnet packets. However, the entire spec has not been implemented, only the bits I found most important. Use the link above if you want a comprehensive implementation.
+You can use this library to send and receive bacnet packets. However, the entire spec has not been implemented, only the bits I found most important. Use the link above if you want a comprehensive implementation. 
 
+
+The library requires no standard library or memory allocator so expect to use iterators and loops to when decoding your network packets.
 
 ## How it works
 

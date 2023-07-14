@@ -8,10 +8,10 @@ use crate::common::{
 
 #[derive(Debug)]
 pub struct IAm {
-    device_id: ObjectId,
-    max_apdu: usize,
-    segmentation: Segmentation,
-    vendor_id: u16,
+    pub device_id: ObjectId,
+    pub max_apdu: usize,
+    pub segmentation: Segmentation,
+    pub vendor_id: u16,
 }
 
 impl IAm {
