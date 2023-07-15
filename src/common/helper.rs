@@ -82,21 +82,21 @@ impl Reader {
     }
 }
 
-pub fn encode_u16(buffer: &mut Writer, value: u16) {
-    buffer.extend_from_slice(&value.to_be_bytes());
+pub fn encode_u16(writer: &mut Writer, value: u16) {
+    writer.extend_from_slice(&value.to_be_bytes());
 }
 
-pub fn encode_u24(buffer: &mut Writer, value: u32) {
+pub fn encode_u24(writer: &mut Writer, value: u32) {
     let slice = &value.to_be_bytes();
-    buffer.extend_from_slice(&slice[..3]);
+    writer.extend_from_slice(&slice[..3]);
 }
 
-pub fn encode_u32(buffer: &mut Writer, value: u32) {
-    buffer.extend_from_slice(&value.to_be_bytes());
+pub fn encode_u32(writer: &mut Writer, value: u32) {
+    writer.extend_from_slice(&value.to_be_bytes());
 }
 
-pub fn encode_u64(buffer: &mut Writer, value: u64) {
-    buffer.extend_from_slice(&value.to_be_bytes());
+pub fn encode_u64(writer: &mut Writer, value: u64) {
+    writer.extend_from_slice(&value.to_be_bytes());
 }
 
 pub fn parse_unsigned(bytes: &[u8], len: u32) -> Result<(&[u8], u32), Error> {
@@ -121,35 +121,35 @@ pub fn parse_unsigned(bytes: &[u8], len: u32) -> Result<(&[u8], u32), Error> {
     Ok((&bytes[len..], val))
 }
 
-pub fn encode_context_object_id(buffer: &mut Writer, tag_number: u8, object_id: &ObjectId) {
+pub fn encode_context_object_id(writer: &mut Writer, tag_number: u8, object_id: &ObjectId) {
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), 4);
-    tag.encode(buffer);
-    object_id.encode(buffer);
+    tag.encode(writer);
+    object_id.encode(writer);
 }
 
-pub fn encode_opening_tag(buffer: &mut Writer, tag_number: u8) {
+pub fn encode_opening_tag(writer: &mut Writer, tag_number: u8) {
     if tag_number <= 14 {
         let byte = 0b0001000 | (tag_number << 4) | 6;
-        buffer.push(byte)
+        writer.push(byte)
     } else {
         let byte = 0b0001000 | 0xF0 | 6;
-        buffer.push(byte);
-        buffer.push(tag_number)
+        writer.push(byte);
+        writer.push(tag_number)
     }
 }
 
-pub fn encode_closing_tag(buffer: &mut Writer, tag_number: u8) {
+pub fn encode_closing_tag(writer: &mut Writer, tag_number: u8) {
     if tag_number <= 14 {
         let byte = 0b0001000 | (tag_number << 4) | 7;
-        buffer.push(byte)
+        writer.push(byte)
     } else {
         let byte = 0b0001000 | 0xF0 | 7;
-        buffer.push(byte);
-        buffer.push(tag_number)
+        writer.push(byte);
+        writer.push(tag_number)
     }
 }
 
-pub fn encode_context_unsigned(buffer: &mut Writer, tag_number: u8, value: u32) {
+pub fn encode_context_unsigned(writer: &mut Writer, tag_number: u8, value: u32) {
     let len = if value < 0x100 {
         1
     } else if value < 0x10000 {
@@ -161,8 +161,8 @@ pub fn encode_context_unsigned(buffer: &mut Writer, tag_number: u8, value: u32) 
     };
 
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
-    tag.encode(buffer);
-    encode_unsigned(buffer, value as u64);
+    tag.encode(writer);
+    encode_unsigned(writer, value as u64);
 }
 
 pub fn decode_context_enumerated(reader: &mut Reader, buf: &[u8]) -> (Tag, PropertyId) {
@@ -172,7 +172,7 @@ pub fn decode_context_enumerated(reader: &mut Reader, buf: &[u8]) -> (Tag, Prope
     (tag, property_id)
 }
 
-pub fn encode_context_enumerated(buffer: &mut Writer, tag_number: u8, property_id: PropertyId) {
+pub fn encode_context_enumerated(writer: &mut Writer, tag_number: u8, property_id: PropertyId) {
     let value = property_id as u32;
     let len = if value < 0x100 {
         1
@@ -185,8 +185,8 @@ pub fn encode_context_enumerated(buffer: &mut Writer, tag_number: u8, property_i
     };
 
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
-    tag.encode(buffer);
-    encode_unsigned(buffer, value as u64);
+    tag.encode(writer);
+    encode_unsigned(writer, value as u64);
 }
 
 pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> u64 {
@@ -206,16 +206,16 @@ pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> u64 {
     }
 }
 
-pub fn encode_unsigned(buffer: &mut Writer, value: u64) {
+pub fn encode_unsigned(writer: &mut Writer, value: u64) {
     if value < 0x100 {
-        buffer.push(value as u8);
+        writer.push(value as u8);
     } else if value < 0x10000 {
-        encode_u16(buffer, value as u16);
+        encode_u16(writer, value as u16);
     } else if value < 0x1000000 {
-        encode_u24(buffer, value as u32);
+        encode_u24(writer, value as u32);
     } else if value < 0x100000000 {
-        encode_u32(buffer, value as u32);
+        encode_u32(writer, value as u32);
     } else {
-        encode_u64(buffer, value)
+        encode_u64(writer, value)
     }
 }

@@ -159,24 +159,24 @@ impl<'a> ReadPropertyMultiple<'a> {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Writer) {
+    pub fn encode(&self, writer: &mut Writer) {
         for object in self.objects {
             // object_id
-            encode_context_object_id(buffer, 0, &object.object_id);
+            encode_context_object_id(writer, 0, &object.object_id);
 
-            encode_opening_tag(buffer, 1);
+            encode_opening_tag(writer, 1);
 
             for property_id in object.property_ids {
                 // property_id
-                encode_context_enumerated(buffer, 0, *property_id);
+                encode_context_enumerated(writer, 0, *property_id);
 
                 // array_index
                 if self.array_index != BACNET_ARRAY_ALL {
-                    encode_context_unsigned(buffer, 1, self.array_index);
+                    encode_context_unsigned(writer, 1, self.array_index);
                 }
             }
 
-            encode_closing_tag(buffer, 1);
+            encode_closing_tag(writer, 1);
         }
     }
 

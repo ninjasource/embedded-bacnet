@@ -133,30 +133,30 @@ impl<'a> NetworkPdu<'a> {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Writer) {
-        buffer.push(Self::VERSION);
-        buffer.push(self.calculate_control());
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push(Self::VERSION);
+        writer.push(self.calculate_control());
 
         if let Some(dst) = self.dst.as_ref() {
-            dst.network_address.encode(buffer);
+            dst.network_address.encode(writer);
         }
 
         if let Some(src) = self.src.as_ref() {
-            src.encode(buffer);
+            src.encode(writer);
         }
 
         // hop count comes after src
         if let Some(dst) = self.dst.as_ref() {
-            buffer.push(dst.hop_count);
+            writer.push(dst.hop_count);
         }
 
         match &self.network_message {
-            NetworkMessage::Apdu(adpu) => adpu.encode(buffer),
+            NetworkMessage::Apdu(adpu) => adpu.encode(writer),
             NetworkMessage::MessageType(message_type) => {
-                buffer.push(*message_type as u8);
+                writer.push(*message_type as u8);
             }
             NetworkMessage::CustomMessageType(message_type) => {
-                buffer.push(*message_type);
+                writer.push(*message_type);
             }
         };
     }
@@ -287,15 +287,15 @@ impl DestinationAddress {
 }
 
 impl NetworkAddress {
-    pub fn encode(&self, buffer: &mut Writer) {
-        buffer.extend_from_slice(&self.net.to_be_bytes());
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.extend_from_slice(&self.net.to_be_bytes());
         match self.addr.as_ref() {
             Some(addr) => {
-                buffer.push(IPV4_ADDR_LEN);
-                buffer.extend_from_slice(&addr.ipv4);
-                buffer.extend_from_slice(&addr.port.to_be_bytes());
+                writer.push(IPV4_ADDR_LEN);
+                writer.extend_from_slice(&addr.ipv4);
+                writer.extend_from_slice(&addr.port.to_be_bytes());
             }
-            None => buffer.push(0),
+            None => writer.push(0),
         }
     }
 

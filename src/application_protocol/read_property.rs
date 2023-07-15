@@ -77,16 +77,16 @@ impl ReadProperty {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Writer) {
+    pub fn encode(&self, writer: &mut Writer) {
         // object_id
-        encode_context_object_id(buffer, 0, &self.object_id);
+        encode_context_object_id(writer, 0, &self.object_id);
 
         // property_id
-        encode_context_enumerated(buffer, 1, self.property_id);
+        encode_context_enumerated(writer, 1, self.property_id);
 
         // array_index
         if self.array_index != BACNET_ARRAY_ALL {
-            encode_context_unsigned(buffer, 2, self.array_index);
+            encode_context_unsigned(writer, 2, self.array_index);
         }
     }
 

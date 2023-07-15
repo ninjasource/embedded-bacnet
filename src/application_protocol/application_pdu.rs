@@ -181,10 +181,10 @@ impl From<u8> for ConfirmedServiceChoice {
 }
 
 impl<'a> ApplicationPdu<'a> {
-    pub fn encode(&self, buffer: &mut Writer) {
+    pub fn encode(&self, writer: &mut Writer) {
         match self {
-            ApplicationPdu::ConfirmedRequest(req) => req.encode(buffer),
-            ApplicationPdu::UnconfirmedRequest(req) => req.encode(buffer),
+            ApplicationPdu::ConfirmedRequest(req) => req.encode(writer),
+            ApplicationPdu::UnconfirmedRequest(req) => req.encode(writer),
             ApplicationPdu::ComplexAck(_) => todo!(),
         };
     }
@@ -289,27 +289,27 @@ impl<'a> ConfirmedRequest<'a> {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Writer) {
+    pub fn encode(&self, writer: &mut Writer) {
         let max_segments_flag = match self.max_segments {
             MaxSegments::_0 => 0,
             _ => PduFlags::SegmentedResponseAccepted as u8,
         };
 
         let control = ((ApduType::ConfirmedServiceRequest as u8) << 4) | max_segments_flag;
-        buffer.push(control);
-        buffer.push(self.max_segments as u8 | self.max_adpu as u8);
-        buffer.push(self.invoke_id);
+        writer.push(control);
+        writer.push(self.max_segments as u8 | self.max_adpu as u8);
+        writer.push(self.invoke_id);
 
         // TODO: handle Segment pdu
 
         match &self.service {
             ConfirmedRequestSerivice::ReadProperty(service) => {
-                buffer.push(ConfirmedServiceChoice::ReadProperty as u8);
-                service.encode(buffer)
+                writer.push(ConfirmedServiceChoice::ReadProperty as u8);
+                service.encode(writer)
             }
             ConfirmedRequestSerivice::ReadPropertyMultiple(service) => {
-                buffer.push(ConfirmedServiceChoice::ReadPropMultiple as u8);
-                service.encode(buffer)
+                writer.push(ConfirmedServiceChoice::ReadPropMultiple as u8);
+                service.encode(writer)
             }
         };
     }
@@ -326,12 +326,12 @@ pub enum UnconfirmedRequest {
 }
 
 impl UnconfirmedRequest {
-    pub fn encode(&self, buffer: &mut Writer) {
-        buffer.push((ApduType::UnconfirmedServiceRequest as u8) << 4);
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push((ApduType::UnconfirmedServiceRequest as u8) << 4);
 
         match &self {
             Self::IAm(_) => todo!(),
-            Self::WhoIs(payload) => payload.encode(buffer),
+            Self::WhoIs(payload) => payload.encode(writer),
         }
     }
 

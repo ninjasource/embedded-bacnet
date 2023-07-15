@@ -73,20 +73,20 @@ impl<'a> DataLink<'a> {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Writer) {
-        buffer.push(Self::BVLL_TYPE_BACNET_IP);
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push(Self::BVLL_TYPE_BACNET_IP);
         match &self.function {
             DataLinkFunction::OriginalBroadcastNpdu(npdu) => {
-                buffer.push(Self::BVLC_ORIGINAL_BROADCAST_NPDU);
-                buffer.extend_from_slice(&[0, 0]); // length placeholder
-                npdu.encode(buffer);
-                Self::update_len(buffer);
+                writer.push(Self::BVLC_ORIGINAL_BROADCAST_NPDU);
+                writer.extend_from_slice(&[0, 0]); // length placeholder
+                npdu.encode(writer);
+                Self::update_len(writer);
             }
             DataLinkFunction::OriginalUnicastNpdu(npdu) => {
-                buffer.push(Self::BVLC_ORIGINAL_UNICAST_NPDU);
-                buffer.extend_from_slice(&[0, 0]); // length placeholder
-                npdu.encode(buffer);
-                Self::update_len(buffer);
+                writer.push(Self::BVLC_ORIGINAL_UNICAST_NPDU);
+                writer.extend_from_slice(&[0, 0]); // length placeholder
+                npdu.encode(writer);
+                Self::update_len(writer);
             }
         }
     }
@@ -122,9 +122,9 @@ impl<'a> DataLink<'a> {
         Ok(data_link)
     }
 
-    fn update_len(buffer: &mut Writer) {
-        let len = buffer.index as u16;
+    fn update_len(writer: &mut Writer) {
+        let len = writer.index as u16;
         let src = len.to_be_bytes();
-        buffer.buf[2..4].copy_from_slice(&src);
+        writer.buf[2..4].copy_from_slice(&src);
     }
 }

@@ -69,7 +69,7 @@ impl Tag {
         Self { number, value }
     }
 
-    pub fn encode(&self, buffer: &mut Writer) {
+    pub fn encode(&self, writer: &mut Writer) {
         let mut buf: [u8; 10] = [0; 10];
         let mut len = 1;
 
@@ -114,7 +114,7 @@ impl Tag {
             }
         }
 
-        buffer.extend_from_slice(&buf[..len]);
+        writer.extend_from_slice(&buf[..len]);
     }
 
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {

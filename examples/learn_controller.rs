@@ -31,11 +31,11 @@ fn main() -> Result<(), Error> {
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(read_property));
     let data_link = DataLink::new_confirmed_req(req);
     let mut buf = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buf);
-    data_link.encode(&mut buffer);
+    let mut writer = Writer::new(&mut buf);
+    data_link.encode(&mut writer);
 
     // send packet
-    let buf = buffer.to_bytes();
+    let buf = writer.to_bytes();
     let addr = format!("192.168.1.249:{}", 0xBAC0);
     socket.send_to(buf, &addr)?;
     println!("Sent:     {:02x?} to {}\n", buf, addr);
@@ -128,10 +128,10 @@ fn get_multi_binary(
 
     let rpm = ReadPropertyMultiple::new(&items);
     let mut buf = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buf);
-    read_property_multiple_to_bytes(rpm, &mut buffer);
+    let mut writer = Writer::new(&mut buf);
+    read_property_multiple_to_bytes(rpm, &mut writer);
     let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(buffer.to_bytes(), &addr)?;
+    socket.send_to(writer.to_bytes(), &addr)?;
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
@@ -243,8 +243,8 @@ fn get_multi_analog(
     Ok(vec![])
 }
 
-fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple, buffer: &mut Writer) {
+fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple, writer: &mut Writer) {
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
     let data_link = DataLink::new_confirmed_req(req);
-    data_link.encode(buffer);
+    data_link.encode(writer);
 }

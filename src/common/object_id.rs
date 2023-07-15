@@ -15,10 +15,10 @@ impl ObjectId {
         Self { object_type, id }
     }
 
-    pub fn encode(&self, buffer: &mut Writer) {
+    pub fn encode(&self, writer: &mut Writer) {
         let value = ((self.object_type as u32 & BACNET_MAX_OBJECT) << BACNET_INSTANCE_BITS)
             | (self.id & BACNET_MAX_INSTANCE);
-        buffer.extend_from_slice(&value.to_be_bytes());
+        writer.extend_from_slice(&value.to_be_bytes());
     }
 
     pub fn decode(size: u32, reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
