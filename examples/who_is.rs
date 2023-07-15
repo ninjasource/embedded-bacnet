@@ -5,7 +5,7 @@ use embedded_bacnet::{
         application_pdu::{ApplicationPdu, UnconfirmedRequest},
         who_is::WhoIs,
     },
-    common::helper::{Buffer, Reader},
+    common::helper::{Reader, Writer},
     network_protocol::{
         data_link::{DataLink, DataLinkFunction},
         network_pdu::{DestinationAddress, MessagePriority, NetworkMessage, NetworkPdu},
@@ -26,7 +26,7 @@ fn main() -> Result<(), Error> {
     let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu(npdu));
 
     let mut buffer = vec![0; 16 * 1024];
-    let mut buffer = Buffer::new(&mut buffer);
+    let mut buffer = Writer::new(&mut buffer);
     data_link.encode(&mut buffer);
 
     let buf = buffer.to_bytes();
@@ -39,7 +39,7 @@ fn main() -> Result<(), Error> {
         let (n, peer) = socket.recv_from(&mut buf).unwrap();
         let payload = &buf[..n];
         println!("Received: {:02x?} from {:?}", payload, peer);
-        let mut reader = Reader::new(payload.len());
+        let mut reader = Reader::new();
         let message = DataLink::decode(&mut reader, payload);
         println!("Decoded:  {:?}\n", message);
     }

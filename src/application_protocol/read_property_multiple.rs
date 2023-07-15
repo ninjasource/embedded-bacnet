@@ -5,7 +5,7 @@ use crate::{
     common::{
         helper::{
             decode_unsigned, encode_closing_tag, encode_context_enumerated,
-            encode_context_object_id, encode_context_unsigned, encode_opening_tag, Buffer, Reader,
+            encode_context_object_id, encode_context_unsigned, encode_opening_tag, Reader, Writer,
         },
         object_id::ObjectId,
         property_id::PropertyId,
@@ -159,7 +159,7 @@ impl<'a> ReadPropertyMultiple<'a> {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         for object in self.objects {
             // object_id
             encode_context_object_id(buffer, 0, &object.object_id);

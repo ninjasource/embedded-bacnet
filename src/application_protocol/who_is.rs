@@ -1,4 +1,4 @@
-use crate::common::helper::{Buffer, Reader};
+use crate::common::helper::{Reader, Writer};
 
 use super::application_pdu::UnconfirmedServiceChoice;
 
@@ -6,7 +6,7 @@ use super::application_pdu::UnconfirmedServiceChoice;
 pub struct WhoIs {}
 
 impl WhoIs {
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         buffer.push(UnconfirmedServiceChoice::WhoIs as u8)
     }
 

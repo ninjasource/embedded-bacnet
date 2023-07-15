@@ -6,7 +6,7 @@ use embedded_bacnet::{
         read_property::ReadProperty,
     },
     common::{
-        helper::{Buffer, Reader},
+        helper::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
     },
@@ -31,7 +31,7 @@ fn main() -> Result<(), Error> {
     let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
     let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
     let mut buffer = vec![0; 16 * 1024];
-    let mut buffer = Buffer::new(&mut buffer);
+    let mut buffer = Writer::new(&mut buffer);
     data_link.encode(&mut buffer);
 
     // send packet
@@ -45,7 +45,7 @@ fn main() -> Result<(), Error> {
     let (n, peer) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::new(buf.len());
+    let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf);
     println!("Decoded:  {:?}\n", message);
 

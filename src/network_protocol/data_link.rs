@@ -6,7 +6,7 @@ use crate::{
     },
     common::{
         error::Error,
-        helper::{Buffer, Reader},
+        helper::{Reader, Writer},
     },
 };
 
@@ -73,7 +73,7 @@ impl<'a> DataLink<'a> {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         buffer.push(Self::BVLL_TYPE_BACNET_IP);
         match &self.function {
             DataLinkFunction::OriginalBroadcastNpdu(npdu) => {
@@ -99,7 +99,13 @@ impl<'a> DataLink<'a> {
 
         let npdu_type = reader.read_byte(buf);
         let len: u16 = u16::from_be_bytes(reader.read_bytes(buf));
-        reader.set_len(len as usize)?;
+
+        if len as usize > buf.len() {
+            return Err(Error::Length(
+                "read buffer too small to fit entire bacnet payload",
+            ));
+        }
+        reader.set_len(len as usize);
 
         let npdu = NetworkPdu::decode(reader, buf)?;
 
@@ -116,7 +122,7 @@ impl<'a> DataLink<'a> {
         Ok(data_link)
     }
 
-    fn update_len(buffer: &mut Buffer) {
+    fn update_len(buffer: &mut Writer) {
         let len = buffer.index as u16;
         let src = len.to_be_bytes();
         buffer.buf[2..4].copy_from_slice(&src);

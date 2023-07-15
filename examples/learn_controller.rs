@@ -11,7 +11,7 @@ use embedded_bacnet::{
         read_property_multiple::{PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject},
     },
     common::{
-        helper::{Buffer, Reader},
+        helper::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
         spec::{Binary, EngineeringUnits, StatusFlags},
@@ -31,7 +31,7 @@ fn main() -> Result<(), Error> {
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(read_property));
     let data_link = DataLink::new_confirmed_req(req);
     let mut buf = vec![0; 16 * 1024];
-    let mut buffer = Buffer::new(&mut buf);
+    let mut buffer = Writer::new(&mut buf);
     data_link.encode(&mut buffer);
 
     // send packet
@@ -45,7 +45,7 @@ fn main() -> Result<(), Error> {
     let (n, peer) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::new(buf.len());
+    let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf).unwrap();
 
     if let Some(ack) = message.get_read_property_ack() {
@@ -128,14 +128,14 @@ fn get_multi_binary(
 
     let rpm = ReadPropertyMultiple::new(&items);
     let mut buf = vec![0; 16 * 1024];
-    let mut buffer = Buffer::new(&mut buf);
+    let mut buffer = Writer::new(&mut buf);
     read_property_multiple_to_bytes(rpm, &mut buffer);
     let addr = format!("192.168.1.249:{}", 0xBAC0);
     socket.send_to(buffer.to_bytes(), &addr)?;
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
-    let mut reader = Reader::new(buf.len());
+    let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf).unwrap();
 
     //let message = send_and_recv(items, socket)?;
@@ -158,6 +158,7 @@ fn get_multi_binary(
                 _ => unreachable!(),
             };
 
+            // you must do this
             assert!(x.decode_next(&mut reader, buf).is_none());
 
             items.push(BinaryValue {
@@ -192,14 +193,14 @@ fn get_multi_analog(
 
     let rpm = ReadPropertyMultiple::new(&items);
     let mut buf = vec![0; 16 * 1024];
-    let mut buffer = Buffer::new(&mut buf);
+    let mut buffer = Writer::new(&mut buf);
     read_property_multiple_to_bytes(rpm, &mut buffer);
     let addr = format!("192.168.1.249:{}", 0xBAC0);
     socket.send_to(buffer.to_bytes(), &addr)?;
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
-    let mut reader = Reader::new(buf.len());
+    let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf).unwrap();
 
     if let Some(ack) = message.get_read_property_multiple_ack() {
@@ -224,6 +225,7 @@ fn get_multi_analog(
                 _ => unreachable!(),
             };
 
+            // you must do this
             assert!(x.decode_next(&mut reader, buf).is_none());
 
             items.push(AnalogValue {
@@ -241,7 +243,7 @@ fn get_multi_analog(
     Ok(vec![])
 }
 
-fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple, buffer: &mut Buffer) {
+fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple, buffer: &mut Writer) {
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
     let data_link = DataLink::new_confirmed_req(req);
     data_link.encode(buffer);

@@ -1,7 +1,7 @@
 use crate::common::{
     helper::{
         decode_context_enumerated, encode_context_enumerated, encode_context_object_id,
-        encode_context_unsigned, Buffer, Reader,
+        encode_context_unsigned, Reader, Writer,
     },
     object_id::ObjectId,
     property_id::PropertyId,
@@ -77,7 +77,7 @@ impl ReadProperty {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         // object_id
         encode_context_object_id(buffer, 0, &self.object_id);
 

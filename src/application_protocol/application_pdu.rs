@@ -1,6 +1,6 @@
 use crate::common::{
     error::Error,
-    helper::{Buffer, Reader},
+    helper::{Reader, Writer},
 };
 
 use super::{
@@ -181,7 +181,7 @@ impl From<u8> for ConfirmedServiceChoice {
 }
 
 impl<'a> ApplicationPdu<'a> {
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         match self {
             ApplicationPdu::ConfirmedRequest(req) => req.encode(buffer),
             ApplicationPdu::UnconfirmedRequest(req) => req.encode(buffer),
@@ -289,7 +289,7 @@ impl<'a> ConfirmedRequest<'a> {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         let max_segments_flag = match self.max_segments {
             MaxSegments::_0 => 0,
             _ => PduFlags::SegmentedResponseAccepted as u8,
@@ -326,7 +326,7 @@ pub enum UnconfirmedRequest {
 }
 
 impl UnconfirmedRequest {
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         buffer.push((ApduType::UnconfirmedServiceRequest as u8) << 4);
 
         match &self {

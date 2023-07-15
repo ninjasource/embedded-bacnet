@@ -3,12 +3,12 @@ use arrayref::array_ref;
 use super::{error::Error, object_id::ObjectId, property_id::PropertyId};
 use crate::common::tag::{Tag, TagNumber};
 
-pub struct Buffer<'a> {
+pub struct Writer<'a> {
     pub buf: &'a mut [u8],
     pub index: usize,
 }
 
-impl<'a> Buffer<'a> {
+impl<'a> Writer<'a> {
     pub fn new(buf: &'a mut [u8]) -> Self {
         Self { buf, index: 0 }
     }
@@ -31,7 +31,6 @@ impl<'a> Buffer<'a> {
 
 pub struct Reader {
     index: usize,
-    payload_len: usize,
     len: usize,
 }
 
@@ -40,23 +39,15 @@ impl Reader {
         self.index == self.len
     }
 
-    pub fn new(payload_len: usize) -> Self {
+    pub fn new() -> Self {
         Self {
             index: 0,
-            payload_len,
             len: usize::MAX - 1000,
         }
     }
 
-    pub fn set_len(&mut self, len: usize) -> Result<(), Error> {
-        if len > self.payload_len {
-            Err(Error::Length(
-                "read buffer too small to fit entire bacnet payload",
-            ))
-        } else {
-            self.len = len;
-            Ok(())
-        }
+    pub fn set_len(&mut self, len: usize) {
+        self.len = len;
     }
 
     pub fn read_byte(&mut self, buf: &[u8]) -> u8 {
@@ -91,20 +82,20 @@ impl Reader {
     }
 }
 
-pub fn encode_u16(buffer: &mut Buffer, value: u16) {
+pub fn encode_u16(buffer: &mut Writer, value: u16) {
     buffer.extend_from_slice(&value.to_be_bytes());
 }
 
-pub fn encode_u24(buffer: &mut Buffer, value: u32) {
+pub fn encode_u24(buffer: &mut Writer, value: u32) {
     let slice = &value.to_be_bytes();
     buffer.extend_from_slice(&slice[..3]);
 }
 
-pub fn encode_u32(buffer: &mut Buffer, value: u32) {
+pub fn encode_u32(buffer: &mut Writer, value: u32) {
     buffer.extend_from_slice(&value.to_be_bytes());
 }
 
-pub fn encode_u64(buffer: &mut Buffer, value: u64) {
+pub fn encode_u64(buffer: &mut Writer, value: u64) {
     buffer.extend_from_slice(&value.to_be_bytes());
 }
 
@@ -130,13 +121,13 @@ pub fn parse_unsigned(bytes: &[u8], len: u32) -> Result<(&[u8], u32), Error> {
     Ok((&bytes[len..], val))
 }
 
-pub fn encode_context_object_id(buffer: &mut Buffer, tag_number: u8, object_id: &ObjectId) {
+pub fn encode_context_object_id(buffer: &mut Writer, tag_number: u8, object_id: &ObjectId) {
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), 4);
     tag.encode(buffer);
     object_id.encode(buffer);
 }
 
-pub fn encode_opening_tag(buffer: &mut Buffer, tag_number: u8) {
+pub fn encode_opening_tag(buffer: &mut Writer, tag_number: u8) {
     if tag_number <= 14 {
         let byte = 0b0001000 | (tag_number << 4) | 6;
         buffer.push(byte)
@@ -147,7 +138,7 @@ pub fn encode_opening_tag(buffer: &mut Buffer, tag_number: u8) {
     }
 }
 
-pub fn encode_closing_tag(buffer: &mut Buffer, tag_number: u8) {
+pub fn encode_closing_tag(buffer: &mut Writer, tag_number: u8) {
     if tag_number <= 14 {
         let byte = 0b0001000 | (tag_number << 4) | 7;
         buffer.push(byte)
@@ -158,7 +149,7 @@ pub fn encode_closing_tag(buffer: &mut Buffer, tag_number: u8) {
     }
 }
 
-pub fn encode_context_unsigned(buffer: &mut Buffer, tag_number: u8, value: u32) {
+pub fn encode_context_unsigned(buffer: &mut Writer, tag_number: u8, value: u32) {
     let len = if value < 0x100 {
         1
     } else if value < 0x10000 {
@@ -181,7 +172,7 @@ pub fn decode_context_enumerated(reader: &mut Reader, buf: &[u8]) -> (Tag, Prope
     (tag, property_id)
 }
 
-pub fn encode_context_enumerated(buffer: &mut Buffer, tag_number: u8, property_id: PropertyId) {
+pub fn encode_context_enumerated(buffer: &mut Writer, tag_number: u8, property_id: PropertyId) {
     let value = property_id as u32;
     let len = if value < 0x100 {
         1
@@ -215,7 +206,7 @@ pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> u64 {
     }
 }
 
-pub fn encode_unsigned(buffer: &mut Buffer, value: u64) {
+pub fn encode_unsigned(buffer: &mut Writer, value: u64) {
     if value < 0x100 {
         buffer.push(value as u8);
     } else if value < 0x10000 {

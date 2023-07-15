@@ -1,4 +1,4 @@
-use super::helper::{Buffer, Reader};
+use super::helper::{Reader, Writer};
 
 // byte0:
 // bits 7-4 tag_num
@@ -69,7 +69,7 @@ impl Tag {
         Self { number, value }
     }
 
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         let mut buf: [u8; 10] = [0; 10];
         let mut len = 1;
 

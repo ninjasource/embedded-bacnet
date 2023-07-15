@@ -2,7 +2,7 @@ use crate::{
     application_protocol::application_pdu::ApplicationPdu,
     common::{
         error::Error,
-        helper::{Buffer, Reader},
+        helper::{Reader, Writer},
     },
 };
 
@@ -133,7 +133,7 @@ impl<'a> NetworkPdu<'a> {
         }
     }
 
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         buffer.push(Self::VERSION);
         buffer.push(self.calculate_control());
 
@@ -287,7 +287,7 @@ impl DestinationAddress {
 }
 
 impl NetworkAddress {
-    pub fn encode(&self, buffer: &mut Buffer) {
+    pub fn encode(&self, buffer: &mut Writer) {
         buffer.extend_from_slice(&self.net.to_be_bytes());
         match self.addr.as_ref() {
             Some(addr) => {
