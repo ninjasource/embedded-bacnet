@@ -9,14 +9,39 @@ use crate::common::{
     tag::{Tag, TagNumber},
 };
 
+use super::primitives::data_value::ApplicationDataValue;
+
 #[derive(Debug)]
-pub struct ReadPropertyAck {
-    pub object_id: ObjectId,
-    pub property_id: PropertyId,
+pub enum ReadPropertyValue<'a> {
+    ObjectIdList(ObjectIdList),
+    ApplicationDataValue(ApplicationDataValue<'a>),
 }
 
-impl ReadPropertyAck {
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+#[derive(Debug)]
+pub struct ObjectIdList {}
+
+impl ObjectIdList {
+    pub fn decode_next(&self, reader: &mut Reader, buf: &[u8]) -> Option<ObjectId> {
+        let tag = Tag::decode(reader, buf);
+        if tag.number == TagNumber::ContextSpecific(3) {
+            // closing tag
+            return None;
+        }
+
+        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
+        Some(object_id)
+    }
+}
+
+#[derive(Debug)]
+pub struct ReadPropertyAck<'a> {
+    pub object_id: ObjectId,
+    pub property_id: PropertyId,
+    pub property_value: ReadPropertyValue<'a>,
+}
+
+impl<'a> ReadPropertyAck<'a> {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
         let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
@@ -31,33 +56,42 @@ impl ReadPropertyAck {
             "invalid property id tag"
         );
 
+        let tag = Tag::decode(reader, buf);
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(3),
+            "expected opening tag"
+        );
+
         match property_id {
             PropertyId::PropObjectList => {
+                let property_value = ReadPropertyValue::ObjectIdList(ObjectIdList {});
+
+                return Self {
+                    object_id,
+                    property_id,
+                    property_value,
+                };
+            }
+            property_id => {
+                let tag = Tag::decode(reader, buf);
+                let value =
+                    ApplicationDataValue::decode(&tag, &object_id, &property_id, reader, buf);
+                let property_value = ReadPropertyValue::ApplicationDataValue(value);
                 let tag = Tag::decode(reader, buf);
                 assert_eq!(
                     tag.number,
                     TagNumber::ContextSpecific(3),
-                    "expected opening tag"
+                    "expected closing tag"
                 );
 
                 return Self {
                     object_id,
                     property_id,
+                    property_value,
                 };
             }
-            _ => unimplemented!(),
         }
-    }
-
-    pub fn decode_next(&self, reader: &mut Reader, buf: &[u8]) -> Option<ObjectId> {
-        let tag = Tag::decode(reader, buf);
-        if tag.number == TagNumber::ContextSpecific(3) {
-            // closing tag
-            return None;
-        }
-
-        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
-        Some(object_id)
     }
 }
 

@@ -161,7 +161,7 @@ impl<'a> NetworkPdu<'a> {
         };
     }
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         // ignore version
         let _version = reader.read_byte(buf);
 

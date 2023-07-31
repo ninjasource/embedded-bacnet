@@ -5,7 +5,7 @@
 "May I never be complete. May I never be content. May I never be perfect."
 -- Chuck Palahniuk, Fight Club 
 
-A library to read and write bacnet packets for embedded devices. Bacnet is a protocol used for building automation and control. 
+A Rust library to read and write bacnet packets for embedded devices. Bacnet is a protocol used for building automation and control. 
 The official spec is unfortunately behind a paywall and so this implementation has been cobbled together by cross referencing multiple code implementations.
 The most comprehensive implementation and documentation I have found to be here: https://bacnet.sourceforge.net/ for which I am very grateful.
 

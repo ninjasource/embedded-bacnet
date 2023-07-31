@@ -1,6 +1,6 @@
 use crate::{
     application_protocol::{
-        application_pdu::{ApplicationPdu, ComplexAckService, ConfirmedRequest},
+        application_pdu::{ApplicationPdu, ComplexAck, ComplexAckService, ConfirmedRequest},
         read_property::ReadPropertyAck,
         read_property_multiple::ReadPropertyMultipleAck,
     },
@@ -40,11 +40,24 @@ impl<'a> DataLink<'a> {
         DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu))
     }
 
-    fn get_ack(&self) -> Option<&ComplexAckService> {
+    pub fn get_ack(&self) -> Option<&ComplexAck> {
         match &self.function {
             DataLinkFunction::OriginalUnicastNpdu(x) => match &x.network_message {
                 NetworkMessage::Apdu(apdu) => match &apdu {
-                    ApplicationPdu::ComplexAck(ack) => Some(&ack.service),
+                    ApplicationPdu::ComplexAck(ack) => Some(&ack),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn get_ack_into(self) -> Option<ComplexAck<'a>> {
+        match self.function {
+            DataLinkFunction::OriginalUnicastNpdu(x) => match x.network_message {
+                NetworkMessage::Apdu(apdu) => match apdu {
+                    ApplicationPdu::ComplexAck(ack) => Some(ack),
                     _ => None,
                 },
                 _ => None,
@@ -55,7 +68,17 @@ impl<'a> DataLink<'a> {
 
     pub fn get_read_property_ack(&self) -> Option<&ReadPropertyAck> {
         match self.get_ack() {
-            Some(ack) => match ack {
+            Some(ack) => match &ack.service {
+                ComplexAckService::ReadProperty(ack) => Some(ack),
+                _ => None,
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_read_property_ack_into(self) -> Option<ReadPropertyAck<'a>> {
+        match self.get_ack_into() {
+            Some(ack) => match ack.service {
                 ComplexAckService::ReadProperty(ack) => Some(ack),
                 _ => None,
             },
@@ -65,7 +88,7 @@ impl<'a> DataLink<'a> {
 
     pub fn get_read_property_multiple_ack(&self) -> Option<&ReadPropertyMultipleAck> {
         match self.get_ack() {
-            Some(ack) => match ack {
+            Some(ack) => match &ack.service {
                 ComplexAckService::ReadPropertyMultiple(ack) => Some(ack),
                 _ => None,
             },
@@ -91,7 +114,7 @@ impl<'a> DataLink<'a> {
         }
     }
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let bvll_type = reader.read_byte(buf);
         if bvll_type != Self::BVLL_TYPE_BACNET_IP {
             panic!("only BACNET_IP supported");

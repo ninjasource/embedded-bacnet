@@ -1,7 +1,23 @@
 use arrayref::array_ref;
+use log::info;
 
-use super::{error::Error, object_id::ObjectId, property_id::PropertyId};
-use crate::common::tag::{Tag, TagNumber};
+use super::{
+    error::Error,
+    object_id::{ObjectId, ObjectType},
+    property_id::PropertyId,
+};
+use crate::{
+    application_protocol::{
+        application_pdu::{ApplicationPdu, ConfirmedRequest, ConfirmedRequestSerivice},
+        primitives::data_value::ApplicationDataValue,
+        read_property::{ReadProperty, ReadPropertyValue},
+    },
+    common::tag::{Tag, TagNumber},
+    network_protocol::{
+        data_link::{DataLink, DataLinkFunction},
+        network_pdu::{MessagePriority, NetworkMessage, NetworkPdu},
+    },
+};
 
 pub struct Writer<'a> {
     pub buf: &'a mut [u8],
@@ -217,5 +233,125 @@ pub fn encode_unsigned(writer: &mut Writer, value: u64) {
         encode_u32(writer, value as u32);
     } else {
         encode_u64(writer, value)
+    }
+}
+
+pub fn read_property_req_to_backnet(
+    invoke_id: u8,
+    object_id: ObjectId,
+    property_id: PropertyId,
+    buf: &mut [u8],
+) -> usize {
+    let read_property = ReadProperty::new(object_id, property_id);
+    let req = ConfirmedRequest::new(
+        invoke_id,
+        ConfirmedRequestSerivice::ReadProperty(read_property),
+    );
+
+    req_to_bacnet(req, buf)
+}
+
+pub fn req_to_bacnet(req: ConfirmedRequest<'_>, buf: &mut [u8]) -> usize {
+    let apdu = ApplicationPdu::ConfirmedRequest(req);
+    let src = None;
+    let dst = None;
+    let message = NetworkMessage::Apdu(apdu);
+    let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
+    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
+    let mut writer = Writer::new(buf);
+    data_link.encode(&mut writer);
+    writer.index
+}
+
+// a helper shortcut function to get a read property string result from a backnet-ip packet
+pub fn bacnet_to_string<'a>(buf: &'a [u8]) -> &'a str {
+    let mut reader = Reader::new();
+    let message: DataLink<'a> = DataLink::decode(&mut reader, buf).unwrap();
+
+    if let Some(ack) = message.get_read_property_ack_into() {
+        if let ReadPropertyValue::ApplicationDataValue(ApplicationDataValue::CharacterString(x)) =
+            &ack.property_value
+        {
+            let s = x.inner;
+            return s;
+        }
+    }
+
+    return "";
+}
+
+pub trait ReadWrite {
+    fn recv(&self, buf: &mut [u8]) -> Result<usize, Error>;
+    fn send(&self, buf: &[u8]) -> Result<(), Error>;
+}
+
+pub struct BacnetService<T: ReadWrite> {
+    object_id: u32,
+    io: T,
+    invoke_id: u8,
+}
+
+impl<T: ReadWrite> BacnetService<T> {
+    pub fn new(io: T, object_id: u32) -> Self {
+        let invoke_id = 0;
+        Self {
+            object_id,
+            io,
+            invoke_id,
+        }
+    }
+
+    pub fn read_string<'a>(
+        &mut self,
+        property_id: PropertyId,
+        buf: &'a mut [u8],
+    ) -> Result<&'a str, Error> {
+        let invoke_id = self.invoke_id;
+        self.invoke_id = self.invoke_id.wrapping_add(1);
+
+        // encode packet
+        let object_id = ObjectId::new(ObjectType::ObjectDevice, self.object_id);
+        let read_property = ReadProperty::new(object_id, property_id);
+        let req = ConfirmedRequest::new(
+            invoke_id,
+            ConfirmedRequestSerivice::ReadProperty(read_property),
+        );
+        let apdu = ApplicationPdu::ConfirmedRequest(req);
+        let src = None;
+        let dst = None;
+        let message = NetworkMessage::Apdu(apdu);
+        let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
+        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
+        let mut buffer = Writer::new(buf);
+        data_link.encode(&mut buffer);
+
+        // send packet
+        let send_buf = buffer.to_bytes();
+        info!("Sending: {:?}", send_buf);
+        self.io.send(send_buf)?;
+
+        // receive reply
+        let n = self.io.recv(buf)?;
+        let mut reader = Reader::new();
+        let message: DataLink<'a> = DataLink::decode(&mut reader, &buf[..n]).unwrap();
+
+        // check that the request and response invoke ids match
+        if let Some(ack) = message.get_ack() {
+            if ack.invoke_id != invoke_id {
+                panic!("Invalid invoke id")
+            }
+        }
+
+        if let Some(ack) = message.get_read_property_ack_into() {
+            if let ReadPropertyValue::ApplicationDataValue(ApplicationDataValue::CharacterString(
+                x,
+            )) = &ack.property_value
+            {
+                let s = x.inner;
+                return Ok(s);
+            }
+        }
+
+        Ok("")
     }
 }

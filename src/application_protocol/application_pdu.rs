@@ -15,7 +15,7 @@ use super::{
 pub enum ApplicationPdu<'a> {
     ConfirmedRequest(ConfirmedRequest<'a>),
     UnconfirmedRequest(UnconfirmedRequest),
-    ComplexAck(ComplexAck),
+    ComplexAck(ComplexAck<'a>),
     // add more here
 }
 
@@ -189,7 +189,7 @@ impl<'a> ApplicationPdu<'a> {
         };
     }
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let byte0 = reader.read_byte(buf);
         let pdu_type: ApduType = (byte0 >> 4).into();
         let pdu_flags = byte0 & 0x0F;
@@ -231,13 +231,13 @@ pub struct ConfirmedRequest<'a> {
 }
 
 #[derive(Debug)]
-pub struct ComplexAck {
+pub struct ComplexAck<'a> {
     pub invoke_id: u8,
-    pub service: ComplexAckService,
+    pub service: ComplexAckService<'a>,
 }
 
-impl ComplexAck {
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+impl<'a> ComplexAck<'a> {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let invoke_id = reader.read_byte(buf);
         let choice = reader.read_byte(buf).into();
 
@@ -257,8 +257,8 @@ impl ComplexAck {
 }
 
 #[derive(Debug)]
-pub enum ComplexAckService {
-    ReadProperty(ReadPropertyAck),
+pub enum ComplexAckService<'a> {
+    ReadProperty(ReadPropertyAck<'a>),
     ReadPropertyMultiple(ReadPropertyMultipleAck),
     // add more here
 }

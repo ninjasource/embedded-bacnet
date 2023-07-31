@@ -7,7 +7,7 @@ use embedded_bacnet::{
     application_protocol::{
         application_pdu::{ConfirmedRequest, ConfirmedRequestSerivice},
         primitives::data_value::{ApplicationDataValue, BitString, Enumerated},
-        read_property::ReadProperty,
+        read_property::{ReadProperty, ReadPropertyValue},
         read_property_multiple::{PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject},
     },
     common::{
@@ -51,19 +51,21 @@ fn main() -> Result<(), Error> {
     if let Some(ack) = message.get_read_property_ack() {
         let mut map = HashMap::new();
 
-        // put all objects in their respective bins by object type
-        while let Some(item) = ack.decode_next(&mut reader, &buf) {
-            match item.object_type {
-                ObjectType::ObjectBinaryOutput
-                | ObjectType::ObjectBinaryInput
-                | ObjectType::ObjectBinaryValue
-                | ObjectType::ObjectAnalogInput
-                | ObjectType::ObjectAnalogOutput
-                | ObjectType::ObjectAnalogValue => {
-                    let list = map.entry(item.object_type as u32).or_insert(vec![]);
-                    list.push(item);
+        if let ReadPropertyValue::ObjectIdList(list) = &ack.property_value {
+            // put all objects in their respective bins by object type
+            while let Some(item) = list.decode_next(&mut reader, &buf) {
+                match item.object_type {
+                    ObjectType::ObjectBinaryOutput
+                    | ObjectType::ObjectBinaryInput
+                    | ObjectType::ObjectBinaryValue
+                    | ObjectType::ObjectAnalogInput
+                    | ObjectType::ObjectAnalogOutput
+                    | ObjectType::ObjectAnalogValue => {
+                        let list = map.entry(item.object_type as u32).or_insert(vec![]);
+                        list.push(item);
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 

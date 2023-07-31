@@ -7,4 +7,6 @@ pub enum Error {
     Unknown,
     UnimplementedConfirmedServiceChoice(ConfirmedServiceChoice),
     SegmentationNotSupported,
+    UnexpectedInvokeId,
+    Io,
 }
