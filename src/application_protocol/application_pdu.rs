@@ -4,10 +4,8 @@ use crate::common::{
 };
 
 use super::{
-    i_am::IAm,
-    read_property::{ReadProperty, ReadPropertyAck},
-    read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleAck},
-    who_is::WhoIs,
+    confirmed::{ComplexAck, ConfirmedRequest, SimpleAck},
+    unconfirmed::UnconfirmedRequest,
 };
 
 // Application Layer Protocol Data Unit
@@ -16,9 +14,11 @@ pub enum ApplicationPdu<'a> {
     ConfirmedRequest(ConfirmedRequest<'a>),
     UnconfirmedRequest(UnconfirmedRequest),
     ComplexAck(ComplexAck<'a>),
+    SimpleAck(SimpleAck),
     // add more here
 }
 
+#[derive(Debug)]
 #[repr(u8)]
 pub enum ApduType {
     ConfirmedServiceRequest = 0,
@@ -72,112 +72,11 @@ pub enum MaxAdpu {
     _1476 = 0x05, // default
 }
 
-#[derive(Debug)]
-#[repr(u8)]
-pub enum ConfirmedServiceChoice {
-    // alarm and event services
-    AcknowledgeAlarm = 0,
-    AuditNotification = 32,
-    CovNotification = 1,
-    CovNotificationMultiple = 31,
-    EventNotification = 2,
-    GetAlarmSummary = 3,
-    GetEnrollmentSummary = 4,
-    GetEventInformation = 29,
-    LifeSafetyOperation = 27,
-    SubscribeCov = 5,
-    SubscribeCovProperty = 28,
-    SubscribeCovPropertyMultiple = 30,
-
-    // file access services
-    AtomicReadFile = 6,
-    AtomicWriteFile = 7,
-
-    // object access services
-    AddListElement = 8,
-    RemoveListElement = 9,
-    CreateObject = 10,
-    DeleteObject = 11,
-    ReadProperty = 12,
-    ReadPropConditional = 13,
-    ReadPropMultiple = 14,
-    ReadRange = 26,
-    WriteProperty = 15,
-    WritePropMultiple = 16,
-    AuditLogQuery = 33,
-
-    // remote device management services
-    DeviceCommunicationControl = 17,
-    PrivateTransfer = 18,
-    TextMessage = 19,
-    ReinitializeDevice = 20,
-
-    // virtual terminal services
-    VtOpen = 21,
-    VtClose = 22,
-    VtData = 23,
-
-    // security services
-    Authenticate = 24,
-    RequestKey = 25,
-
-    // services added after 1995
-    // readRange [26] see Object Access Services
-    // lifeSafetyOperation [27] see Alarm and Event Services
-    // subscribeCOVProperty [28] see Alarm and Event Services
-    // getEventInformation [29] see Alarm and Event Services
-
-    // services added after 2012
-    // subscribe-cov-property-multiple [30] see Alarm and Event Services
-    // confirmed-cov-notification-multiple [31] see Alarm and Event Services
-
-    // services added after 2016
-    // confirmed-audit-notification [32] see Alarm and Event Services
-    // audit-log-query [33] see Object Access Services
-    MaxBacnetConfirmedService = 34,
-}
-
-impl From<u8> for ConfirmedServiceChoice {
-    fn from(value: u8) -> Self {
-        match value {
-            0 => Self::AcknowledgeAlarm,
-            1 => Self::CovNotification,
-            2 => Self::EventNotification,
-            3 => Self::GetAlarmSummary,
-            4 => Self::GetEnrollmentSummary,
-            5 => Self::SubscribeCov,
-            6 => Self::AtomicReadFile,
-            7 => Self::AtomicWriteFile,
-            8 => Self::AddListElement,
-            9 => Self::RemoveListElement,
-            10 => Self::CreateObject,
-            11 => Self::DeleteObject,
-            12 => Self::ReadProperty,
-            13 => Self::ReadPropConditional,
-            14 => Self::ReadPropMultiple,
-            15 => Self::WriteProperty,
-            16 => Self::WritePropMultiple,
-            17 => Self::DeviceCommunicationControl,
-            18 => Self::PrivateTransfer,
-            19 => Self::TextMessage,
-            20 => Self::ReinitializeDevice,
-            21 => Self::VtOpen,
-            22 => Self::VtClose,
-            23 => Self::VtData,
-            24 => Self::Authenticate,
-            25 => Self::RequestKey,
-            26 => Self::ReadRange,
-            27 => Self::LifeSafetyOperation,
-            28 => Self::SubscribeCovProperty,
-            29 => Self::GetEventInformation,
-            30 => Self::SubscribeCovPropertyMultiple,
-            31 => Self::CovNotificationMultiple,
-            32 => Self::AuditNotification,
-            33 => Self::AuditLogQuery,
-            34 => Self::MaxBacnetConfirmedService,
-            _ => panic!("invalid confirmed service choice"),
-        }
-    }
+pub enum PduFlags {
+    Server = 0b0001,
+    SegmentedResponseAccepted = 0b0010,
+    MoreFollows = 0b0100,
+    SegmentedMessage = 0b1000,
 }
 
 impl<'a> ApplicationPdu<'a> {
@@ -186,6 +85,7 @@ impl<'a> ApplicationPdu<'a> {
             ApplicationPdu::ConfirmedRequest(req) => req.encode(writer),
             ApplicationPdu::UnconfirmedRequest(req) => req.encode(writer),
             ApplicationPdu::ComplexAck(_) => todo!(),
+            ApplicationPdu::SimpleAck(_) => todo!(),
         };
     }
 
@@ -215,195 +115,12 @@ impl<'a> ApplicationPdu<'a> {
                 let adpu = ComplexAck::decode(reader, buf)?;
                 Ok(ApplicationPdu::ComplexAck(adpu))
             }
-            _ => unimplemented!(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ConfirmedRequest<'a> {
-    pub max_segments: MaxSegments, // default 65
-    pub max_adpu: MaxAdpu,         // default 1476
-    pub invoke_id: u8,             // starts at 0
-    pub sequence_num: u8,          // default to 0
-    pub proposed_window_size: u8,  // default to 0
-    pub service: ConfirmedRequestSerivice<'a>,
-}
-
-#[derive(Debug)]
-pub struct ComplexAck<'a> {
-    pub invoke_id: u8,
-    pub service: ComplexAckService<'a>,
-}
-
-impl<'a> ComplexAck<'a> {
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
-        let invoke_id = reader.read_byte(buf);
-        let choice = reader.read_byte(buf).into();
-
-        let service = match choice {
-            ConfirmedServiceChoice::ReadProperty => {
-                let apdu = ReadPropertyAck::decode(reader, buf);
-                ComplexAckService::ReadProperty(apdu)
+            ApduType::SimpleAck => {
+                let adpu = SimpleAck::decode(reader, buf)?;
+                Ok(ApplicationPdu::SimpleAck(adpu))
             }
-            ConfirmedServiceChoice::ReadPropMultiple => {
-                ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck {})
-            }
-            s => return Err(Error::UnimplementedConfirmedServiceChoice(s)),
-        };
 
-        Ok(Self { invoke_id, service })
-    }
-}
-
-#[derive(Debug)]
-pub enum ComplexAckService<'a> {
-    ReadProperty(ReadPropertyAck<'a>),
-    ReadPropertyMultiple(ReadPropertyMultipleAck),
-    // add more here
-}
-
-#[derive(Debug)]
-pub enum ConfirmedRequestSerivice<'a> {
-    ReadProperty(ReadProperty),
-    ReadPropertyMultiple(ReadPropertyMultiple<'a>),
-    // add more here
-}
-
-pub enum PduFlags {
-    Server = 0b0001,
-    SegmentedResponseAccepted = 0b0010,
-    MoreFollows = 0b0100,
-    SegmentedMessage = 0b1000,
-}
-
-impl<'a> ConfirmedRequest<'a> {
-    pub fn new(invoke_id: u8, service: ConfirmedRequestSerivice<'a>) -> Self {
-        Self {
-            max_segments: MaxSegments::_65,
-            max_adpu: MaxAdpu::_1476,
-            invoke_id,
-            sequence_num: 0,
-            proposed_window_size: 0,
-            service,
-        }
-    }
-
-    pub fn encode(&self, writer: &mut Writer) {
-        let max_segments_flag = match self.max_segments {
-            MaxSegments::_0 => 0,
-            _ => PduFlags::SegmentedResponseAccepted as u8,
-        };
-
-        let control = ((ApduType::ConfirmedServiceRequest as u8) << 4) | max_segments_flag;
-        writer.push(control);
-        writer.push(self.max_segments as u8 | self.max_adpu as u8);
-        writer.push(self.invoke_id);
-
-        // TODO: handle Segment pdu
-
-        match &self.service {
-            ConfirmedRequestSerivice::ReadProperty(service) => {
-                writer.push(ConfirmedServiceChoice::ReadProperty as u8);
-                service.encode(writer)
-            }
-            ConfirmedRequestSerivice::ReadPropertyMultiple(service) => {
-                writer.push(ConfirmedServiceChoice::ReadPropMultiple as u8);
-                service.encode(writer)
-            }
-        };
-    }
-
-    pub fn decode(_reader: &mut Reader, _buf: &[u8]) -> Self {
-        unimplemented!()
-    }
-}
-
-#[derive(Debug)]
-pub enum UnconfirmedRequest {
-    WhoIs(WhoIs),
-    IAm(IAm),
-}
-
-impl UnconfirmedRequest {
-    pub fn encode(&self, writer: &mut Writer) {
-        writer.push((ApduType::UnconfirmedServiceRequest as u8) << 4);
-
-        match &self {
-            Self::IAm(_) => todo!(),
-            Self::WhoIs(payload) => payload.encode(writer),
-        }
-    }
-
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
-        let choice: UnconfirmedServiceChoice = reader.read_byte(buf).into();
-        match choice {
-            UnconfirmedServiceChoice::IAm => {
-                let apdu = IAm::decode(reader, buf).unwrap();
-                UnconfirmedRequest::IAm(apdu)
-            }
-            UnconfirmedServiceChoice::WhoIs => {
-                let apdu = WhoIs::decode(reader, buf);
-                UnconfirmedRequest::WhoIs(apdu)
-            }
-            _ => unimplemented!(),
-        }
-    }
-}
-
-pub enum UnconfirmedServiceChoice {
-    IAm = 0,
-    IHave = 1,
-    CovNotification = 2,
-    EventNotification = 3,
-    PrivateTransfer = 4,
-    TextMessage = 5,
-    TimeSynchronization = 6,
-    WhoHas = 7,
-    WhoIs = 8,
-    UtcTimeSynchronization = 9,
-
-    // addendum 2010-aa
-    WriteGroup = 10,
-
-    // addendum 2012-aq
-    CovNotificationMultiple = 11,
-
-    // addendum 2016-bi
-    AuditNotification = 12,
-
-    // addendum 2016-bz
-    WhoAmI = 13,
-    YouAre = 14,
-
-    // Other services to be added as they are defined.
-    // All choice values in this production are reserved
-    // for definition by ASHRAE.
-    // Proprietary extensions are made by using the
-    // UnconfirmedPrivateTransfer service. See Clause 23.
-    MaxBacnetUnconfirmedService = 15,
-}
-
-impl From<u8> for UnconfirmedServiceChoice {
-    fn from(value: u8) -> Self {
-        match value {
-            0 => Self::IAm,
-            1 => Self::IHave,
-            2 => Self::CovNotification,
-            3 => Self::EventNotification,
-            4 => Self::PrivateTransfer,
-            5 => Self::TextMessage,
-            6 => Self::TimeSynchronization,
-            7 => Self::WhoHas,
-            8 => Self::WhoIs,
-            9 => Self::UtcTimeSynchronization,
-            10 => Self::WriteGroup,
-            11 => Self::CovNotificationMultiple,
-            12 => Self::AuditNotification,
-            13 => Self::WhoAmI,
-            14 => Self::YouAre,
-            15 => Self::MaxBacnetUnconfirmedService,
-            _ => panic!("invalid unconfirmed service choice"),
+            _ => panic!("Unsupported pdu type: {:?}", pdu_type),
         }
     }
 }

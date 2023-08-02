@@ -8,9 +8,10 @@ use super::{
 };
 use crate::{
     application_protocol::{
-        application_pdu::{ApplicationPdu, ConfirmedRequest, ConfirmedRequestSerivice},
+        application_pdu::ApplicationPdu,
+        confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
         primitives::data_value::ApplicationDataValue,
-        read_property::{ReadProperty, ReadPropertyValue},
+        services::read_property::{ReadProperty, ReadPropertyValue},
     },
     common::tag::{Tag, TagNumber},
     network_protocol::{
@@ -138,9 +139,17 @@ pub fn parse_unsigned(bytes: &[u8], len: u32) -> Result<(&[u8], u32), Error> {
 }
 
 pub fn encode_context_object_id(writer: &mut Writer, tag_number: u8, object_id: &ObjectId) {
-    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), 4);
+    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), ObjectId::LEN);
     tag.encode(writer);
     object_id.encode(writer);
+}
+
+pub fn encode_context_bool(writer: &mut Writer, tag_number: u8, value: bool) {
+    const LEN: u32 = 1; // 1 byte
+    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), LEN);
+    tag.encode(writer);
+    let item = if value { 1 } else { 0 };
+    writer.push(item);
 }
 
 pub fn encode_opening_tag(writer: &mut Writer, tag_number: u8) {

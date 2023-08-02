@@ -11,8 +11,12 @@ The most comprehensive implementation and documentation I have found to be here:
 
 You can use this library to send and receive bacnet packets. However, the entire spec has not been implemented, only the bits I found most important. Use the link above if you want a comprehensive implementation. 
 
-
 The library requires no standard library or memory allocator so expect to use iterators and loops to when decoding your network packets.
+
+## Current state
+
+This software is currently in alpha state so you can expect the API to change significantly in the near future. It will be stabilized once it has been used for a real-world use case. 
+This library is being developed in tandem with such a real-world use case so its stability is dependent on it.
 
 ## How it works
 
@@ -24,7 +28,7 @@ UdpPacket
 |
 -> DataLink (about the connection)
    |
-   -> NetworkPdu (how to get there)
+   -> NetworkPdu (flags and the reason for the message)
       |
       -> ApplicationPdu (the payload)
 ```

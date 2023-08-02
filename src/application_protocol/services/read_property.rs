@@ -1,15 +1,16 @@
-use crate::common::{
-    helper::{
-        decode_context_enumerated, encode_context_enumerated, encode_context_object_id,
-        encode_context_unsigned, Reader, Writer,
+use crate::{
+    application_protocol::primitives::data_value::ApplicationDataValue,
+    common::{
+        helper::{
+            decode_context_enumerated, encode_context_enumerated, encode_context_object_id,
+            encode_context_unsigned, Reader, Writer,
+        },
+        object_id::ObjectId,
+        property_id::PropertyId,
+        spec::BACNET_ARRAY_ALL,
+        tag::{Tag, TagNumber},
     },
-    object_id::ObjectId,
-    property_id::PropertyId,
-    spec::BACNET_ARRAY_ALL,
-    tag::{Tag, TagNumber},
 };
-
-use super::primitives::data_value::ApplicationDataValue;
 
 #[derive(Debug)]
 pub enum ReadPropertyValue<'a> {

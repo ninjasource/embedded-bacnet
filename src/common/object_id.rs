@@ -11,6 +11,8 @@ pub struct ObjectId {
 }
 
 impl ObjectId {
+    pub const LEN: u32 = 4; // 4 bytes
+
     pub fn new(object_type: ObjectType, id: u32) -> Self {
         Self { object_type, id }
     }

@@ -3,5 +3,6 @@
         "Bacnet",
         "Noob",
         "Palahniuk"
-    ]
+    ],
+    "rust-analyzer.showUnlinkedFileNotification": false
 }

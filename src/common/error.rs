@@ -1,4 +1,4 @@
-use crate::application_protocol::application_pdu::ConfirmedServiceChoice;
+use crate::application_protocol::confirmed::ConfirmedServiceChoice;
 
 #[derive(Debug)]
 pub enum Error {
