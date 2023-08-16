@@ -9,6 +9,7 @@ use super::{
         change_of_value::SubscribeCov,
         read_property::{ReadProperty, ReadPropertyAck},
         read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleAck},
+        write_property::WriteProperty,
     },
 };
 
@@ -58,6 +59,10 @@ impl<'a> ConfirmedRequest<'a> {
             }
             ConfirmedRequestSerivice::SubscribeCov(service) => {
                 writer.push(ConfirmedServiceChoice::SubscribeCov as u8);
+                service.encode(writer)
+            }
+            ConfirmedRequestSerivice::WriteProperty(service) => {
+                writer.push(ConfirmedServiceChoice::WriteProperty as u8);
                 service.encode(writer)
             }
         };
@@ -232,5 +237,6 @@ pub enum ConfirmedRequestSerivice<'a> {
     ReadProperty(ReadProperty),
     ReadPropertyMultiple(ReadPropertyMultiple<'a>),
     SubscribeCov(SubscribeCov),
+    WriteProperty(WriteProperty<'a>),
     // add more here (see ConfirmedServiceChoice enum)
 }

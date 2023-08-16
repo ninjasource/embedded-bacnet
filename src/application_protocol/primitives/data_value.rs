@@ -3,8 +3,9 @@ use core::{fmt::Display, str::from_utf8};
 use flagset::{FlagSet, Flags};
 
 use crate::common::{
+    daily_schedule::WeeklySchedule,
     error::Error,
-    helper::{decode_unsigned, Reader},
+    helper::{decode_unsigned, Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
     spec::{Binary, EngineeringUnits, StatusFlags},
@@ -23,6 +24,7 @@ pub enum ApplicationDataValue<'a> {
     Enumerated(Enumerated),
     BitString(BitString<'a>),
     UnsignedInt(u32),
+    WeeklySchedule(WeeklySchedule<'a>),
 }
 
 #[derive(Debug)]
@@ -40,12 +42,55 @@ pub struct Date {
     pub wday: u8, // 1 (Monday) to 7 (Sunday)
 }
 
+impl Date {
+    //  year = years since 1900, wildcard=1900+255
+    //  month 1=Jan
+    //  day = day of month
+    //  wday 1=Monday...7=Sunday
+    pub fn decode(value: u32) -> Self {
+        let value = value.to_be_bytes();
+        let year = value[0] as u16 + 1900;
+        let month = value[1];
+        let day = value[2];
+        let wday = value[3];
+        Self {
+            year,
+            month,
+            day,
+            wday,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Time {
     pub hour: u8,
-    pub min: u8,
-    pub sec: u8,
+    pub minute: u8,
+    pub second: u8,
     pub hundredths: u8,
+}
+
+impl Time {
+    // assuming that this comes from a Time tag
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+        let hour = reader.read_byte(buf);
+        let minute = reader.read_byte(buf);
+        let second = reader.read_byte(buf);
+        let hundredths = reader.read_byte(buf);
+        Time {
+            hour,
+            minute,
+            second,
+            hundredths,
+        }
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push(self.hour);
+        writer.push(self.minute);
+        writer.push(self.second);
+        writer.push(self.hundredths);
+    }
 }
 
 #[derive(Debug)]
@@ -119,6 +164,19 @@ impl<'a> CharacterString<'a> {
 }
 
 impl<'a> ApplicationDataValue<'a> {
+    pub fn encode(&self, writer: &mut Writer) {
+        match self {
+            Self::Real(x) => {
+                let len = 4;
+                let tag = Tag::new(TagNumber::Application(ApplicationTagNumber::Real), len);
+                tag.encode(writer);
+                writer.extend_from_slice(&f32::to_be_bytes(*x))
+            }
+            Self::WeeklySchedule(x) => x.encode(writer),
+            _ => todo!(),
+        }
+    }
+
     pub fn decode(
         tag: &Tag,
         object_id: &ObjectId,
@@ -126,9 +184,9 @@ impl<'a> ApplicationDataValue<'a> {
         reader: &mut Reader,
         buf: &'a [u8],
     ) -> Self {
-        let tag_num = match tag.number {
+        let tag_num = match &tag.number {
             TagNumber::Application(x) => x,
-            TagNumber::ContextSpecific(_) => panic!("application tag number expected"),
+            unknown => panic!("application tag number expected: {:?}", unknown),
         };
 
         match tag_num {
@@ -177,8 +235,17 @@ impl<'a> ApplicationDataValue<'a> {
                 let value = decode_unsigned(tag.value, reader, buf) as u32;
                 ApplicationDataValue::UnsignedInt(value)
             }
+            ApplicationTagNumber::Time => {
+                assert_eq!(tag.value, 4); // 4 bytes
+                let time = Time::decode(reader, buf);
+                ApplicationDataValue::Time(time)
+            }
+            ApplicationTagNumber::Date => {
+                let date = Date::decode(tag.value);
+                ApplicationDataValue::Date(date)
+            }
 
-            _ => unimplemented!(),
+            x => unimplemented!("{:?}", x),
         }
     }
 }

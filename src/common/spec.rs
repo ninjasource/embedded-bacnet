@@ -36,7 +36,7 @@ impl TryFrom<u32> for Segmentation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(u32)]
 pub enum Binary {
     Off = 0,

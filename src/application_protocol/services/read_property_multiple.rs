@@ -3,6 +3,7 @@ use core::fmt::Display;
 use crate::{
     application_protocol::primitives::data_value::ApplicationDataValue,
     common::{
+        daily_schedule::WeeklySchedule,
         helper::{
             decode_unsigned, encode_closing_tag, encode_context_enumerated,
             encode_context_object_id, encode_context_unsigned, encode_opening_tag, Reader, Writer,
@@ -29,7 +30,7 @@ impl ObjectWithResults {
         buf: &'a [u8],
     ) -> Option<PropertyResult<'a>> {
         let tag = Tag::decode(reader, buf);
-        if tag.number == TagNumber::ContextSpecific(1) {
+        if tag.number == TagNumber::ContextSpecificClosing(1) {
             // closing tag
             return None;
         }
@@ -44,33 +45,40 @@ impl ObjectWithResults {
         let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
-            TagNumber::ContextSpecific(4),
+            TagNumber::ContextSpecificOpening(4),
             "expected opening tag"
         );
 
-        let property_value = if property_id == PropertyId::PropEventTimeStamps {
-            // hack to read past complicated timestamps
-            loop {
-                let byte = reader.read_byte(buf);
-                // read until we get to the closing tag
-                if byte == 0x4f {
-                    break PropertyValue::PropValue(ApplicationDataValue::Boolean(false));
+        let property_value = match property_id {
+            PropertyId::PropEventTimeStamps => {
+                // hack to read past complicated timestamps
+                loop {
+                    let byte = reader.read_byte(buf);
+                    // read until we get to the closing tag
+                    if byte == 0x4f {
+                        break PropertyValue::PropValue(ApplicationDataValue::Boolean(false));
+                    }
                 }
             }
-        } else {
-            let tag = Tag::decode(reader, buf);
-            let value =
-                ApplicationDataValue::decode(&tag, &self.object_id, &property_id, reader, buf);
-            let property_value = PropertyValue::PropValue(value);
+            PropertyId::PropWeeklySchedule => {
+                let weekly_schedule = WeeklySchedule::new();
+                PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(weekly_schedule))
+            }
+            property_id => {
+                let tag = Tag::decode(reader, buf);
+                let value =
+                    ApplicationDataValue::decode(&tag, &self.object_id, &property_id, reader, buf);
+                let property_value = PropertyValue::PropValue(value);
 
-            let tag = Tag::decode(reader, buf);
-            assert_eq!(
-                tag.number,
-                TagNumber::ContextSpecific(4),
-                "expected closing tag"
-            );
+                let tag = Tag::decode(reader, buf);
+                assert_eq!(
+                    tag.number,
+                    TagNumber::ContextSpecificClosing(4),
+                    "expected closing tag"
+                );
 
-            property_value
+                property_value
+            }
         };
 
         let property_result = PropertyResult {
@@ -121,7 +129,7 @@ impl ReadPropertyMultipleAck {
         let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
-            TagNumber::ContextSpecific(1),
+            TagNumber::ContextSpecificOpening(1),
             "expected list of results opening tag"
         );
 

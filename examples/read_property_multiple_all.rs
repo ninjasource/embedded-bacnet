@@ -50,8 +50,17 @@ fn main() -> Result<(), Error> {
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
     let mut reader = Reader::new();
-    let message = DataLink::decode(&mut reader, buf);
+    let message = DataLink::decode(&mut reader, buf).unwrap();
     println!("Decoded:  {:?}\n", message);
+
+    // read values
+    if let Some(message) = message.get_read_property_multiple_ack() {
+        while let Some(values) = message.decode_next(&mut reader, buf) {
+            while let Some(x) = values.decode_next(&mut reader, buf) {
+                println!("{:?}", x);
+            }
+        }
+    }
 
     Ok(())
 }

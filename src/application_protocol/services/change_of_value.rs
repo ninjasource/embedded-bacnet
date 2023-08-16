@@ -81,7 +81,7 @@ impl CovNotification {
 
         // opening tag list of values
         let tag = Tag::decode(reader, buf);
-        if tag.number != TagNumber::ContextSpecific(Self::TAG_LIST_OF_VALUES) {
+        if tag.number != TagNumber::ContextSpecificOpening(Self::TAG_LIST_OF_VALUES) {
             return Err(Error::InvalidValue(
                 "expected list of values opening tag type for CovNotification",
             ));
@@ -103,7 +103,7 @@ impl CovNotification {
         // TODO: read list of values
 
         let tag = Tag::decode(reader, buf);
-        if tag.number == TagNumber::ContextSpecific(4) {
+        if tag.number == TagNumber::ContextSpecificClosing(4) {
             return None;
         }
 
@@ -118,7 +118,7 @@ impl CovNotification {
         let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
-            TagNumber::ContextSpecific(2),
+            TagNumber::ContextSpecificOpening(2),
             "expected value opening tag"
         );
 
@@ -128,7 +128,7 @@ impl CovNotification {
         let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
-            TagNumber::ContextSpecific(2),
+            TagNumber::ContextSpecificClosing(2),
             "expected value closing tag"
         );
 

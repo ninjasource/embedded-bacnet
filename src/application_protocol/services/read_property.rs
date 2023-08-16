@@ -24,7 +24,7 @@ pub struct ObjectIdList {}
 impl ObjectIdList {
     pub fn decode_next(&self, reader: &mut Reader, buf: &[u8]) -> Option<ObjectId> {
         let tag = Tag::decode(reader, buf);
-        if tag.number == TagNumber::ContextSpecific(3) {
+        if tag.number == TagNumber::ContextSpecificClosing(3) {
             // closing tag
             return None;
         }
@@ -60,7 +60,7 @@ impl<'a> ReadPropertyAck<'a> {
         let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
-            TagNumber::ContextSpecific(3),
+            TagNumber::ContextSpecificOpening(3),
             "expected opening tag"
         );
 
@@ -82,7 +82,7 @@ impl<'a> ReadPropertyAck<'a> {
                 let tag = Tag::decode(reader, buf);
                 assert_eq!(
                     tag.number,
-                    TagNumber::ContextSpecific(3),
+                    TagNumber::ContextSpecificClosing(3),
                     "expected closing tag"
                 );
 

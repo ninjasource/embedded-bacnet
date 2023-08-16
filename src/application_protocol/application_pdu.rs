@@ -15,7 +15,7 @@ pub enum ApplicationPdu<'a> {
     UnconfirmedRequest(UnconfirmedRequest),
     ComplexAck(ComplexAck<'a>),
     SimpleAck(SimpleAck),
-    // add more here
+    // add more here (see ApduType)
 }
 
 #[derive(Debug)]

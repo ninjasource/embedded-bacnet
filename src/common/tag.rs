@@ -56,6 +56,8 @@ impl From<u8> for ApplicationTagNumber {
 pub enum TagNumber {
     Application(ApplicationTagNumber),
     ContextSpecific(u8),
+    ContextSpecificOpening(u8),
+    ContextSpecificClosing(u8),
 }
 
 #[derive(Debug)]
@@ -76,6 +78,36 @@ impl Tag {
         match &self.number {
             TagNumber::Application(num) => {
                 buf[0] |= (*num as u8) << 4;
+            }
+            TagNumber::ContextSpecificOpening(num) => {
+                let num = *num;
+                buf[0] |= 0b1000; // set class to context specific
+
+                if num <= 14 {
+                    buf[0] |= num << 4;
+                } else {
+                    buf[0] |= 0xF0;
+                    buf[1] = num;
+                    len += 1;
+                }
+
+                // set type field to opening tag
+                buf[0] |= 6;
+            }
+            TagNumber::ContextSpecificClosing(num) => {
+                let num = *num;
+                buf[0] |= 0b1000; // set class to context specific
+
+                if num <= 14 {
+                    buf[0] |= num << 4;
+                } else {
+                    buf[0] |= 0xF0;
+                    buf[1] = num;
+                    len += 1;
+                }
+
+                // set type field to closing tag
+                buf[0] |= 7;
             }
             TagNumber::ContextSpecific(num) => {
                 let num = *num;
@@ -161,7 +193,13 @@ fn decode_tag_number(reader: &mut Reader, buf: &[u8]) -> (TagNumber, u8) {
             (TagNumber::ContextSpecific(num), byte0)
         } else {
             let num = byte0 >> 4;
-            (TagNumber::ContextSpecific(num), byte0)
+            if is_opening_tag(byte0) {
+                (TagNumber::ContextSpecificOpening(num), 0)
+            } else if is_closing_tag(byte0) {
+                (TagNumber::ContextSpecificClosing(num), 0)
+            } else {
+                (TagNumber::ContextSpecific(num), byte0)
+            }
         }
     } else {
         // application tag num
