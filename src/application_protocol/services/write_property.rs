@@ -1,5 +1,5 @@
 use crate::{
-    application_protocol::primitives::data_value::ApplicationDataValue,
+    application_protocol::primitives::data_value::ApplicationDataValueWrite,
     common::{
         helper::{
             encode_closing_tag, encode_context_enumerated, encode_context_object_id,
@@ -16,7 +16,7 @@ pub struct WriteProperty<'a> {
     property_id: PropertyId,
     priority: Option<u8>,
     array_index: Option<u32>,
-    value: ApplicationDataValue<'a>,
+    value: ApplicationDataValueWrite<'a>,
 }
 
 impl<'a> WriteProperty<'a> {
@@ -32,7 +32,7 @@ impl<'a> WriteProperty<'a> {
         property_id: PropertyId,
         priority: Option<u8>,
         array_index: Option<u32>,
-        value: ApplicationDataValue<'a>,
+        value: ApplicationDataValueWrite<'a>,
     ) -> Self {
         Self {
             object_id,

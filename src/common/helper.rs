@@ -46,9 +46,10 @@ impl<'a> Writer<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct Reader {
-    index: usize,
-    len: usize,
+    pub index: usize,
+    pub len: usize,
 }
 
 impl Reader {
@@ -96,6 +97,23 @@ impl Reader {
             self.index += len;
             slice
         }
+    }
+}
+
+// This gives you a reader that begins after the opening tag and ends before the closing tag
+pub fn get_reader_for_tag(tag_number: u8, reader: &mut Reader, buf: &[u8]) -> Reader {
+    let tag = Tag::decode(reader, buf);
+    assert_eq!(tag.number, TagNumber::ContextSpecificOpening(tag_number));
+    let index = reader.index;
+    loop {
+        let tag = Tag::decode(reader, buf);
+        if tag.number == TagNumber::ContextSpecificClosing(tag_number) {
+            let len = reader.index - index - 1;
+            return Reader { index, len };
+        }
+
+        // skip past value and read next tag
+        reader.index += tag.value as usize;
     }
 }
 

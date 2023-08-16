@@ -4,7 +4,7 @@ use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
         confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
-        primitives::data_value::ApplicationDataValue,
+        primitives::data_value::{ApplicationDataValue, ApplicationDataValueWrite},
         services::{
             read_property_multiple::{
                 PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject,
@@ -13,7 +13,7 @@ use embedded_bacnet::{
         },
     },
     common::{
-        daily_schedule::WeeklySchedule,
+        daily_schedule::WeeklyScheduleWrite,
         helper::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
@@ -59,7 +59,15 @@ fn main() -> Result<(), Error> {
     let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf).unwrap();
 
-    let mut schedule = vec![];
+    //  let mut schedule = vec![];
+
+    let mut monday = vec![];
+    let mut tuesday = vec![];
+    let mut wednesday = vec![];
+    let mut thursday = vec![];
+    let mut friday = vec![];
+    let mut saturday = vec![];
+    let mut sunday = vec![];
 
     if let Some(message) = message.get_read_property_multiple_ack() {
         while let Some(values) = message.decode_next(&mut reader, buf) {
@@ -68,12 +76,13 @@ fn main() -> Result<(), Error> {
                     PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
                         weekly_schedule,
                     )) => {
-                        let mut weekly_schedule_reader = weekly_schedule.decode();
-                        while let Some(day_time_value) =
-                            weekly_schedule_reader.decode_next(&mut reader, buf)
-                        {
-                            schedule.push(day_time_value);
-                        }
+                        monday = weekly_schedule.monday.collect();
+                        tuesday = weekly_schedule.tuesday.collect();
+                        wednesday = weekly_schedule.wednesday.collect();
+                        thursday = weekly_schedule.thursday.collect();
+                        friday = weekly_schedule.friday.collect();
+                        saturday = weekly_schedule.saturday.collect();
+                        sunday = weekly_schedule.sunday.collect();
                     }
                     _ => {
                         // do nothing
@@ -83,15 +92,16 @@ fn main() -> Result<(), Error> {
         }
     }
 
-    println!("{schedule:?}");
+    /*
+        println!("{schedule:?}");
 
-    let mut monday = vec![];
-    let mut tuesday = vec![];
-    let mut wednesday = vec![];
-    let mut thursday = vec![];
-    let mut friday = vec![];
-    let mut saturday = vec![];
-    let mut sunday = vec![];
+        let mut monday = vec![];
+        let mut tuesday = vec![];
+        let mut wednesday = vec![];
+        let mut thursday = vec![];
+        let mut friday = vec![];
+        let mut saturday = vec![];
+        let mut sunday = vec![];
 
     for item in schedule {
         match item.day_of_week {
@@ -104,18 +114,44 @@ fn main() -> Result<(), Error> {
             6 => sunday.push(item.time_value),
             _ => unreachable!(),
         }
-    }
+    }*/
     // change the schedule
-    monday[0].time.hour = 7;
+    monday[0].time.hour = 8;
 
-    let mut weekly_schedule = WeeklySchedule::new();
-    weekly_schedule.monday = &monday;
-    weekly_schedule.tuesday = &tuesday;
-    weekly_schedule.wednesday = &wednesday;
-    weekly_schedule.thursday = &thursday;
-    weekly_schedule.friday = &friday;
-    weekly_schedule.saturday = &saturday;
-    weekly_schedule.sunday = &sunday;
+    /*
+    let mut weekly_schedule = WeeklyScheduleNew {
+        monday,
+        tuesday,
+        wednesday,
+        thursday,
+        friday,
+        saturday,
+        sunday,
+    };
+    */
+
+    /*
+        let mut weekly_schedule = WeeklySchedule::new();
+        weekly_schedule.monday = &monday;
+        weekly_schedule.tuesday = &tuesday;
+        weekly_schedule.wednesday = &wednesday;
+        weekly_schedule.thursday = &thursday;
+        weekly_schedule.friday = &friday;
+        weekly_schedule.saturday = &saturday;
+        weekly_schedule.sunday = &sunday;
+    */
+
+    let weekly_schedule = WeeklyScheduleWrite {
+        monday: &monday,
+        tuesday: &tuesday,
+        wednesday: &wednesday,
+        thursday: &thursday,
+        friday: &friday,
+        saturday: &saturday,
+        sunday: &sunday,
+    };
+
+    println!("{:?}", weekly_schedule);
 
     // encode packet
     let write_property = WriteProperty::new(
@@ -123,7 +159,7 @@ fn main() -> Result<(), Error> {
         PropertyId::PropWeeklySchedule,
         None,
         None,
-        ApplicationDataValue::WeeklySchedule(weekly_schedule),
+        ApplicationDataValueWrite::WeeklySchedule(weekly_schedule),
     );
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::WriteProperty(write_property));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
