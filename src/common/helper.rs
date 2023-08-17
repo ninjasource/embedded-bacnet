@@ -101,15 +101,28 @@ impl Reader {
 }
 
 // This gives you a reader that begins after the opening tag and ends before the closing tag
-pub fn get_reader_for_tag(tag_number: u8, reader: &mut Reader, buf: &[u8]) -> Reader {
+pub fn get_tag_body(tag_number: u8, reader: &mut Reader, buf: &[u8]) -> Reader {
     let tag = Tag::decode(reader, buf);
     assert_eq!(tag.number, TagNumber::ContextSpecificOpening(tag_number));
     let index = reader.index;
+    let mut counter = 0;
     loop {
         let tag = Tag::decode(reader, buf);
-        if tag.number == TagNumber::ContextSpecificClosing(tag_number) {
-            let len = reader.index - index - 1;
-            return Reader { index, len };
+
+        // keep track of nested tags and when we reach our last closing tag then we are done
+        match tag.number {
+            TagNumber::ContextSpecificOpening(x) if x == tag_number => counter += 1,
+            TagNumber::ContextSpecificClosing(x) if x == tag_number => {
+                if counter == 0 {
+                    let len = reader.index - index - 1;
+                    return Reader { index, len };
+                } else {
+                    counter -= 1;
+                }
+            }
+            _ => {
+                // ignore all other tags
+            }
         }
 
         // skip past value and read next tag

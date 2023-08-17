@@ -59,8 +59,6 @@ fn main() -> Result<(), Error> {
     let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf).unwrap();
 
-    //  let mut schedule = vec![];
-
     let mut monday = vec![];
     let mut tuesday = vec![];
     let mut wednesday = vec![];
@@ -92,64 +90,12 @@ fn main() -> Result<(), Error> {
         }
     }
 
-    /*
-        println!("{schedule:?}");
-
-        let mut monday = vec![];
-        let mut tuesday = vec![];
-        let mut wednesday = vec![];
-        let mut thursday = vec![];
-        let mut friday = vec![];
-        let mut saturday = vec![];
-        let mut sunday = vec![];
-
-    for item in schedule {
-        match item.day_of_week {
-            0 => monday.push(item.time_value),
-            1 => tuesday.push(item.time_value),
-            2 => wednesday.push(item.time_value),
-            3 => thursday.push(item.time_value),
-            4 => friday.push(item.time_value),
-            5 => saturday.push(item.time_value),
-            6 => sunday.push(item.time_value),
-            _ => unreachable!(),
-        }
-    }*/
     // change the schedule
     monday[0].time.hour = 8;
 
-    /*
-    let mut weekly_schedule = WeeklyScheduleNew {
-        monday,
-        tuesday,
-        wednesday,
-        thursday,
-        friday,
-        saturday,
-        sunday,
-    };
-    */
-
-    /*
-        let mut weekly_schedule = WeeklySchedule::new();
-        weekly_schedule.monday = &monday;
-        weekly_schedule.tuesday = &tuesday;
-        weekly_schedule.wednesday = &wednesday;
-        weekly_schedule.thursday = &thursday;
-        weekly_schedule.friday = &friday;
-        weekly_schedule.saturday = &saturday;
-        weekly_schedule.sunday = &sunday;
-    */
-
-    let weekly_schedule = WeeklyScheduleWrite {
-        monday: &monday,
-        tuesday: &tuesday,
-        wednesday: &wednesday,
-        thursday: &thursday,
-        friday: &friday,
-        saturday: &saturday,
-        sunday: &sunday,
-    };
+    let weekly_schedule = WeeklyScheduleWrite::new(
+        &monday, &tuesday, &wednesday, &thursday, &friday, &saturday, &sunday,
+    );
 
     println!("{:?}", weekly_schedule);
 
