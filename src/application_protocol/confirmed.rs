@@ -1,6 +1,8 @@
 use crate::common::{
     error::Error,
-    helper::{Reader, Writer},
+    helper::{decode_unsigned, Reader, Writer},
+    spec::{ErrorClass, ErrorCode},
+    tag::{ApplicationTagNumber, Tag, TagNumber},
 };
 
 use super::{
@@ -195,6 +197,50 @@ impl SimpleAck {
         Ok(Self {
             invoke_id,
             service_choice,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct BacnetError {
+    pub invoke_id: u8,
+    pub service_choice: ConfirmedServiceChoice,
+    pub error_class: ErrorClass,
+    pub error_code: ErrorCode,
+}
+
+impl BacnetError {
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let invoke_id = reader.read_byte(buf);
+        let service_choice = reader.read_byte(buf).into();
+
+        let tag = Tag::decode(reader, buf);
+        match tag.number {
+            TagNumber::Application(ApplicationTagNumber::Enumerated) => {
+                // ok
+            }
+            x => panic!("Expected error class application tag enumerated: {:?}", x),
+        };
+
+        let value = decode_unsigned(tag.value, reader, buf) as u32;
+        let error_class = ErrorClass::try_from(value).unwrap();
+
+        let tag = Tag::decode(reader, buf);
+        match tag.number {
+            TagNumber::Application(ApplicationTagNumber::Enumerated) => {
+                // ok
+            }
+            x => panic!("Expected error code application tag enumerated: {:?}", x),
+        };
+
+        let value = decode_unsigned(tag.value, reader, buf) as u32;
+        let error_code = ErrorCode::try_from(value).unwrap();
+
+        Ok(Self {
+            invoke_id,
+            service_choice,
+            error_class,
+            error_code,
         })
     }
 }
