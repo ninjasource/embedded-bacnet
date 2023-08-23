@@ -166,6 +166,13 @@ impl<'a> CharacterString<'a> {
 impl<'a> ApplicationDataValue<'a> {
     pub fn encode(&self, writer: &mut Writer) {
         match self {
+            Self::Boolean(x) => {
+                let len = 1;
+                let tag = Tag::new(TagNumber::Application(ApplicationTagNumber::Boolean), len);
+                tag.encode(writer);
+                let value = if *x { 1_u8 } else { 0_u8 };
+                writer.push(value)
+            }
             Self::Real(x) => {
                 let len = 4;
                 let tag = Tag::new(TagNumber::Application(ApplicationTagNumber::Real), len);
