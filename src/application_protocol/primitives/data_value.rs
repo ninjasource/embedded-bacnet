@@ -29,6 +29,7 @@ pub enum ApplicationDataValue<'a> {
 
 #[derive(Debug)]
 pub enum ApplicationDataValueWrite<'a> {
+    Boolean(bool),
     Real(f32),
     WeeklySchedule(WeeklyScheduleWrite<'a>),
 }
