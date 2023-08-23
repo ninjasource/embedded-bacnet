@@ -4,7 +4,7 @@ use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
         confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
-        primitives::data_value::ApplicationDataValue,
+        primitives::data_value::ApplicationDataValueWrite,
         services::write_property::WriteProperty,
     },
     common::{
@@ -28,7 +28,7 @@ fn main() -> Result<(), Error> {
         PropertyId::PropPresentValue,
         None,
         None,
-        ApplicationDataValue::Real(10.0),
+        ApplicationDataValueWrite::Real(10.0),
     );
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::WriteProperty(write_property));
     let apdu = ApplicationPdu::ConfirmedRequest(req);

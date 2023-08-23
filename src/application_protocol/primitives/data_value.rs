@@ -3,7 +3,7 @@ use core::{fmt::Display, str::from_utf8};
 use flagset::{FlagSet, Flags};
 
 use crate::common::{
-    daily_schedule::WeeklySchedule,
+    daily_schedule::{WeeklySchedule, WeeklyScheduleWrite},
     error::Error,
     helper::{decode_unsigned, Reader, Writer},
     object_id::{ObjectId, ObjectType},
@@ -25,6 +25,12 @@ pub enum ApplicationDataValue<'a> {
     BitString(BitString<'a>),
     UnsignedInt(u32),
     WeeklySchedule(WeeklySchedule<'a>),
+}
+
+#[derive(Debug)]
+pub enum ApplicationDataValueWrite<'a> {
+    Real(f32),
+    WeeklySchedule(WeeklyScheduleWrite<'a>),
 }
 
 #[derive(Debug)]
@@ -163,7 +169,7 @@ impl<'a> CharacterString<'a> {
     }
 }
 
-impl<'a> ApplicationDataValue<'a> {
+impl<'a> ApplicationDataValueWrite<'a> {
     pub fn encode(&self, writer: &mut Writer) {
         match self {
             Self::Boolean(x) => {
@@ -180,10 +186,11 @@ impl<'a> ApplicationDataValue<'a> {
                 writer.extend_from_slice(&f32::to_be_bytes(*x))
             }
             Self::WeeklySchedule(x) => x.encode(writer),
-            _ => todo!(),
         }
     }
+}
 
+impl<'a> ApplicationDataValue<'a> {
     pub fn decode(
         tag: &Tag,
         object_id: &ObjectId,

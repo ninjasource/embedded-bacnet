@@ -61,7 +61,7 @@ impl ObjectWithResults {
                 }
             }
             PropertyId::PropWeeklySchedule => {
-                let weekly_schedule = WeeklySchedule::new();
+                let weekly_schedule = WeeklySchedule::new(reader, buf);
                 PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(weekly_schedule))
             }
             property_id => {
