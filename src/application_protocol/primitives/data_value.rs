@@ -30,6 +30,7 @@ pub enum ApplicationDataValue<'a> {
 #[derive(Debug)]
 pub enum ApplicationDataValueWrite<'a> {
     Boolean(bool),
+    Enumerated(Enumerated),
     Real(f32),
     WeeklySchedule(WeeklyScheduleWrite<'a>),
 }
@@ -39,6 +40,23 @@ pub enum Enumerated {
     Units(EngineeringUnits),
     Binary(Binary),
     Unknown(u32),
+}
+
+impl Enumerated {
+    pub fn encode(&self, writer: &mut Writer) {
+        let len = 4;
+        let tag = Tag::new(
+            TagNumber::Application(ApplicationTagNumber::Enumerated),
+            len,
+        );
+        tag.encode(writer);
+        let value = match self {
+            Self::Units(x) => *x as u32,
+            Self::Binary(x) => *x as u32,
+            Self::Unknown(x) => *x,
+        };
+        writer.extend_from_slice(&value.to_be_bytes());
+    }
 }
 
 #[derive(Debug)]
@@ -185,6 +203,9 @@ impl<'a> ApplicationDataValueWrite<'a> {
                 let tag = Tag::new(TagNumber::Application(ApplicationTagNumber::Real), len);
                 tag.encode(writer);
                 writer.extend_from_slice(&f32::to_be_bytes(*x))
+            }
+            Self::Enumerated(x) => {
+                x.encode(writer);
             }
             Self::WeeklySchedule(x) => x.encode(writer),
         }
