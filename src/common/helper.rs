@@ -102,18 +102,11 @@ impl Reader {
 }
 
 // This gives you the bytes that begin after the opening tag and end before the closing tag
-pub fn get_tagged_body<'a>(
-    expected_tag_number: u8,
-    reader: &mut Reader,
-    buf: &'a [u8],
-) -> &'a [u8] {
+pub fn get_tagged_body<'a>(reader: &mut Reader, buf: &'a [u8]) -> (&'a [u8], u8) {
     let tag = Tag::decode(reader, buf);
     let tag_number = match &tag.number {
-        TagNumber::ContextSpecificOpening(expected_tag_number) => *expected_tag_number,
-        _ => panic!(
-            "Expected opening tag {} but got: {:?}",
-            expected_tag_number, tag
-        ),
+        TagNumber::ContextSpecificOpening(x) => *x,
+        _ => panic!("Expected opening tag but got: {:?}", tag),
     };
 
     let index = reader.index;
@@ -128,7 +121,7 @@ pub fn get_tagged_body<'a>(
                 if counter == 0 {
                     //  let len = reader.index - index - 1;
                     let end = reader.index - 1; // -1 to ignore the last closing tag
-                    return &buf[index..end];
+                    return (&buf[index..end], tag_number);
                 } else {
                     counter -= 1;
                 }

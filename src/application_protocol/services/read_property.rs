@@ -85,11 +85,12 @@ impl<'a> ReadPropertyAck<'a> {
         );
 
         //let tag = Tag::decode(reader, buf);
-        let inner_buf = get_tagged_body(3, reader, buf);
+        let (inner_buf, tag_number) = get_tagged_body(reader, buf);
         let mut inner_reader = Reader {
             index: 0,
             end: inner_buf.len(),
         };
+        assert_eq!(3, tag_number, "Expected opening tag");
         //assert_eq!(
         //    tag.number,
         //    TagNumber::ContextSpecificOpening(3),

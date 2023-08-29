@@ -25,13 +25,13 @@ impl<'a> WeeklySchedule<'a> {
     // due to the fact that WeeklySchedule contains an arbitrary number of TimeValue pairs we need to return an iterator
     // because we cannot use an allocator
     pub fn new(reader: &mut Reader, buf: &'a [u8]) -> Self {
-        let monday = TimeValueIter::new(get_tagged_body(0, reader, buf));
-        let tuesday = TimeValueIter::new(get_tagged_body(0, reader, buf));
-        let wednesday = TimeValueIter::new(get_tagged_body(0, reader, buf));
-        let thursday = TimeValueIter::new(get_tagged_body(0, reader, buf));
-        let friday = TimeValueIter::new(get_tagged_body(0, reader, buf));
-        let saturday = TimeValueIter::new(get_tagged_body(0, reader, buf));
-        let sunday = TimeValueIter::new(get_tagged_body(0, reader, buf));
+        let monday = TimeValueIter::new(get_tagged_body(reader, buf).0);
+        let tuesday = TimeValueIter::new(get_tagged_body(reader, buf).0);
+        let wednesday = TimeValueIter::new(get_tagged_body(reader, buf).0);
+        let thursday = TimeValueIter::new(get_tagged_body(reader, buf).0);
+        let friday = TimeValueIter::new(get_tagged_body(reader, buf).0);
+        let saturday = TimeValueIter::new(get_tagged_body(reader, buf).0);
+        let sunday = TimeValueIter::new(get_tagged_body(reader, buf).0);
 
         let schedule = WeeklySchedule {
             monday,

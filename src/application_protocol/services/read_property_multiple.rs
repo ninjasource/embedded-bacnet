@@ -11,8 +11,8 @@ use crate::{
         },
         object_id::ObjectId,
         property_id::PropertyId,
-        spec::BACNET_ARRAY_ALL,
-        tag::{Tag, TagNumber},
+        spec::{ErrorClass, ErrorCode, BACNET_ARRAY_ALL},
+        tag::{ApplicationTagNumber, Tag, TagNumber},
     },
 };
 
@@ -46,7 +46,7 @@ impl ObjectWithResults {
         let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf) as u32).into();
 
         //let tag = Tag::decode(reader, buf);
-        let inner_buf = get_tagged_body(4, reader, buf);
+        let (inner_buf, tag_number) = get_tagged_body(reader, buf);
         let mut inner_reader = Reader {
             index: 0,
             end: inner_buf.len(),
@@ -63,50 +63,42 @@ impl ObjectWithResults {
         //    "expected opening tag"
         //);
 
-        let property_value = match property_id {
-            PropertyId::PropEventTimeStamps => {
-                // ignore for now
-                PropertyValue::PropValue(ApplicationDataValue::Boolean(false))
-                /*
-                // hack to read past complicated timestamps
-                loop {
-                    let byte = reader.read_byte(buf);
-                    // read until we get to the closing tag
-                    if byte == 0x4f {
-                        break PropertyValue::PropValue(ApplicationDataValue::Boolean(false));
+        let property_value = match tag_number {
+            4 => {
+                match property_id {
+                    PropertyId::PropEventTimeStamps => {
+                        // ignore for now
+                        PropertyValue::PropValue(ApplicationDataValue::Boolean(false))
                     }
-                }*/
+                    PropertyId::PropWeeklySchedule => {
+                        let weekly_schedule = WeeklySchedule::new(&mut inner_reader, inner_buf);
+                        PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
+                            weekly_schedule,
+                        ))
+                    }
+                    property_id => {
+                        let tag = Tag::decode(&mut inner_reader, inner_buf);
+                        let value = ApplicationDataValue::decode(
+                            &tag,
+                            &self.object_id,
+                            &property_id,
+                            &mut inner_reader,
+                            inner_buf,
+                        );
+                        PropertyValue::PropValue(value)
+                    }
+                }
             }
-            PropertyId::PropWeeklySchedule => {
-                let weekly_schedule = WeeklySchedule::new(&mut inner_reader, inner_buf);
-                //let weekly_schedule = WeeklySchedule::new(reader, buf);
-                PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(weekly_schedule))
+            5 => {
+                // property read error
+                let error = read_error(&mut inner_reader, inner_buf);
+                PropertyValue::PropError(error)
             }
-            property_id => {
-                let tag = Tag::decode(&mut inner_reader, inner_buf);
-                let value = ApplicationDataValue::decode(
-                    &tag,
-                    &self.object_id,
-                    &property_id,
-                    &mut inner_reader,
-                    inner_buf,
+            x => {
+                panic!(
+                    "Unexpected tag number after property identifier {:?}: {:?}",
+                    property_id, x
                 );
-
-                /*
-                                let tag = Tag::decode(reader, buf);
-                                let value =
-                                    ApplicationDataValue::decode(&tag, &self.object_id, &property_id, reader, buf);
-                */
-                let property_value = PropertyValue::PropValue(value);
-
-                // let tag = Tag::decode(reader, buf);
-                // assert_eq!(
-                //     tag.number,
-                //     TagNumber::ContextSpecificClosing(4),
-                //     "expected closing tag"
-                // );
-
-                property_value
             }
         };
 
@@ -116,6 +108,31 @@ impl ObjectWithResults {
         };
 
         Some(property_result)
+    }
+}
+
+fn read_error(reader: &mut Reader, buf: &[u8]) -> PropertyAccessError {
+    // error class enumerated
+    let tag = Tag::decode(reader, buf);
+    match &tag.number {
+        TagNumber::Application(ApplicationTagNumber::Enumerated) => {}
+        _unknown => panic!("enumerated application tag number expected for error class"),
+    };
+    let value = decode_unsigned(tag.value, reader, buf) as u32;
+    let error_class = value.try_into().unwrap();
+
+    // error code enumerated
+    let tag = Tag::decode(reader, buf);
+    match &tag.number {
+        TagNumber::Application(ApplicationTagNumber::Enumerated) => {}
+        _unknown => panic!("enumerated application tag number expected for error code"),
+    };
+    let value = decode_unsigned(tag.value, reader, buf) as u32;
+    let error_code = value.try_into().unwrap();
+
+    PropertyAccessError {
+        error_class,
+        error_code,
     }
 }
 
@@ -130,8 +147,17 @@ pub struct PropertyResult<'a> {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PropertyValue<'a> {
     PropValue(ApplicationDataValue<'a>),
+    PropError(PropertyAccessError),
+    // TODO: figure out is we need these
     PropDescription(&'a str),
     PropObjectName(&'a str),
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct PropertyAccessError {
+    pub error_class: ErrorClass,
+    pub error_code: ErrorCode,
 }
 
 impl<'a> Display for PropertyValue<'a> {

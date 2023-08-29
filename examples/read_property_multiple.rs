@@ -17,15 +17,23 @@ use embedded_bacnet::{
     },
 };
 
-const IP_ADDRESS: &str = "192.168.1.249:47808";
+const IP_ADDRESS: &str = "192.168.1.215:47808";
+//const IP_ADDRESS: &str = "192.168.1.249:47808";
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
     // encode packet
-    let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 2);
-    let property_ids = [PropertyId::PropPresentValue];
+    let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 61);
+    /*
+    let property_ids = [
+        PropertyId::PropObjectName,
+        PropertyId::PropPresentValue,
+        PropertyId::PropUnits,
+        PropertyId::PropStatusFlags,
+    ];*/
+    let property_ids = [PropertyId::PropStatusFlags];
     let rpm = ReadPropertyMultipleObject::new(object_id, &property_ids);
     let objects = [rpm];
     let rpm = ReadPropertyMultiple::new(&objects);

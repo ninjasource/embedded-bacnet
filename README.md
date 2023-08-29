@@ -61,3 +61,8 @@ The most important part I have found to exist in the `src/bacnet/basic/service` 
 There is some sense to the acronyms used. 
 For example `h_rpm.c` means `handle_read_property_multiple` which is for encoding and decoding read_property_multiple confirmed requests.
 Furthermore, `h_rpm_a.c` means `handle_read_property_multiple_acknowledgements` which is for encoding and decoding responses to the request above.
+
+## Unit testing
+
+You may notice that there are no (or very little) unit tests. This is because I am not (yet) convinced that the parsing is correct and I don't want to write tests to cover incorrect logic.
+Once I have tested this with multiple real-world controllers I will be happier with what tag numbers are unchanging and which ones are implementation specific. The tests will come.

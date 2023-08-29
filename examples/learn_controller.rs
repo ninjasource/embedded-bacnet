@@ -24,11 +24,11 @@ use embedded_bacnet::{
 };
 use flagset::FlagSet;
 
-//const IP_ADDRESS: &str = "192.168.1.215:47808";
-//const DEVICE_ID: u32 = 76011;
+const IP_ADDRESS: &str = "192.168.1.215:47808";
+const DEVICE_ID: u32 = 76011;
 
-const IP_ADDRESS: &str = "192.168.1.249:47808";
-const DEVICE_ID: u32 = 79079;
+//const IP_ADDRESS: &str = "192.168.1.249:47808";
+//const DEVICE_ID: u32 = 79079;
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
@@ -249,11 +249,7 @@ fn get_multi_analog(
                 PropertyValue::PropValue(ApplicationDataValue::BitString(
                     BitString::StatusFlags(x),
                 )) => x,
-                x => panic!("unexpected value: {:?}", x),
-                // _ => {
-                // ignore
-                //      FlagSet::new(0).unwrap()
-                //  }
+                _ => FlagSet::default(), // ignore property read errors
             };
 
             // you must do this
