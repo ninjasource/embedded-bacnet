@@ -3,26 +3,50 @@ use crate::{
     common::{
         helper::{
             decode_context_enumerated, encode_context_enumerated, encode_context_object_id,
-            encode_context_unsigned, Reader, Writer,
+            encode_context_unsigned, get_tagged_body, Reader, Writer,
         },
         object_id::ObjectId,
         property_id::PropertyId,
         spec::BACNET_ARRAY_ALL,
-        tag::{Tag, TagNumber},
+        tag::{ApplicationTagNumber, Tag, TagNumber},
     },
 };
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ReadPropertyValue<'a> {
-    ObjectIdList(ObjectIdList),
+    ObjectIdList(ObjectIdList<'a>),
     ApplicationDataValue(ApplicationDataValue<'a>),
 }
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct ObjectIdList {}
+pub struct ObjectIdList<'a> {
+    reader: Reader,
+    buf: &'a [u8],
+}
 
+impl<'a> Iterator for ObjectIdList<'a> {
+    type Item = ObjectId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
+            None
+        } else {
+            let tag = Tag::decode(&mut self.reader, &self.buf);
+            match tag.number {
+                TagNumber::Application(ApplicationTagNumber::ObjectId) => {
+                    // ok
+                }
+                x => panic!("Unexpected tag number: {:?}", x),
+            }
+            let object_id = ObjectId::decode(tag.value, &mut self.reader, &self.buf).unwrap();
+            Some(object_id)
+        }
+    }
+}
+
+/*
 impl ObjectIdList {
     pub fn decode_next(&self, reader: &mut Reader, buf: &[u8]) -> Option<ObjectId> {
         let tag = Tag::decode(reader, buf);
@@ -34,7 +58,7 @@ impl ObjectIdList {
         let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
         Some(object_id)
     }
-}
+}*/
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -60,16 +84,24 @@ impl<'a> ReadPropertyAck<'a> {
             "invalid property id tag"
         );
 
-        let tag = Tag::decode(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecificOpening(3),
-            "expected opening tag"
-        );
+        //let tag = Tag::decode(reader, buf);
+        let inner_buf = get_tagged_body(3, reader, buf);
+        let mut inner_reader = Reader {
+            index: 0,
+            end: inner_buf.len(),
+        };
+        //assert_eq!(
+        //    tag.number,
+        //    TagNumber::ContextSpecificOpening(3),
+        //    "expected opening tag"
+        //);
 
         match property_id {
             PropertyId::PropObjectList => {
-                let property_value = ReadPropertyValue::ObjectIdList(ObjectIdList {});
+                let property_value = ReadPropertyValue::ObjectIdList(ObjectIdList {
+                    reader: inner_reader,
+                    buf: inner_buf,
+                });
 
                 return Self {
                     object_id,
@@ -78,16 +110,22 @@ impl<'a> ReadPropertyAck<'a> {
                 };
             }
             property_id => {
-                let tag = Tag::decode(reader, buf);
-                let value =
-                    ApplicationDataValue::decode(&tag, &object_id, &property_id, reader, buf);
-                let property_value = ReadPropertyValue::ApplicationDataValue(value);
-                let tag = Tag::decode(reader, buf);
-                assert_eq!(
-                    tag.number,
-                    TagNumber::ContextSpecificClosing(3),
-                    "expected closing tag"
+                let tag = Tag::decode(&mut inner_reader, buf);
+                let value = ApplicationDataValue::decode(
+                    &tag,
+                    &object_id,
+                    &property_id,
+                    &mut inner_reader,
+                    buf,
                 );
+                let property_value = ReadPropertyValue::ApplicationDataValue(value);
+
+                //let tag = Tag::decode(reader, buf);
+                //assert_eq!(
+                //    tag.number,
+                //    TagNumber::ContextSpecificClosing(3),
+                //    "expected closing tag"
+                //);
 
                 return Self {
                     object_id,

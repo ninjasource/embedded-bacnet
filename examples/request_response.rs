@@ -6,11 +6,14 @@ use embedded_bacnet::common::{
     property_id::PropertyId,
 };
 
+const IP_ADDRESS: &str = "192.168.1.249:47808";
+const DEVICE_ID: u32 = 79079;
+
 fn main() -> Result<(), io::Error> {
     simple_logger::init().unwrap();
 
-    let io = ReadWriteImpl::new(format!("192.168.1.249:{}", 0xBAC0))?;
-    let mut bacnet = BacnetService::new(io, 79079);
+    let io = ReadWriteImpl::new(IP_ADDRESS.into())?;
+    let mut bacnet = BacnetService::new(io, DEVICE_ID);
     let mut buf = vec![0; 16 * 1024];
     let name = bacnet
         .read_string(PropertyId::PropObjectName, &mut buf)

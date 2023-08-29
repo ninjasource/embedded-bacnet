@@ -6,7 +6,8 @@ use crate::{
         daily_schedule::WeeklySchedule,
         helper::{
             decode_unsigned, encode_closing_tag, encode_context_enumerated,
-            encode_context_object_id, encode_context_unsigned, encode_opening_tag, Reader, Writer,
+            encode_context_object_id, encode_context_unsigned, encode_opening_tag, get_tagged_body,
+            Reader, Writer,
         },
         object_id::ObjectId,
         property_id::PropertyId,
@@ -44,7 +45,18 @@ impl ObjectWithResults {
         );
         let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf) as u32).into();
 
-        let tag = Tag::decode(reader, buf);
+        //let tag = Tag::decode(reader, buf);
+        let inner_buf = get_tagged_body(4, reader, buf);
+        let mut inner_reader = Reader {
+            index: 0,
+            end: inner_buf.len(),
+        };
+
+        // let tag_number = match tag.number {
+        //     TagNumber::ContextSpecificOpening(x) => x,
+        //     x => panic!("Expected opening tag but got: {:?}", x),
+        // };
+
         //assert_eq!(
         //    tag.number,
         //    TagNumber::ContextSpecificOpening(4),
@@ -53,6 +65,9 @@ impl ObjectWithResults {
 
         let property_value = match property_id {
             PropertyId::PropEventTimeStamps => {
+                // ignore for now
+                PropertyValue::PropValue(ApplicationDataValue::Boolean(false))
+                /*
                 // hack to read past complicated timestamps
                 loop {
                     let byte = reader.read_byte(buf);
@@ -60,24 +75,36 @@ impl ObjectWithResults {
                     if byte == 0x4f {
                         break PropertyValue::PropValue(ApplicationDataValue::Boolean(false));
                     }
-                }
+                }*/
             }
             PropertyId::PropWeeklySchedule => {
-                let weekly_schedule = WeeklySchedule::new(reader, buf);
+                let weekly_schedule = WeeklySchedule::new(&mut inner_reader, inner_buf);
+                //let weekly_schedule = WeeklySchedule::new(reader, buf);
                 PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(weekly_schedule))
             }
             property_id => {
-                let tag = Tag::decode(reader, buf);
-                let value =
-                    ApplicationDataValue::decode(&tag, &self.object_id, &property_id, reader, buf);
+                let tag = Tag::decode(&mut inner_reader, inner_buf);
+                let value = ApplicationDataValue::decode(
+                    &tag,
+                    &self.object_id,
+                    &property_id,
+                    &mut inner_reader,
+                    inner_buf,
+                );
+
+                /*
+                                let tag = Tag::decode(reader, buf);
+                                let value =
+                                    ApplicationDataValue::decode(&tag, &self.object_id, &property_id, reader, buf);
+                */
                 let property_value = PropertyValue::PropValue(value);
 
-                let tag = Tag::decode(reader, buf);
-                //  assert_eq!(
-                //      tag.number,
-                //      TagNumber::ContextSpecificClosing(4),
-                //      "expected closing tag"
-                //  );
+                // let tag = Tag::decode(reader, buf);
+                // assert_eq!(
+                //     tag.number,
+                //     TagNumber::ContextSpecificClosing(4),
+                //     "expected closing tag"
+                // );
 
                 property_value
             }

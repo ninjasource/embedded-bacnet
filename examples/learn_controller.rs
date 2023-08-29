@@ -24,8 +24,11 @@ use embedded_bacnet::{
 };
 use flagset::FlagSet;
 
-const IP_ADDRESS: &str = "192.168.1.215:47808";
-const DEVICE_ID: u32 = 76011;
+//const IP_ADDRESS: &str = "192.168.1.215:47808";
+//const DEVICE_ID: u32 = 76011;
+
+const IP_ADDRESS: &str = "192.168.1.249:47808";
+const DEVICE_ID: u32 = 79079;
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
@@ -55,10 +58,27 @@ fn main() -> Result<(), Error> {
     let message = DataLink::decode(&mut reader, buf).unwrap();
     println!("Decoded: {:?}", message);
 
-    if let Some(ack) = message.get_read_property_ack() {
+    if let Some(ack) = message.get_read_property_ack_into() {
         let mut map = HashMap::new();
 
-        if let ReadPropertyValue::ObjectIdList(list) = &ack.property_value {
+        if let ReadPropertyValue::ObjectIdList(list) = ack.property_value {
+            // put all objects in their respective bins by object type
+            for item in list.into_iter() {
+                match item.object_type {
+                    ObjectType::ObjectBinaryOutput
+                    | ObjectType::ObjectBinaryInput
+                    | ObjectType::ObjectBinaryValue
+                    | ObjectType::ObjectAnalogInput
+                    | ObjectType::ObjectAnalogOutput
+                    | ObjectType::ObjectAnalogValue => {
+                        let list = map.entry(item.object_type as u32).or_insert(vec![]);
+                        list.push(item);
+                    }
+                    _ => {}
+                }
+            }
+
+            /*
             // put all objects in their respective bins by object type
             while let Some(item) = list.decode_next(&mut reader, &buf) {
                 match item.object_type {
@@ -73,7 +93,7 @@ fn main() -> Result<(), Error> {
                     }
                     _ => {}
                 }
-            }
+            }*/
         }
 
         for (object_type, ids) in map.iter() {

@@ -5,6 +5,7 @@ use super::{
     error::Error,
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
+    tag::ApplicationTagNumber,
 };
 use crate::{
     application_protocol::{
@@ -49,23 +50,23 @@ impl<'a> Writer<'a> {
 #[derive(Debug)]
 pub struct Reader {
     pub index: usize,
-    pub len: usize,
+    pub end: usize,
 }
 
 impl Reader {
     pub fn eof(&self) -> bool {
-        self.index == self.len
+        self.index >= self.end
     }
 
     pub fn new() -> Self {
         Self {
             index: 0,
-            len: usize::MAX - 1000,
+            end: usize::MAX - 1000,
         }
     }
 
     pub fn set_len(&mut self, len: usize) {
-        self.len = len;
+        self.end = len;
     }
 
     pub fn read_byte(&mut self, buf: &[u8]) -> u8 {
@@ -79,7 +80,7 @@ impl Reader {
     }
 
     pub fn read_bytes<const COUNT: usize>(&mut self, buf: &[u8]) -> [u8; COUNT] {
-        if self.index + COUNT >= self.len {
+        if self.index + COUNT > self.end {
             panic!("read_bytes attempt to read past end of buffer");
         } else {
             let mut tmp: [u8; COUNT] = [0; COUNT];
@@ -90,7 +91,7 @@ impl Reader {
     }
 
     pub fn read_slice<'a>(&mut self, len: usize, buf: &'a [u8]) -> &'a [u8] {
-        if self.index + len >= self.len {
+        if self.index + len > self.end {
             panic!("read_slice attempt to read past end of buffer");
         } else {
             let slice = &buf[self.index..self.index + len];
@@ -100,10 +101,21 @@ impl Reader {
     }
 }
 
-// This gives you a reader that begins after the opening tag and ends before the closing tag
-pub fn get_tag_body(tag_number: u8, reader: &mut Reader, buf: &[u8]) -> Reader {
+// This gives you the bytes that begin after the opening tag and end before the closing tag
+pub fn get_tagged_body<'a>(
+    expected_tag_number: u8,
+    reader: &mut Reader,
+    buf: &'a [u8],
+) -> &'a [u8] {
     let tag = Tag::decode(reader, buf);
-    assert_eq!(tag.number, TagNumber::ContextSpecificOpening(tag_number));
+    let tag_number = match &tag.number {
+        TagNumber::ContextSpecificOpening(expected_tag_number) => *expected_tag_number,
+        _ => panic!(
+            "Expected opening tag {} but got: {:?}",
+            expected_tag_number, tag
+        ),
+    };
+
     let index = reader.index;
     let mut counter = 0;
     loop {
@@ -114,8 +126,49 @@ pub fn get_tag_body(tag_number: u8, reader: &mut Reader, buf: &[u8]) -> Reader {
             TagNumber::ContextSpecificOpening(x) if x == tag_number => counter += 1,
             TagNumber::ContextSpecificClosing(x) if x == tag_number => {
                 if counter == 0 {
-                    let len = reader.index - index - 1;
-                    return Reader { index, len };
+                    //  let len = reader.index - index - 1;
+                    let end = reader.index - 1; // -1 to ignore the last closing tag
+                    return &buf[index..end];
+                } else {
+                    counter -= 1;
+                }
+            }
+            TagNumber::Application(ApplicationTagNumber::Boolean) => {
+                // tag value is not a length for bool
+            }
+            _ => {
+                // skip past value and read next tag
+                reader.index += tag.value as usize;
+            }
+        }
+    }
+}
+
+/*
+// This gives you a reader that begins after the opening tag and ends before the closing tag
+pub fn get_tagged_body(expected_tag_number: u8, reader: &mut Reader, buf: &[u8]) -> Reader {
+    let tag = Tag::decode(reader, buf);
+    let tag_number = match &tag.number {
+        TagNumber::ContextSpecificOpening(expected_tag_number) => *expected_tag_number,
+        _ => panic!(
+            "Expected opening tag {} but got: {:?}",
+            expected_tag_number, tag
+        ),
+    };
+
+    let index = reader.index;
+    let mut counter = 0;
+    loop {
+        let tag = Tag::decode(reader, buf);
+
+        // keep track of nested tags and when we reach our last closing tag then we are done
+        match tag.number {
+            TagNumber::ContextSpecificOpening(x) if x == tag_number => counter += 1,
+            TagNumber::ContextSpecificClosing(x) if x == tag_number => {
+                if counter == 0 {
+                    //  let len = reader.index - index - 1;
+                    let end = reader.index - 1; // -1 to ignore the last closing tag
+                    return Reader { index, end };
                 } else {
                     counter -= 1;
                 }
@@ -128,7 +181,7 @@ pub fn get_tag_body(tag_number: u8, reader: &mut Reader, buf: &[u8]) -> Reader {
         // skip past value and read next tag
         reader.index += tag.value as usize;
     }
-}
+}*/
 
 pub fn encode_u16(writer: &mut Writer, value: u16) {
     writer.extend_from_slice(&value.to_be_bytes());

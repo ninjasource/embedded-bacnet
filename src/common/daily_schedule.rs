@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use crate::common::helper::{get_tag_body, Writer};
+use crate::common::helper::{get_tagged_body, Writer};
 
 use super::{
     helper::Reader,
@@ -8,7 +8,9 @@ use super::{
     time_value::TimeValue,
 };
 
-// note that Debug is implemented manually here because of the reader in time value iter
+//// note that Debug is implemented manually here because of the reader in time value iter
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WeeklySchedule<'a> {
     pub monday: TimeValueIter<'a>,
     pub tuesday: TimeValueIter<'a>,
@@ -23,13 +25,13 @@ impl<'a> WeeklySchedule<'a> {
     // due to the fact that WeeklySchedule contains an arbitrary number of TimeValue pairs we need to return an iterator
     // because we cannot use an allocator
     pub fn new(reader: &mut Reader, buf: &'a [u8]) -> Self {
-        let monday = TimeValueIter::new(get_tag_body(0, reader, buf), buf);
-        let tuesday = TimeValueIter::new(get_tag_body(0, reader, buf), buf);
-        let wednesday = TimeValueIter::new(get_tag_body(0, reader, buf), buf);
-        let thursday = TimeValueIter::new(get_tag_body(0, reader, buf), buf);
-        let friday = TimeValueIter::new(get_tag_body(0, reader, buf), buf);
-        let saturday = TimeValueIter::new(get_tag_body(0, reader, buf), buf);
-        let sunday = TimeValueIter::new(get_tag_body(0, reader, buf), buf);
+        let monday = TimeValueIter::new(get_tagged_body(0, reader, buf));
+        let tuesday = TimeValueIter::new(get_tagged_body(0, reader, buf));
+        let wednesday = TimeValueIter::new(get_tagged_body(0, reader, buf));
+        let thursday = TimeValueIter::new(get_tagged_body(0, reader, buf));
+        let friday = TimeValueIter::new(get_tagged_body(0, reader, buf));
+        let saturday = TimeValueIter::new(get_tagged_body(0, reader, buf));
+        let sunday = TimeValueIter::new(get_tagged_body(0, reader, buf));
 
         let schedule = WeeklySchedule {
             monday,
@@ -42,25 +44,34 @@ impl<'a> WeeklySchedule<'a> {
         };
 
         // read closing tag
-        let tag = Tag::decode(reader, buf);
-        assert_eq!(tag.number, TagNumber::ContextSpecificClosing(4));
+        // let tag = Tag::decode(reader, buf);
+        //  assert_eq!(tag.number, TagNumber::ContextSpecificClosing(4));
 
         schedule
     }
 }
 
-// note that Debug is not implemented here because if does not add value
+//// note that Debug is not implemented here because if does not add value
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TimeValueIter<'a> {
     reader: Reader,
     buf: &'a [u8],
 }
 
 impl<'a> TimeValueIter<'a> {
-    pub fn new(reader: Reader, buf: &'a [u8]) -> Self {
-        Self { reader, buf }
+    pub fn new(buf: &'a [u8]) -> Self {
+        Self {
+            reader: Reader {
+                index: 0,
+                end: buf.len(),
+            },
+            buf,
+        }
     }
 }
 
+/*
 #[cfg(feature = "defmt")]
 impl<'a> defmt::Format for WeeklySchedule<'a> {
     fn format(&self, _fmt: defmt::Formatter) {
@@ -73,16 +84,18 @@ impl<'a> Debug for WeeklySchedule<'a> {
         f.debug_struct("WeeklyScheduleIter").finish()
     }
 }
+*/
 
 impl<'a> Iterator for TimeValueIter<'a> {
     type Item = TimeValue;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
+            return None;
+        }
+
         let tag = Tag::decode(&mut self.reader, &self.buf);
         match tag.number {
-            TagNumber::ContextSpecificClosing(0) => {
-                return None;
-            }
             TagNumber::Application(ApplicationTagNumber::Time) => {
                 let time_value = TimeValue::decode(&tag, &mut self.reader, &self.buf);
                 return Some(time_value);

@@ -24,6 +24,8 @@ use embedded_bacnet::{
     },
 };
 
+const IP_ADDRESS: &str = "192.168.1.249:47808";
+
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
@@ -47,9 +49,8 @@ fn main() -> Result<(), Error> {
 
     // send packet
     let buf = buffer.to_bytes();
-    let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(buf, &addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, addr);
+    socket.send_to(buf, IP_ADDRESS)?;
+    println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
 
     // receive reply
     let mut buf = vec![0; 1024];
@@ -58,6 +59,7 @@ fn main() -> Result<(), Error> {
     println!("Received: {:02x?} from {:?}", buf, peer);
     let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf).unwrap();
+    println!("Decoded: {:?}", message);
 
     let mut monday = vec![];
     let mut tuesday = vec![];
@@ -118,9 +120,8 @@ fn main() -> Result<(), Error> {
 
     // send packet
     let buf = buffer.to_bytes();
-    let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(buf, &addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, addr);
+    socket.send_to(buf, IP_ADDRESS)?;
+    println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
 
     // receive reply ack
     let mut buf = vec![0; 1024];

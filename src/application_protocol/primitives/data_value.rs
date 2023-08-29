@@ -175,6 +175,7 @@ impl<'a> BitString<'a> {
                 Ok(Self::StatusFlags(status_flags))
             }
             _ => {
+                let len = (len - 1) as usize; // we have already read a byte
                 let bits = reader.read_slice(len as usize, buf);
                 Ok(Self::Custom(CustomBitStream { unused_bits, bits }))
             }

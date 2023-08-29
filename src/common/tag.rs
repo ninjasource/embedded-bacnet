@@ -62,6 +62,23 @@ pub enum TagNumber {
     ContextSpecificClosing(u8),
 }
 
+/*
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct ContextSpecificTagNumber {
+    pub id: u8,
+    pub context_type: ContextType,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ContextType {
+    None,
+    Opening,
+    Closing,
+}
+*/
+
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Tag {

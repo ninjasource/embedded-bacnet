@@ -17,12 +17,15 @@ use embedded_bacnet::{
     },
 };
 
+const IP_ADDRESS: &str = "192.168.1.249:47808";
+const DEVICE_ID: u32 = 79079;
+
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
     // encode packet
-    let object_id = ObjectId::new(ObjectType::ObjectDevice, 20088);
+    let object_id = ObjectId::new(ObjectType::ObjectDevice, DEVICE_ID);
     let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(read_property));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
@@ -37,9 +40,8 @@ fn main() -> Result<(), Error> {
 
     // send packet
     let buf = buffer.to_bytes();
-    let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(buf, &addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, addr);
+    socket.send_to(buf, IP_ADDRESS)?;
+    println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
 
     // receive reply
     let mut buf = vec![0; 1024];
