@@ -13,6 +13,7 @@ use crate::common::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationDataValue<'a> {
     Boolean(bool),
     Real(f32),
@@ -28,6 +29,7 @@ pub enum ApplicationDataValue<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationDataValueWrite<'a> {
     Boolean(bool),
     Enumerated(Enumerated),
@@ -36,6 +38,7 @@ pub enum ApplicationDataValueWrite<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Enumerated {
     Units(EngineeringUnits),
     Binary(Binary),
@@ -60,6 +63,7 @@ impl Enumerated {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Date {
     pub year: u16,
     pub month: u8,
@@ -88,6 +92,7 @@ impl Date {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Time {
     pub hour: u8,
     pub minute: u8,
@@ -119,6 +124,7 @@ impl Time {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct CharacterString<'a> {
     pub inner: &'a str,
 }
@@ -141,7 +147,15 @@ pub enum BitString<'a> {
     Custom(CustomBitStream<'a>),
 }
 
+#[cfg(feature = "defmt")]
+impl<'a> defmt::Format for BitString<'a> {
+    fn format(&self, _fmt: defmt::Formatter) {
+        // do nothing for now because it is too complicated due to StatusFlags
+    }
+}
+
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct CustomBitStream<'a> {
     pub unused_bits: u8,
     pub bits: &'a [u8],

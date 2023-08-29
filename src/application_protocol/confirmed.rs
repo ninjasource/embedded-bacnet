@@ -16,6 +16,7 @@ use super::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ConfirmedRequest<'a> {
     pub max_segments: MaxSegments, // default 65
     pub max_adpu: MaxAdpu,         // default 1476
@@ -76,6 +77,7 @@ impl<'a> ConfirmedRequest<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum ConfirmedServiceChoice {
     // alarm and event services
@@ -184,6 +186,7 @@ impl From<u8> for ConfirmedServiceChoice {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SimpleAck {
     pub invoke_id: u8,
     pub service_choice: ConfirmedServiceChoice,
@@ -202,6 +205,7 @@ impl SimpleAck {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct BacnetError {
     pub invoke_id: u8,
     pub service_choice: ConfirmedServiceChoice,
@@ -246,6 +250,7 @@ impl BacnetError {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ComplexAck<'a> {
     pub invoke_id: u8,
     pub service: ComplexAckService<'a>,
@@ -272,6 +277,7 @@ impl<'a> ComplexAck<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ComplexAckService<'a> {
     ReadProperty(ReadPropertyAck<'a>),
     ReadPropertyMultiple(ReadPropertyMultipleAck),
@@ -279,6 +285,7 @@ pub enum ComplexAckService<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConfirmedRequestSerivice<'a> {
     ReadProperty(ReadProperty),
     ReadPropertyMultiple(ReadPropertyMultiple<'a>),

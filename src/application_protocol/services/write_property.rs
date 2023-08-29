@@ -11,6 +11,7 @@ use crate::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WriteProperty<'a> {
     object_id: ObjectId,
     property_id: PropertyId,

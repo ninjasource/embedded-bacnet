@@ -297,7 +297,7 @@ pub fn req_to_bacnet(req: ConfirmedRequest<'_>, buf: &mut [u8]) -> usize {
     let dst = None;
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
+    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
     let mut writer = Writer::new(buf);
     data_link.encode(&mut writer);
     writer.index
@@ -361,7 +361,7 @@ impl<T: ReadWrite> BacnetService<T> {
         let dst = None;
         let message = NetworkMessage::Apdu(apdu);
         let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
-        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
+        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
         let mut buffer = Writer::new(buf);
         data_link.encode(&mut buffer);
 

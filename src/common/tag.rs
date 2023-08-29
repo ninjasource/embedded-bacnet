@@ -8,6 +8,7 @@ use super::helper::{Reader, Writer};
 // Can use additional bytes as specified in bits 2-0 above
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum ApplicationTagNumber {
     Null = 0,
@@ -53,6 +54,7 @@ impl From<u8> for ApplicationTagNumber {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum TagNumber {
     Application(ApplicationTagNumber),
     ContextSpecific(u8),
@@ -61,6 +63,7 @@ pub enum TagNumber {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Tag {
     pub number: TagNumber,
     pub value: u32,

@@ -10,6 +10,7 @@ use super::{
 
 // Application Layer Protocol Data Unit
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationPdu<'a> {
     ConfirmedRequest(ConfirmedRequest<'a>),
     UnconfirmedRequest(UnconfirmedRequest),
@@ -20,6 +21,7 @@ pub enum ApplicationPdu<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum ApduType {
     ConfirmedServiceRequest = 0,
@@ -50,6 +52,7 @@ impl From<u8> for ApduType {
 
 // preshifted by 4 bits
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum MaxSegments {
     _0 = 0x00,
@@ -63,6 +66,7 @@ pub enum MaxSegments {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum MaxAdpu {
     _0 = 0x00,

@@ -7,6 +7,7 @@ use crate::common::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct IAm {
     pub device_id: ObjectId,
     pub max_apdu: usize,

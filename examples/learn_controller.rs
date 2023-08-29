@@ -24,13 +24,16 @@ use embedded_bacnet::{
 };
 use flagset::FlagSet;
 
+const IP_ADDRESS: &str = "192.168.1.215:47808";
+const DEVICE_ID: u32 = 76011;
+
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
 
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
     // encode packet
-    let object_id = ObjectId::new(ObjectType::ObjectDevice, 79079);
+    let object_id = ObjectId::new(ObjectType::ObjectDevice, DEVICE_ID);
     let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(read_property));
     let data_link = DataLink::new_confirmed_req(req);
@@ -40,9 +43,8 @@ fn main() -> Result<(), Error> {
 
     // send packet
     let buf = writer.to_bytes();
-    let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(buf, &addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, addr);
+    socket.send_to(buf, &IP_ADDRESS)?;
+    println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
 
     // receive reply
     let mut buf = vec![0; 64 * 1024];
@@ -51,6 +53,7 @@ fn main() -> Result<(), Error> {
     println!("Received: {:02x?} from {:?}", buf, peer);
     let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf).unwrap();
+    println!("Decoded: {:?}", message);
 
     if let Some(ack) = message.get_read_property_ack() {
         let mut map = HashMap::new();
@@ -136,8 +139,7 @@ fn get_multi_binary(
     let mut buf = vec![0; 16 * 1024];
     let mut writer = Writer::new(&mut buf);
     read_property_multiple_to_bytes(rpm, &mut writer);
-    let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(writer.to_bytes(), &addr)?;
+    socket.send_to(writer.to_bytes(), &IP_ADDRESS)?;
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
@@ -201,8 +203,7 @@ fn get_multi_analog(
     let mut buf = vec![0; 16 * 1024];
     let mut buffer = Writer::new(&mut buf);
     read_property_multiple_to_bytes(rpm, &mut buffer);
-    let addr = format!("192.168.1.249:{}", 0xBAC0);
-    socket.send_to(buffer.to_bytes(), &addr)?;
+    socket.send_to(buffer.to_bytes(), &IP_ADDRESS)?;
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
@@ -228,7 +229,11 @@ fn get_multi_analog(
                 PropertyValue::PropValue(ApplicationDataValue::BitString(
                     BitString::StatusFlags(x),
                 )) => x,
-                _ => unreachable!(),
+                x => panic!("unexpected value: {:?}", x),
+                // _ => {
+                // ignore
+                //      FlagSet::new(0).unwrap()
+                //  }
             };
 
             // you must do this

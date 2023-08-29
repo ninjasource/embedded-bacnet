@@ -15,6 +15,7 @@ use crate::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct CovNotification {
     pub process_id: u32,
     pub device_id: ObjectId,
@@ -23,6 +24,7 @@ pub struct CovNotification {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PropertyResult<'a> {
     pub id: PropertyId,
     pub value: ApplicationDataValue<'a>,
@@ -140,6 +142,7 @@ impl CovNotification {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SubscribeCov {
     process_id: u32,
     object_id: ObjectId,

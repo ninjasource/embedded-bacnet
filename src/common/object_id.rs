@@ -5,6 +5,7 @@ use super::{
 };
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectId {
     pub object_type: ObjectType,
     pub id: u32,
@@ -34,6 +35,7 @@ impl ObjectId {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u32)]
 pub enum ObjectType {
     ObjectAnalogInput = 0,

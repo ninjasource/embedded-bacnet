@@ -28,7 +28,8 @@ fn main() -> Result<(), Error> {
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu(npdu));
+
+    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
     let mut buffer = vec![0; 16 * 1024];
     let mut buffer = Writer::new(&mut buffer);
     data_link.encode(&mut buffer);
@@ -58,8 +59,8 @@ fn main() -> Result<(), Error> {
     println!("Decoded:  {:?}\n", message);
 
     let notification = match message {
-        Ok(message) => match message.function {
-            DataLinkFunction::OriginalUnicastNpdu(x) => match x.network_message {
+        Ok(message) => match message.npdu {
+            Some(x) => match x.network_message {
                 NetworkMessage::Apdu(apdu) => match apdu {
                     ApplicationPdu::UnconfirmedRequest(UnconfirmedRequest::CovNotification(x)) => {
                         Some(x)

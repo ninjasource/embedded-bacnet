@@ -8,6 +8,7 @@ use super::{
     time_value::TimeValue,
 };
 
+// note that Debug is implemented manually here because of the reader in time value iter
 pub struct WeeklySchedule<'a> {
     pub monday: TimeValueIter<'a>,
     pub tuesday: TimeValueIter<'a>,
@@ -48,6 +49,7 @@ impl<'a> WeeklySchedule<'a> {
     }
 }
 
+// note that Debug is not implemented here because if does not add value
 pub struct TimeValueIter<'a> {
     reader: Reader,
     buf: &'a [u8],
@@ -56,6 +58,13 @@ pub struct TimeValueIter<'a> {
 impl<'a> TimeValueIter<'a> {
     pub fn new(reader: Reader, buf: &'a [u8]) -> Self {
         Self { reader, buf }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl<'a> defmt::Format for WeeklySchedule<'a> {
+    fn format(&self, _fmt: defmt::Formatter) {
+        // do nothing
     }
 }
 
@@ -87,6 +96,7 @@ impl<'a> Iterator for TimeValueIter<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WeeklyScheduleWrite<'a> {
     monday: &'a [TimeValue],
     tuesday: &'a [TimeValue],

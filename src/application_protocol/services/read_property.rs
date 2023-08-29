@@ -13,12 +13,14 @@ use crate::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ReadPropertyValue<'a> {
     ObjectIdList(ObjectIdList),
     ApplicationDataValue(ApplicationDataValue<'a>),
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectIdList {}
 
 impl ObjectIdList {
@@ -35,6 +37,7 @@ impl ObjectIdList {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyAck<'a> {
     pub object_id: ObjectId,
     pub property_id: PropertyId,
@@ -97,6 +100,7 @@ impl<'a> ReadPropertyAck<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadProperty {
     pub object_id: ObjectId,     // e.g ObjectDevice:20088
     pub property_id: PropertyId, // e.g. PropObjectList

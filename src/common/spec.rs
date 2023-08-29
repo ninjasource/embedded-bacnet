@@ -12,6 +12,7 @@ pub const BACNET_MIN_PRIORITY: u32 = 1;
 pub const BACNET_MAX_PRIORITY: u32 = 16;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u32)]
 pub enum Segmentation {
     Both = 0,
@@ -37,6 +38,7 @@ impl TryFrom<u32> for Segmentation {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u32)]
 pub enum Binary {
     Off = 0,
@@ -56,6 +58,7 @@ impl TryFrom<u32> for Binary {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u16)]
 pub enum ErrorClass {
     Device = 0,
@@ -91,6 +94,7 @@ impl TryFrom<u32> for ErrorClass {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u16)]
 pub enum ErrorCode {
     // valid for all classes
@@ -543,6 +547,7 @@ impl TryFrom<u32> for ErrorCode {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u16)]
 pub enum EngineeringUnits {
     // Enumerated values 0-255 are reserved for definition by ASHRAE.
@@ -1127,9 +1132,6 @@ impl TryFrom<u32> for EngineeringUnits {
 }
 
 // start of bit string enumerations
-
-// touch gfx studio
-
 flags! {
     pub enum StatusFlags: u8 {
         InAlarm = 0b1000_0000,
@@ -1139,24 +1141,32 @@ flags! {
     }
 }
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum LogStatus {
     LogDisabled = 0,
     BufferPurged = 1,
     LogInterrupted = 2,
 }
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum LoggingType {
     Polled = 0,
     Cov = 1,
     Triggered = 2,
 }
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum AcknowledgmentFilter {
     All = 0,
     Acked = 1,
     NotAcked = 2,
 }
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum EventStateFilter {
     Offnormal = 0,
     Fault = 1,
@@ -1165,12 +1175,16 @@ pub enum EventStateFilter {
     Active = 4,
 }
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SelectionLogic {
     And = 0,
     Or = 1,
     All = 2,
 }
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum RelationSpecifier {
     Equal = 0,
     NotEqual = 1,
@@ -1180,12 +1194,16 @@ pub enum RelationSpecifier {
     GreaterThanOrEqual = 5,
 }
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum CommunicationEnableDisable {
     Enable = 0,
     Disable = 1,
     DisableInitiation = 2,
 }
 
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum MessagePriority {
     Normal = 0,
     Urgent = 1,

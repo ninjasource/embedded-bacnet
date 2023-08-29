@@ -22,7 +22,7 @@ fn main() -> Result<(), Error> {
     let dst = Some(DestinationAddress::new(0xffff, None));
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(src, dst, false, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu(npdu));
+    let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu, Some(npdu));
 
     let mut buffer = vec![0; 16 * 1024];
     let mut buffer = Writer::new(&mut buffer);

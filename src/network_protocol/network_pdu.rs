@@ -8,6 +8,7 @@ use crate::{
 
 // Network Layer Protocol Data Unit
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NetworkPdu<'a> {
     pub src: Option<SourceAddress>,
     pub dst: Option<DestinationAddress>,
@@ -17,8 +18,9 @@ pub struct NetworkPdu<'a> {
 }
 
 // NOTE: this is actually a control flag
-#[repr(u8)]
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u8)]
 pub enum MessagePriority {
     Normal = 0,
     Urgent = 1,
@@ -41,6 +43,7 @@ impl From<u8> for MessagePriority {
     }
 }
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 enum ControlFlags {
     NetworkLayerMessage = 1 << 7,
@@ -50,6 +53,7 @@ enum ControlFlags {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum NetworkMessage<'a> {
     Apdu(ApplicationPdu<'a>),
     MessageType(MessageType),
@@ -58,6 +62,7 @@ pub enum NetworkMessage<'a> {
 
 // Network Layer Message Type
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum MessageType {
     WhoIsRouterToNetwork = 0,
@@ -256,6 +261,7 @@ impl<'a> NetworkPdu<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Addr {
     pub ipv4: [u8; 4],
     pub port: u16,
@@ -266,12 +272,14 @@ const IPV4_ADDR_LEN: u8 = 6;
 pub type SourceAddress = NetworkAddress;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NetworkAddress {
     pub net: u16,
     pub addr: Option<Addr>,
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct DestinationAddress {
     pub network_address: NetworkAddress,
     pub hop_count: u8,

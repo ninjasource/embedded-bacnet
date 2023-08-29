@@ -16,9 +16,11 @@ use crate::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultipleAck {}
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectWithResults {
     pub object_id: ObjectId,
 }
@@ -43,11 +45,11 @@ impl ObjectWithResults {
         let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf) as u32).into();
 
         let tag = Tag::decode(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecificOpening(4),
-            "expected opening tag"
-        );
+        //assert_eq!(
+        //    tag.number,
+        //    TagNumber::ContextSpecificOpening(4),
+        //    "expected opening tag"
+        //);
 
         let property_value = match property_id {
             PropertyId::PropEventTimeStamps => {
@@ -71,11 +73,11 @@ impl ObjectWithResults {
                 let property_value = PropertyValue::PropValue(value);
 
                 let tag = Tag::decode(reader, buf);
-                assert_eq!(
-                    tag.number,
-                    TagNumber::ContextSpecificClosing(4),
-                    "expected closing tag"
-                );
+                //  assert_eq!(
+                //      tag.number,
+                //      TagNumber::ContextSpecificClosing(4),
+                //      "expected closing tag"
+                //  );
 
                 property_value
             }
@@ -91,12 +93,14 @@ impl ObjectWithResults {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PropertyResult<'a> {
     pub id: PropertyId,
     pub value: PropertyValue<'a>,
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PropertyValue<'a> {
     PropValue(ApplicationDataValue<'a>),
     PropDescription(&'a str),
@@ -139,12 +143,14 @@ impl ReadPropertyMultipleAck {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultiple<'a> {
     pub array_index: u32, // use BACNET_ARRAY_ALL for all
     pub objects: &'a [ReadPropertyMultipleObject<'a>],
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultipleObject<'a> {
     pub object_id: ObjectId, // e.g ObjectDevice:20088
     pub property_ids: &'a [PropertyId],
