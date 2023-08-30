@@ -1,6 +1,6 @@
 use crate::common::{
     error::Error,
-    helper::{Reader, Writer},
+    io::{Reader, Writer},
 };
 
 use super::{
@@ -13,7 +13,7 @@ use super::{
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationPdu<'a> {
     ConfirmedRequest(ConfirmedRequest<'a>),
-    UnconfirmedRequest(UnconfirmedRequest),
+    UnconfirmedRequest(UnconfirmedRequest<'a>),
     ComplexAck(ComplexAck<'a>),
     SimpleAck(SimpleAck),
     Error(BacnetError),

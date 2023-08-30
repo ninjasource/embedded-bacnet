@@ -1,9 +1,8 @@
 use core::fmt::Debug;
 
-use crate::common::helper::{get_tagged_body, Writer};
-
 use super::{
-    helper::Reader,
+    helper::get_tagged_body,
+    io::{Reader, Writer},
     tag::{ApplicationTagNumber, Tag, TagNumber},
     time_value::TimeValue,
 };

@@ -1,6 +1,7 @@
 use super::{
     error::Error,
-    helper::{decode_unsigned, Reader, Writer},
+    helper::decode_unsigned,
+    io::{Reader, Writer},
     spec::{BACNET_INSTANCE_BITS, BACNET_MAX_INSTANCE, BACNET_MAX_OBJECT},
 };
 

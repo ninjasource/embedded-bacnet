@@ -3,11 +3,11 @@ use std::{io::Error, net::UdpSocket};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
-        services::read_property::ReadProperty,
+        confirmed::{ComplexAckService, ConfirmedRequest, ConfirmedRequestSerivice},
+        services::read_property::{ReadProperty, ReadPropertyValue},
     },
     common::{
-        helper::{Reader, Writer},
+        io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
     },
@@ -51,6 +51,21 @@ fn main() -> Result<(), Error> {
     let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf);
     println!("Decoded:  {:?}\n", message);
+
+    let network_message = message.unwrap().npdu.unwrap().network_message;
+    if let NetworkMessage::Apdu(ApplicationPdu::ComplexAck(apdu)) = network_message {
+        match apdu.service {
+            ComplexAckService::ReadProperty(x) => match x.property_value {
+                ReadPropertyValue::ObjectIdList(list) => {
+                    for item in list {
+                        println!("{:?}", item);
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
 
     Ok(())
 }

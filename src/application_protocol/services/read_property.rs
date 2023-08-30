@@ -3,8 +3,9 @@ use crate::{
     common::{
         helper::{
             decode_context_enumerated, encode_context_enumerated, encode_context_object_id,
-            encode_context_unsigned, get_tagged_body, Reader, Writer,
+            encode_context_unsigned, get_tagged_body,
         },
+        io::{Reader, Writer},
         object_id::ObjectId,
         property_id::PropertyId,
         spec::BACNET_ARRAY_ALL,
@@ -45,20 +46,6 @@ impl<'a> Iterator for ObjectIdList<'a> {
         }
     }
 }
-
-/*
-impl ObjectIdList {
-    pub fn decode_next(&self, reader: &mut Reader, buf: &[u8]) -> Option<ObjectId> {
-        let tag = Tag::decode(reader, buf);
-        if tag.number == TagNumber::ContextSpecificClosing(3) {
-            // closing tag
-            return None;
-        }
-
-        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
-        Some(object_id)
-    }
-}*/
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

@@ -1,4 +1,4 @@
-use crate::common::helper::{Reader, Writer};
+use crate::common::io::{Reader, Writer};
 
 use super::{
     application_pdu::ApduType,
@@ -7,13 +7,13 @@ use super::{
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum UnconfirmedRequest {
+pub enum UnconfirmedRequest<'a> {
     WhoIs(WhoIs),
     IAm(IAm),
-    CovNotification(CovNotification),
+    CovNotification(CovNotification<'a>),
 }
 
-impl UnconfirmedRequest {
+impl<'a> UnconfirmedRequest<'a> {
     pub fn encode(&self, writer: &mut Writer) {
         writer.push((ApduType::UnconfirmedServiceRequest as u8) << 4);
 
@@ -24,7 +24,7 @@ impl UnconfirmedRequest {
         }
     }
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
         let choice: UnconfirmedServiceChoice = reader.read_byte(buf).into();
         match choice {
             UnconfirmedServiceChoice::IAm => {

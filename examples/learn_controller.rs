@@ -1,4 +1,3 @@
-//#![allow(dead_code, unreachable_code, unused_variables)]
 #![allow(dead_code)]
 
 use std::{collections::HashMap, io::Error, net::UdpSocket};
@@ -15,7 +14,7 @@ use embedded_bacnet::{
         },
     },
     common::{
-        helper::{Reader, Writer},
+        io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
         spec::{Binary, EngineeringUnits, StatusFlags},
@@ -24,11 +23,11 @@ use embedded_bacnet::{
 };
 use flagset::FlagSet;
 
-const IP_ADDRESS: &str = "192.168.1.215:47808";
-const DEVICE_ID: u32 = 76011;
+//const IP_ADDRESS: &str = "192.168.1.215:47808";
+//const DEVICE_ID: u32 = 76011;
 
-//const IP_ADDRESS: &str = "192.168.1.249:47808";
-//const DEVICE_ID: u32 = 79079;
+const IP_ADDRESS: &str = "192.168.1.249:47808";
+const DEVICE_ID: u32 = 79079;
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
@@ -77,23 +76,6 @@ fn main() -> Result<(), Error> {
                     _ => {}
                 }
             }
-
-            /*
-            // put all objects in their respective bins by object type
-            while let Some(item) = list.decode_next(&mut reader, &buf) {
-                match item.object_type {
-                    ObjectType::ObjectBinaryOutput
-                    | ObjectType::ObjectBinaryInput
-                    | ObjectType::ObjectBinaryValue
-                    | ObjectType::ObjectAnalogInput
-                    | ObjectType::ObjectAnalogOutput
-                    | ObjectType::ObjectAnalogValue => {
-                        let list = map.entry(item.object_type as u32).or_insert(vec![]);
-                        list.push(item);
-                    }
-                    _ => {}
-                }
-            }*/
         }
 
         for (object_type, ids) in map.iter() {
@@ -168,26 +150,24 @@ fn get_multi_binary(
 
     //let message = send_and_recv(items, socket)?;
 
-    if let Some(ack) = message.get_read_property_multiple_ack() {
+    if let Some(ack) = message.get_read_property_multiple_ack_into() {
         let mut items = vec![];
 
-        while let Some(x) = ack.decode_next(&mut reader, buf) {
-            let name = x.decode_next(&mut reader, buf).unwrap().value.to_string();
-            let value = match x.decode_next(&mut reader, buf).unwrap().value {
+        for x in ack {
+            let mut x = x.into_iter();
+            let name = x.next().unwrap().value.to_string();
+            let value = match x.next().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Binary(
                     Binary::On,
                 ))) => true,
                 _ => false,
             };
-            let status_flags = match x.decode_next(&mut reader, buf).unwrap().value {
+            let status_flags = match x.next().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::BitString(
                     BitString::StatusFlags(x),
                 )) => x,
                 _ => unreachable!(),
             };
-
-            // you must do this
-            assert!(x.decode_next(&mut reader, buf).is_none());
 
             items.push(BinaryValue {
                 id: x.object_id,
@@ -230,30 +210,28 @@ fn get_multi_analog(
     let mut reader = Reader::new();
     let message = DataLink::decode(&mut reader, buf).unwrap();
 
-    if let Some(ack) = message.get_read_property_multiple_ack() {
+    if let Some(ack) = message.get_read_property_multiple_ack_into() {
         let mut items = vec![];
 
-        while let Some(x) = ack.decode_next(&mut reader, buf) {
-            let name = x.decode_next(&mut reader, buf).unwrap().value.to_string();
-            let value = match x.decode_next(&mut reader, buf).unwrap().value {
+        for x in ack {
+            let mut x = x.into_iter();
+            let name = x.next().unwrap().value.to_string();
+            let value = match x.next().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::Real(val)) => val,
                 _ => unreachable!(),
             };
-            let units = match x.decode_next(&mut reader, buf).unwrap().value {
+            let units = match x.next().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Units(
                     u,
                 ))) => u.clone(),
                 _ => unreachable!(),
             };
-            let status_flags = match x.decode_next(&mut reader, buf).unwrap().value {
+            let status_flags = match x.next().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::BitString(
                     BitString::StatusFlags(x),
                 )) => x,
                 _ => FlagSet::default(), // ignore property read errors
             };
-
-            // you must do this
-            assert!(x.decode_next(&mut reader, buf).is_none());
 
             items.push(AnalogValue {
                 id: x.object_id,

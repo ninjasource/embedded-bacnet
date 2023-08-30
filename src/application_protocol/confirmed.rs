@@ -1,6 +1,7 @@
 use crate::common::{
     error::Error,
-    helper::{decode_unsigned, Reader, Writer},
+    helper::decode_unsigned,
+    io::{Reader, Writer},
     spec::{ErrorClass, ErrorCode},
     tag::{ApplicationTagNumber, Tag, TagNumber},
 };
@@ -267,7 +268,8 @@ impl<'a> ComplexAck<'a> {
                 ComplexAckService::ReadProperty(apdu)
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
-                ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck {})
+                let buf = &buf[reader.index..reader.end];
+                ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck::new(buf))
             }
             s => return Err(Error::UnimplementedConfirmedServiceChoice(s)),
         };
@@ -280,7 +282,7 @@ impl<'a> ComplexAck<'a> {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ComplexAckService<'a> {
     ReadProperty(ReadPropertyAck<'a>),
-    ReadPropertyMultiple(ReadPropertyMultipleAck),
+    ReadPropertyMultiple(ReadPropertyMultipleAck<'a>),
     // add more here
 }
 

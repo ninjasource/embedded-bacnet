@@ -8,7 +8,7 @@ use crate::{
     },
     common::{
         error::Error,
-        helper::{Reader, Writer},
+        io::{Reader, Writer},
     },
 };
 
@@ -78,6 +78,7 @@ impl<'a> DataLink<'a> {
         DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu))
     }
 
+    /*
     pub fn get_ack(&self) -> Option<&ComplexAck> {
         match &self.npdu {
             Some(npdu) => match &npdu.network_message {
@@ -89,7 +90,7 @@ impl<'a> DataLink<'a> {
             },
             _ => None,
         }
-    }
+    }*/
 
     fn get_ack_into(self) -> Option<ComplexAck<'a>> {
         match self.npdu {
@@ -104,6 +105,7 @@ impl<'a> DataLink<'a> {
         }
     }
 
+    /*
     pub fn get_read_property_ack(&self) -> Option<&ReadPropertyAck> {
         match self.get_ack() {
             Some(ack) => match &ack.service {
@@ -112,7 +114,7 @@ impl<'a> DataLink<'a> {
             },
             None => None,
         }
-    }
+    }*/
 
     pub fn get_read_property_ack_into(self) -> Option<ReadPropertyAck<'a>> {
         match self.get_ack_into() {
@@ -124,9 +126,9 @@ impl<'a> DataLink<'a> {
         }
     }
 
-    pub fn get_read_property_multiple_ack(&self) -> Option<&ReadPropertyMultipleAck> {
-        match self.get_ack() {
-            Some(ack) => match &ack.service {
+    pub fn get_read_property_multiple_ack_into(self) -> Option<ReadPropertyMultipleAck<'a>> {
+        match self.get_ack_into() {
+            Some(ack) => match ack.service {
                 ComplexAckService::ReadPropertyMultiple(ack) => Some(ack),
                 _ => None,
             },

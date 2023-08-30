@@ -1,3 +1,6 @@
+fn main() {}
+
+/*
 use std::{io, net::UdpSocket};
 
 use embedded_bacnet::common::{
@@ -62,3 +65,4 @@ impl ReadWrite for ReadWriteImpl {
         Ok(())
     }
 }
+*/

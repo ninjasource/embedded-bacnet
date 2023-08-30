@@ -8,7 +8,7 @@ use embedded_bacnet::{
         unconfirmed::UnconfirmedRequest,
     },
     common::{
-        helper::{Reader, Writer},
+        io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
     },
     network_protocol::{
@@ -76,7 +76,7 @@ fn main() -> Result<(), Error> {
     };
 
     if let Some(notification) = notification {
-        while let Some(property) = notification.decode_next(&mut reader, buf) {
+        for property in notification {
             println!("Value: {:?}", property)
         }
     }

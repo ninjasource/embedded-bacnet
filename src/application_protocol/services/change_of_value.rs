@@ -6,8 +6,9 @@ use crate::{
         error::Error,
         helper::{
             decode_unsigned, encode_context_bool, encode_context_object_id,
-            encode_context_unsigned, Reader, Writer,
+            encode_context_unsigned, get_tagged_body,
         },
+        io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
         tag::{Tag, TagNumber},
@@ -16,11 +17,13 @@ use crate::{
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct CovNotification {
+pub struct CovNotification<'a> {
     pub process_id: u32,
     pub device_id: ObjectId,
     pub object_id: ObjectId,
     pub time_remaining_seconds: u32,
+    reader: Reader,
+    buf: &'a [u8],
 }
 
 #[derive(Debug)]
@@ -30,14 +33,14 @@ pub struct PropertyResult<'a> {
     pub value: ApplicationDataValue<'a>,
 }
 
-impl CovNotification {
+impl<'a> CovNotification<'a> {
     const TAG_PROCESS_ID: u8 = 0;
     const TAG_DEVICE_ID: u8 = 1;
     const TAG_OBJECT_ID: u8 = 2;
     const TAG_LIFETIME: u8 = 3;
     const TAG_LIST_OF_VALUES: u8 = 4;
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         // parse a tag, starting from after the pdu type and service choice
 
         // process_id
@@ -81,33 +84,38 @@ impl CovNotification {
         }
         let time_remaining_seconds = decode_unsigned(tag.value, reader, buf) as u32;
 
-        // opening tag list of values
-        let tag = Tag::decode(reader, buf);
-        if tag.number != TagNumber::ContextSpecificOpening(Self::TAG_LIST_OF_VALUES) {
+        let (buf, tag_number) = get_tagged_body(reader, buf);
+        if tag_number != Self::TAG_LIST_OF_VALUES {
             return Err(Error::InvalidValue(
                 "expected list of values opening tag type for CovNotification",
             ));
         }
+
+        let reader = Reader {
+            index: 0,
+            end: buf.len(),
+        };
 
         Ok(Self {
             process_id,
             device_id,
             object_id,
             time_remaining_seconds,
+            buf,
+            reader,
         })
     }
+}
 
-    pub fn decode_next<'a>(
-        &self,
-        reader: &mut Reader,
-        buf: &'a [u8],
-    ) -> Option<PropertyResult<'a>> {
-        // TODO: read list of values
+impl<'a> Iterator for CovNotification<'a> {
+    type Item = PropertyResult<'a>;
 
-        let tag = Tag::decode(reader, buf);
-        if tag.number == TagNumber::ContextSpecificClosing(4) {
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
             return None;
         }
+
+        let tag = Tag::decode(&mut self.reader, self.buf);
 
         assert_eq!(
             tag.number,
@@ -115,19 +123,26 @@ impl CovNotification {
             "invalid property id tag"
         );
 
-        let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf) as u32).into();
+        let property_id: PropertyId =
+            (decode_unsigned(tag.value, &mut self.reader, self.buf) as u32).into();
 
-        let tag = Tag::decode(reader, buf);
+        let tag = Tag::decode(&mut self.reader, self.buf);
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecificOpening(2),
             "expected value opening tag"
         );
 
-        let tag = Tag::decode(reader, buf);
-        let value = ApplicationDataValue::decode(&tag, &self.object_id, &property_id, reader, buf);
+        let tag = Tag::decode(&mut self.reader, self.buf);
+        let value = ApplicationDataValue::decode(
+            &tag,
+            &self.object_id,
+            &property_id,
+            &mut self.reader,
+            self.buf,
+        );
 
-        let tag = Tag::decode(reader, buf);
+        let tag = Tag::decode(&mut self.reader, self.buf);
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecificClosing(2),

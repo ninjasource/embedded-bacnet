@@ -4,7 +4,7 @@ use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu, services::who_is::WhoIs, unconfirmed::UnconfirmedRequest,
     },
-    common::helper::{Reader, Writer},
+    common::io::{Reader, Writer},
     network_protocol::{
         data_link::{DataLink, DataLinkFunction},
         network_pdu::{DestinationAddress, MessagePriority, NetworkMessage, NetworkPdu},

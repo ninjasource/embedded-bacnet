@@ -14,7 +14,7 @@ use embedded_bacnet::{
     },
     common::{
         daily_schedule::WeeklyScheduleWrite,
-        helper::{Reader, Writer},
+        io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
     },
@@ -69,9 +69,9 @@ fn main() -> Result<(), Error> {
     let mut saturday = vec![];
     let mut sunday = vec![];
 
-    if let Some(message) = message.get_read_property_multiple_ack() {
-        while let Some(values) = message.decode_next(&mut reader, buf) {
-            while let Some(x) = values.decode_next(&mut reader, buf) {
+    if let Some(message) = message.get_read_property_multiple_ack_into() {
+        for values in message {
+            for x in values.into_iter() {
                 match x.value {
                     PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
                         weekly_schedule,

@@ -1,6 +1,7 @@
 use crate::common::{
     error::Error,
-    helper::{decode_unsigned, Reader},
+    helper::decode_unsigned,
+    io::Reader,
     object_id::{ObjectId, ObjectType},
     spec::Segmentation,
     tag::{ApplicationTagNumber, Tag, TagNumber},

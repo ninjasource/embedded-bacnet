@@ -3,8 +3,9 @@ use crate::{
     common::{
         helper::{
             encode_closing_tag, encode_context_enumerated, encode_context_object_id,
-            encode_context_unsigned, encode_opening_tag, Writer,
+            encode_context_unsigned, encode_opening_tag,
         },
+        io::Writer,
         object_id::ObjectId,
         property_id::PropertyId,
     },

@@ -5,7 +5,8 @@ use flagset::{FlagSet, Flags};
 use crate::common::{
     daily_schedule::{WeeklySchedule, WeeklyScheduleWrite},
     error::Error,
-    helper::{decode_unsigned, Reader, Writer},
+    helper::decode_unsigned,
+    io::{Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
     spec::{Binary, EngineeringUnits, StatusFlags},

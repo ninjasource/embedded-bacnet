@@ -7,8 +7,8 @@ use crate::{
         helper::{
             decode_unsigned, encode_closing_tag, encode_context_enumerated,
             encode_context_object_id, encode_context_unsigned, encode_opening_tag, get_tagged_body,
-            Reader, Writer,
         },
+        io::{Reader, Writer},
         object_id::ObjectId,
         property_id::PropertyId,
         spec::{ErrorClass, ErrorCode, BACNET_ARRAY_ALL},
@@ -18,50 +18,42 @@ use crate::{
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct ReadPropertyMultipleAck {}
+pub struct ReadPropertyMultipleAck<'a> {
+    buf: &'a [u8],
+    reader: Reader,
+}
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct ObjectWithResults {
+pub struct ObjectWithResults<'a> {
     pub object_id: ObjectId,
+    buf: &'a [u8],
+    reader: Reader,
 }
 
-impl ObjectWithResults {
-    pub fn decode_next<'a>(
-        &self,
-        reader: &mut Reader,
-        buf: &'a [u8],
-    ) -> Option<PropertyResult<'a>> {
-        let tag = Tag::decode(reader, buf);
-        if tag.number == TagNumber::ContextSpecificClosing(1) {
-            // closing tag
+impl<'a> Iterator for ObjectWithResults<'a> {
+    type Item = PropertyResult<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
             return None;
         }
+
+        let tag = Tag::decode(&mut self.reader, self.buf);
 
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecific(2),
             "expected property identifier tag"
         );
-        let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf) as u32).into();
+        let property_id: PropertyId =
+            (decode_unsigned(tag.value, &mut self.reader, self.buf) as u32).into();
 
-        //let tag = Tag::decode(reader, buf);
-        let (buf, tag_number) = get_tagged_body(reader, buf);
+        let (buf, tag_number) = get_tagged_body(&mut self.reader, self.buf);
         let mut reader = Reader {
             index: 0,
             end: buf.len(),
         };
-
-        // let tag_number = match tag.number {
-        //     TagNumber::ContextSpecificOpening(x) => x,
-        //     x => panic!("Expected opening tag but got: {:?}", x),
-        // };
-
-        //assert_eq!(
-        //    tag.number,
-        //    TagNumber::ContextSpecificOpening(4),
-        //    "expected opening tag"
-        //);
 
         let property_value = match tag_number {
             4 => {
@@ -108,6 +100,21 @@ impl ObjectWithResults {
         };
 
         Some(property_result)
+    }
+}
+
+impl<'a> ObjectWithResults<'a> {
+    pub fn new(object_id: ObjectId, buf: &'a [u8]) -> Self {
+        let reader = Reader {
+            index: 0,
+            end: buf.len(),
+        };
+
+        Self {
+            object_id,
+            buf,
+            reader,
+        }
     }
 }
 
@@ -169,28 +176,36 @@ impl<'a> Display for PropertyValue<'a> {
     }
 }
 
-impl ReadPropertyMultipleAck {
-    pub fn decode_next(&self, reader: &mut Reader, buf: &[u8]) -> Option<ObjectWithResults> {
-        if reader.eof() {
+impl<'a> ReadPropertyMultipleAck<'a> {
+    pub fn new(buf: &'a [u8]) -> Self {
+        let reader = Reader {
+            index: 0,
+            end: buf.len(),
+        };
+        Self { buf, reader }
+    }
+}
+
+impl<'a> Iterator for ReadPropertyMultipleAck<'a> {
+    type Item = ObjectWithResults<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
             return None;
         }
 
-        let tag = Tag::decode(reader, buf);
+        let tag = Tag::decode(&mut self.reader, self.buf);
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecific(0),
             "expected object_id tag"
         );
-        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
+        let object_id = ObjectId::decode(tag.value, &mut self.reader, self.buf).unwrap();
 
-        let tag = Tag::decode(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecificOpening(1),
-            "expected list of results opening tag"
-        );
+        let (buf, tag_number) = get_tagged_body(&mut self.reader, self.buf);
+        assert_eq!(tag_number, 1, "expected list of results opening tag");
 
-        let object_with_results = ObjectWithResults { object_id };
+        let object_with_results = ObjectWithResults::new(object_id, buf);
         Some(object_with_results)
     }
 }
