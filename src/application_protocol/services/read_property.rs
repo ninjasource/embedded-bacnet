@@ -85,10 +85,10 @@ impl<'a> ReadPropertyAck<'a> {
         );
 
         //let tag = Tag::decode(reader, buf);
-        let (inner_buf, tag_number) = get_tagged_body(reader, buf);
-        let mut inner_reader = Reader {
+        let (buf, tag_number) = get_tagged_body(reader, buf);
+        let mut reader = Reader {
             index: 0,
-            end: inner_buf.len(),
+            end: buf.len(),
         };
         assert_eq!(3, tag_number, "Expected opening tag");
         //assert_eq!(
@@ -99,10 +99,7 @@ impl<'a> ReadPropertyAck<'a> {
 
         match property_id {
             PropertyId::PropObjectList => {
-                let property_value = ReadPropertyValue::ObjectIdList(ObjectIdList {
-                    reader: inner_reader,
-                    buf: inner_buf,
-                });
+                let property_value = ReadPropertyValue::ObjectIdList(ObjectIdList { reader, buf });
 
                 return Self {
                     object_id,
@@ -111,14 +108,9 @@ impl<'a> ReadPropertyAck<'a> {
                 };
             }
             property_id => {
-                let tag = Tag::decode(&mut inner_reader, buf);
-                let value = ApplicationDataValue::decode(
-                    &tag,
-                    &object_id,
-                    &property_id,
-                    &mut inner_reader,
-                    buf,
-                );
+                let tag = Tag::decode(&mut reader, buf);
+                let value =
+                    ApplicationDataValue::decode(&tag, &object_id, &property_id, &mut reader, buf);
                 let property_value = ReadPropertyValue::ApplicationDataValue(value);
 
                 //let tag = Tag::decode(reader, buf);

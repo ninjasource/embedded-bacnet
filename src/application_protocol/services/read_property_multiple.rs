@@ -46,10 +46,10 @@ impl ObjectWithResults {
         let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf) as u32).into();
 
         //let tag = Tag::decode(reader, buf);
-        let (inner_buf, tag_number) = get_tagged_body(reader, buf);
-        let mut inner_reader = Reader {
+        let (buf, tag_number) = get_tagged_body(reader, buf);
+        let mut reader = Reader {
             index: 0,
-            end: inner_buf.len(),
+            end: buf.len(),
         };
 
         // let tag_number = match tag.number {
@@ -71,19 +71,19 @@ impl ObjectWithResults {
                         PropertyValue::PropValue(ApplicationDataValue::Boolean(false))
                     }
                     PropertyId::PropWeeklySchedule => {
-                        let weekly_schedule = WeeklySchedule::new(&mut inner_reader, inner_buf);
+                        let weekly_schedule = WeeklySchedule::new(&mut reader, buf);
                         PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
                             weekly_schedule,
                         ))
                     }
                     property_id => {
-                        let tag = Tag::decode(&mut inner_reader, inner_buf);
+                        let tag = Tag::decode(&mut reader, buf);
                         let value = ApplicationDataValue::decode(
                             &tag,
                             &self.object_id,
                             &property_id,
-                            &mut inner_reader,
-                            inner_buf,
+                            &mut reader,
+                            buf,
                         );
                         PropertyValue::PropValue(value)
                     }
@@ -91,7 +91,7 @@ impl ObjectWithResults {
             }
             5 => {
                 // property read error
-                let error = read_error(&mut inner_reader, inner_buf);
+                let error = read_error(&mut reader, buf);
                 PropertyValue::PropError(error)
             }
             x => {
