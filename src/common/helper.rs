@@ -48,6 +48,7 @@ impl<'a> Writer<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Reader {
     pub index: usize,
     pub end: usize,
