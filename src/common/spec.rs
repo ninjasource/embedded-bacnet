@@ -1131,6 +1131,14 @@ impl TryFrom<u32> for EngineeringUnits {
     }
 }
 
+flags! {
+    pub enum LogBufferResultFlags: u8 {
+        FirstItem = 0b1000_0000,
+        LastItem =  0b0100_0000,
+        MoreItems = 0b0010_0000,
+    }
+}
+
 // start of bit string enumerations
 flags! {
     pub enum StatusFlags: u8 {

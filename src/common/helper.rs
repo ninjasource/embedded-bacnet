@@ -44,6 +44,14 @@ pub fn get_tagged_body<'a>(reader: &mut Reader, buf: &'a [u8]) -> (&'a [u8], u8)
     }
 }
 
+pub fn encode_i16(writer: &mut Writer, value: i16) {
+    writer.extend_from_slice(&value.to_be_bytes());
+}
+
+pub fn encode_i32(writer: &mut Writer, value: i32) {
+    writer.extend_from_slice(&value.to_be_bytes());
+}
+
 pub fn encode_u16(writer: &mut Writer, value: u16) {
     writer.extend_from_slice(&value.to_be_bytes());
 }
@@ -120,19 +128,11 @@ pub fn encode_closing_tag(writer: &mut Writer, tag_number: u8) {
 }
 
 pub fn encode_context_unsigned(writer: &mut Writer, tag_number: u8, value: u32) {
-    let len = if value < 0x100 {
-        1
-    } else if value < 0x10000 {
-        2
-    } else if value < 0x1000000 {
-        3
-    } else {
-        4
-    };
+    let len = get_len_u64(value as u64);
 
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
     tag.encode(writer);
-    encode_unsigned(writer, value as u64);
+    encode_unsigned(writer, len, value as u64);
 }
 
 pub fn decode_context_enumerated(reader: &mut Reader, buf: &[u8]) -> (Tag, PropertyId) {
@@ -144,19 +144,54 @@ pub fn decode_context_enumerated(reader: &mut Reader, buf: &[u8]) -> (Tag, Prope
 
 pub fn encode_context_enumerated(writer: &mut Writer, tag_number: u8, property_id: PropertyId) {
     let value = property_id as u32;
-    let len = if value < 0x100 {
+    let len = get_len_u64(value as u64);
+
+    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
+    tag.encode(writer);
+    encode_unsigned(writer, len, value as u64);
+}
+
+pub fn encode_application_unsigned(writer: &mut Writer, value: u64) {
+    let len = get_len_u64(value);
+    Tag::new(
+        TagNumber::Application(ApplicationTagNumber::UnsignedInt),
+        len,
+    )
+    .encode(writer);
+    encode_unsigned(writer, len, value);
+}
+
+pub fn encode_application_signed(writer: &mut Writer, value: i32) {
+    let mut len = get_len_i32(value);
+    len = if len == 3 { 4 } else { len }; // we don't bother with 3 byte integers (just save it as a 4 byte integer)
+    Tag::new(TagNumber::Application(ApplicationTagNumber::SignedInt), len).encode(writer);
+    encode_signed(writer, len, value);
+}
+
+fn get_len_u64(value: u64) -> u32 {
+    if value < 0x100 {
         1
     } else if value < 0x10000 {
         2
     } else if value < 0x1000000 {
         3
+    } else if value < 0x100000000 {
+        4
+    } else {
+        8
+    }
+}
+
+fn get_len_i32(value: i32) -> u32 {
+    if (value >= -128) && (value < 128) {
+        1
+    } else if (value >= -32768) && (value < 32768) {
+        2
+    } else if (value >= -8388608) && (value < 8388608) {
+        3
     } else {
         4
-    };
-
-    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
-    tag.encode(writer);
-    encode_unsigned(writer, value as u64);
+    }
 }
 
 pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> u64 {
@@ -169,23 +204,28 @@ pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> u64 {
             tmp[1..].copy_from_slice(&bytes);
             u32::from_be_bytes(tmp) as u64
         }
-
         4 => u32::from_be_bytes(reader.read_bytes(buf)) as u64,
         8 => u64::from_be_bytes(reader.read_bytes(buf)) as u64,
         _ => panic!("invalid unsigned len"),
     }
 }
 
-pub fn encode_unsigned(writer: &mut Writer, value: u64) {
-    if value < 0x100 {
-        writer.push(value as u8);
-    } else if value < 0x10000 {
-        encode_u16(writer, value as u16);
-    } else if value < 0x1000000 {
-        encode_u24(writer, value as u32);
-    } else if value < 0x100000000 {
-        encode_u32(writer, value as u32);
-    } else {
-        encode_u64(writer, value)
+pub fn encode_unsigned(writer: &mut Writer, len: u32, value: u64) {
+    match len {
+        1 => writer.push(value as u8),
+        2 => encode_u16(writer, value as u16),
+        3 => encode_u24(writer, value as u32),
+        4 => encode_u32(writer, value as u32),
+        8 => encode_u64(writer, value),
+        _ => unreachable!(),
+    }
+}
+
+pub fn encode_signed(writer: &mut Writer, len: u32, value: i32) {
+    match len {
+        1 => writer.push(value as u8),
+        2 => encode_i16(writer, value as i16),
+        4 => encode_i32(writer, value as i32),
+        _ => unreachable!(),
     }
 }

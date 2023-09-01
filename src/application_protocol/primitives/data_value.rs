@@ -9,7 +9,7 @@ use crate::common::{
     io::{Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
-    spec::{Binary, EngineeringUnits, StatusFlags},
+    spec::{Binary, EngineeringUnits, LogBufferResultFlags, StatusFlags},
     tag::{ApplicationTagNumber, Tag, TagNumber},
 };
 
@@ -77,8 +77,18 @@ impl Date {
     //  month 1=Jan
     //  day = day of month
     //  wday 1=Monday...7=Sunday
-    pub fn decode(value: u32) -> Self {
+    pub fn decode_from_tag(tag: &Tag) -> Self {
+        let value = tag.value;
         let value = value.to_be_bytes();
+        Self::decode_inner(value)
+    }
+
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+        let value = reader.read_bytes(buf);
+        Self::decode_inner(value)
+    }
+
+    fn decode_inner(value: [u8; 4]) -> Self {
         let year = value[0] as u16 + 1900;
         let month = value[1];
         let day = value[2];
@@ -89,6 +99,14 @@ impl Date {
             day,
             wday,
         }
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        let year = (self.year - 1900) as u8;
+        writer.push(year);
+        writer.push(self.month);
+        writer.push(self.day);
+        writer.push(self.wday);
     }
 }
 
@@ -145,6 +163,7 @@ impl<'a> Display for ApplicationDataValue<'a> {
 #[derive(Debug)]
 pub enum BitString<'a> {
     StatusFlags(FlagSet<StatusFlags>),
+    LogBufferResultFlags(FlagSet<LogBufferResultFlags>),
     Custom(CustomBitStream<'a>),
 }
 
@@ -174,6 +193,10 @@ impl<'a> BitString<'a> {
             PropertyId::PropStatusFlags => {
                 let status_flags = Self::decode_byte_flag(reader.read_byte(buf))?;
                 Ok(Self::StatusFlags(status_flags))
+            }
+            PropertyId::PropLogBuffer => {
+                let flags = Self::decode_byte_flag(reader.read_byte(buf))?;
+                Ok(Self::LogBufferResultFlags(flags))
             }
             _ => {
                 let len = (len - 1) as usize; // we have already read a byte
@@ -293,7 +316,7 @@ impl<'a> ApplicationDataValue<'a> {
                 ApplicationDataValue::Time(time)
             }
             ApplicationTagNumber::Date => {
-                let date = Date::decode(tag.value);
+                let date = Date::decode_from_tag(&tag);
                 ApplicationDataValue::Date(date)
             }
 

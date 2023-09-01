@@ -78,21 +78,7 @@ impl<'a> DataLink<'a> {
         DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu))
     }
 
-    /*
-    pub fn get_ack(&self) -> Option<&ComplexAck> {
-        match &self.npdu {
-            Some(npdu) => match &npdu.network_message {
-                NetworkMessage::Apdu(apdu) => match &apdu {
-                    ApplicationPdu::ComplexAck(ack) => Some(&ack),
-                    _ => None,
-                },
-                _ => None,
-            },
-            _ => None,
-        }
-    }*/
-
-    fn get_ack_into(self) -> Option<ComplexAck<'a>> {
+    pub fn get_ack_into(self) -> Option<ComplexAck<'a>> {
         match self.npdu {
             Some(x) => match x.network_message {
                 NetworkMessage::Apdu(apdu) => match apdu {
@@ -104,17 +90,6 @@ impl<'a> DataLink<'a> {
             _ => None,
         }
     }
-
-    /*
-    pub fn get_read_property_ack(&self) -> Option<&ReadPropertyAck> {
-        match self.get_ack() {
-            Some(ack) => match &ack.service {
-                ComplexAckService::ReadProperty(ack) => Some(ack),
-                _ => None,
-            },
-            None => None,
-        }
-    }*/
 
     pub fn get_read_property_ack_into(self) -> Option<ReadPropertyAck<'a>> {
         match self.get_ack_into() {

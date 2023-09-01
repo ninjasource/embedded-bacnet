@@ -12,6 +12,7 @@ use super::{
         change_of_value::SubscribeCov,
         read_property::{ReadProperty, ReadPropertyAck},
         read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleAck},
+        read_range::{ReadRange, ReadRangeAck},
         write_property::WriteProperty,
     },
 };
@@ -67,6 +68,10 @@ impl<'a> ConfirmedRequest<'a> {
             }
             ConfirmedRequestSerivice::WriteProperty(service) => {
                 writer.push(ConfirmedServiceChoice::WriteProperty as u8);
+                service.encode(writer)
+            }
+            ConfirmedRequestSerivice::ReadRange(service) => {
+                writer.push(ConfirmedServiceChoice::ReadRange as u8);
                 service.encode(writer)
             }
         };
@@ -271,6 +276,10 @@ impl<'a> ComplexAck<'a> {
                 let buf = &buf[reader.index..reader.end];
                 ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck::new(buf))
             }
+            ConfirmedServiceChoice::ReadRange => {
+                let apdu = ReadRangeAck::decode(reader, buf);
+                ComplexAckService::ReadRange(apdu)
+            }
             s => return Err(Error::UnimplementedConfirmedServiceChoice(s)),
         };
 
@@ -283,6 +292,7 @@ impl<'a> ComplexAck<'a> {
 pub enum ComplexAckService<'a> {
     ReadProperty(ReadPropertyAck<'a>),
     ReadPropertyMultiple(ReadPropertyMultipleAck<'a>),
+    ReadRange(ReadRangeAck<'a>),
     // add more here
 }
 
@@ -293,5 +303,6 @@ pub enum ConfirmedRequestSerivice<'a> {
     ReadPropertyMultiple(ReadPropertyMultiple<'a>),
     SubscribeCov(SubscribeCov),
     WriteProperty(WriteProperty<'a>),
+    ReadRange(ReadRange),
     // add more here (see ConfirmedServiceChoice enum)
 }
