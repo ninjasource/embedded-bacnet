@@ -26,7 +26,7 @@ fn main() -> Result<(), Error> {
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
     // encode packet
-    let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);
+    let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 4);
     let rpm = ReadPropertyMultipleObject::new(object_id, &[PropertyId::PropAll]);
     let objects = [rpm];
     let rpm = ReadPropertyMultiple::new(&objects);

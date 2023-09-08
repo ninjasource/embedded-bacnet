@@ -1,5 +1,7 @@
+use core::ops::Range;
 use std::{io::Error, net::UdpSocket};
 
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
@@ -29,27 +31,169 @@ fn main() -> Result<(), Error> {
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
     let object_id = ObjectId::new(ObjectType::ObjectTrendlog, 4);
 
-    let record_count = get_record_count(&socket, object_id)?;
+    let record_count = get_record_count(&socket, object_id)? as usize;
     println!("Record count {record_count}");
 
-    const MAX_COUNT_PER_REQ: usize = 55;
-    for index in (1..=record_count).step_by(MAX_COUNT_PER_REQ) {
-        print_items_by_range(&socket, object_id, index, MAX_COUNT_PER_REQ)?;
+    const MAX_LOG_COUNT_PER_REQ: usize = 55;
+
+    let mut log_set = LogSet::new(record_count);
+
+    for row in (1..=record_count).step_by(MAX_LOG_COUNT_PER_REQ) {
+        get_items_for_range(&socket, object_id, row..MAX_LOG_COUNT_PER_REQ, &mut log_set)?;
     }
+
+    log_set.finished();
 
     Ok(())
 }
 
-fn print_items_by_range(
+#[derive(Debug)]
+struct LogSet {
+    pub level0: Vec<LogEntry>, // every 15 mins
+    pub level1: Vec<LogEntry>, // every hour
+    pub level2: Vec<LogEntry>, // every 4 hours
+    pub level3: Vec<LogEntry>, // every 12 hours
+
+    level1_current: Aggregation,
+    level2_current: Aggregation,
+    level3_current: Aggregation,
+}
+
+impl LogSet {
+    pub fn new(record_count: usize) -> Self {
+        LogSet {
+            level0: Vec::with_capacity(record_count),
+            level1: Vec::with_capacity(record_count / 4),
+            level2: Vec::with_capacity(record_count / 16),
+            level3: Vec::with_capacity(24),
+            level1_current: Aggregation::new(Duration::hours(1)),
+            level2_current: Aggregation::new(Duration::hours(4)),
+            level3_current: Aggregation::new(Duration::hours(12)),
+        }
+    }
+
+    pub fn add_entry(&mut self, log_entry: LogEntry) {
+        self.level0.push(log_entry);
+
+        if let Some(aggregation) = self.level1_current.add_entry(log_entry) {
+            self.level1.push(aggregation);
+        }
+
+        if let Some(aggregation) = self.level2_current.add_entry(log_entry) {
+            let date_time =
+                NaiveDateTime::from_timestamp_opt(aggregation.timestamp as i64, 0).unwrap();
+            println!("{} - {}", date_time, aggregation.value);
+            self.level2.push(aggregation);
+        }
+
+        if let Some(aggregation) = self.level3_current.add_entry(log_entry) {
+            if self.level3.len() != self.level3.capacity() {
+                self.level3.push(aggregation);
+            }
+        }
+    }
+
+    pub fn finished(&mut self) {
+        if let Some(aggregation) = self.level1_current.finished() {
+            self.level1.push(aggregation);
+        }
+        if let Some(aggregation) = self.level2_current.finished() {
+            let date_time =
+                NaiveDateTime::from_timestamp_opt(aggregation.timestamp as i64, 0).unwrap();
+            println!("{} - {}", date_time, aggregation.value);
+            self.level2.push(aggregation);
+        }
+        if let Some(aggregation) = self.level2_current.finished() {
+            if self.level3.len() != self.level3.capacity() {
+                self.level3.push(aggregation);
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Aggregation {
+    duration: Duration,
+    date_time: Option<NaiveDateTime>,
+    value: f32,
+    count: usize,
+}
+
+impl Aggregation {
+    pub fn new(duration: Duration) -> Self {
+        Self {
+            duration,
+            date_time: None,
+            value: 0.0,
+            count: 0,
+        }
+    }
+
+    fn calculate_bucket(&self, dt: &NaiveDateTime) -> NaiveDateTime {
+        let hour = dt.time().hour() - (dt.time().hour() % self.duration.num_hours() as u32);
+        NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(dt.year(), dt.month(), dt.day()).unwrap(),
+            NaiveTime::from_hms_opt(hour, 0, 0).unwrap(),
+        )
+    }
+
+    pub fn add_entry(&mut self, log_entry: LogEntry) -> Option<LogEntry> {
+        let dt = NaiveDateTime::from_timestamp_opt(log_entry.timestamp as i64, 0).unwrap();
+        let bucket = self.calculate_bucket(&dt);
+
+        match self.date_time {
+            Some(date_time) => {
+                if date_time == bucket {
+                    self.value += log_entry.value;
+                    self.count += 1;
+                } else {
+                    let agg_log_entry = LogEntry {
+                        timestamp: date_time.timestamp() as i32,
+                        value: self.value / self.count as f32,
+                    };
+
+                    self.date_time = Some(bucket);
+                    self.value = log_entry.value;
+                    self.count = 1;
+                    return Some(agg_log_entry);
+                }
+            }
+            None => {
+                self.date_time = Some(bucket);
+                self.value = log_entry.value;
+                self.count = 1;
+            }
+        }
+        None
+    }
+
+    pub fn finished(&self) -> Option<LogEntry> {
+        match self.date_time {
+            Some(date_time) => Some(LogEntry {
+                timestamp: date_time.timestamp() as i32,
+                value: self.value / self.count as f32,
+            }),
+            None => None,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct LogEntry {
+    pub timestamp: i32,
+    pub value: f32,
+}
+
+fn get_items_for_range(
     socket: &UdpSocket,
     object_id: ObjectId,
-    index: u32,
-    count: usize,
+    range: Range<usize>,
+    items: &mut LogSet,
 ) -> Result<(), Error> {
     // encode packet
     let request_type = ReadRangeRequestType::ByPosition(ReadRangeByPosition {
-        index: index,
-        count: count as u32,
+        index: range.start as u32,
+        count: range.end as u32,
     });
     let rp = ReadRange::new(object_id, PropertyId::PropLogBuffer, request_type);
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadRange(rp));
@@ -83,15 +227,22 @@ fn print_items_by_range(
                         ReadRangeValue::Real(x) => x,
                         _ => 0.0,
                     };
-                    println!(
-                        "{}-{:02}-{:02} {:02}:{:02} - {:.2}",
-                        item.date.year,
-                        item.date.month,
-                        item.date.day,
-                        item.time.hour,
-                        item.time.minute,
-                        value
+                    //let x = items.get_mut(index as usize + i - 1).unwrap();
+                    let date_time = NaiveDateTime::new(
+                        NaiveDate::from_ymd_opt(
+                            item.date.year as i32,
+                            item.date.month as u32,
+                            item.date.day as u32,
+                        )
+                        .unwrap(),
+                        NaiveTime::from_hms_opt(item.time.hour as u32, item.time.minute as u32, 0)
+                            .unwrap(),
                     );
+                    let log_entry = LogEntry {
+                        timestamp: date_time.timestamp() as i32,
+                        value,
+                    };
+                    items.add_entry(log_entry);
                 }
             }
             _ => {

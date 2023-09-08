@@ -9,7 +9,10 @@ use crate::common::{
     io::{Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
-    spec::{Binary, EngineeringUnits, LogBufferResultFlags, StatusFlags},
+    spec::{
+        Binary, EngineeringUnits, EventState, LogBufferResultFlags, LoggingType, NotifyType,
+        StatusFlags,
+    },
     tag::{ApplicationTagNumber, Tag, TagNumber},
 };
 
@@ -43,6 +46,10 @@ pub enum ApplicationDataValueWrite<'a> {
 pub enum Enumerated {
     Units(EngineeringUnits),
     Binary(Binary),
+    ObjectType(ObjectType),
+    EventState(EventState),
+    NotifyType(NotifyType),
+    LoggingType(LoggingType),
     Unknown(u32),
 }
 
@@ -57,6 +64,10 @@ impl Enumerated {
         let value = match self {
             Self::Units(x) => *x as u32,
             Self::Binary(x) => *x as u32,
+            Self::ObjectType(x) => *x as u32,
+            Self::EventState(x) => *x as u32,
+            Self::NotifyType(x) => *x as u32,
+            Self::LoggingType(x) => *x as u32,
             Self::Unknown(x) => *x,
         };
         writer.extend_from_slice(&value.to_be_bytes());
@@ -293,6 +304,22 @@ impl<'a> ApplicationDataValue<'a> {
                         }
                         _ => Enumerated::Unknown(value),
                     },
+                    PropertyId::PropObjectType => {
+                        let object_type = ObjectType::try_from(value).unwrap();
+                        Enumerated::ObjectType(object_type)
+                    }
+                    PropertyId::PropEventState => {
+                        let event_state = EventState::try_from(value).unwrap();
+                        Enumerated::EventState(event_state)
+                    }
+                    PropertyId::PropNotifyType => {
+                        let notify_type = NotifyType::try_from(value).unwrap();
+                        Enumerated::NotifyType(notify_type)
+                    }
+                    PropertyId::PropLoggingType => {
+                        let logging_type = LoggingType::try_from(value).unwrap();
+                        Enumerated::LoggingType(logging_type)
+                    }
 
                     _ => Enumerated::Unknown(value),
                 };

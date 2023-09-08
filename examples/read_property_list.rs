@@ -17,6 +17,8 @@ use embedded_bacnet::{
     },
 };
 
+//const IP_ADDRESS: &str = "192.168.1.215:47808";
+//const DEVICE_ID: u32 = 76011;
 const IP_ADDRESS: &str = "192.168.1.249:47808";
 const DEVICE_ID: u32 = 79079;
 

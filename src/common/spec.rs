@@ -1159,28 +1159,80 @@ pub enum LogStatus {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum LoggingType {
-    Polled = 0,
-    Cov = 1,
-    Triggered = 2,
-}
-
-#[derive(Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum AcknowledgmentFilter {
     All = 0,
     Acked = 1,
     NotAcked = 2,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum EventStateFilter {
-    Offnormal = 0,
+#[repr(u32)]
+pub enum EventState {
+    Normal = 0,
     Fault = 1,
-    Normal = 2,
-    All = 3,
-    Active = 4,
+    OffNormal = 2,
+    HighLimit = 3,
+    LowLimit = 4,
+}
+
+impl TryFrom<u32> for EventState {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Normal),
+            1 => Ok(Self::Fault),
+            2 => Ok(Self::OffNormal),
+            3 => Ok(Self::HighLimit),
+            4 => Ok(Self::LowLimit),
+            x => Err(x),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u32)]
+pub enum NotifyType {
+    Alarm = 0,
+    Event = 1,
+    AckNotification = 2,
+}
+
+impl TryFrom<u32> for NotifyType {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Alarm),
+            1 => Ok(Self::Event),
+            2 => Ok(Self::AckNotification),
+            x => Err(x),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u32)]
+pub enum LoggingType {
+    Polled = 0,
+    Cov = 1,
+    Triggered = 2,
+}
+
+impl TryFrom<u32> for LoggingType {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Polled),
+            1 => Ok(Self::Cov),
+            2 => Ok(Self::Triggered),
+            x => Err(x),
+        }
+    }
 }
 
 #[derive(Debug)]
