@@ -2,7 +2,10 @@ use crate::common::io::{Reader, Writer};
 
 use super::{
     application_pdu::ApduType,
-    services::{change_of_value::CovNotification, i_am::IAm, who_is::WhoIs},
+    services::{
+        change_of_value::CovNotification, i_am::IAm, time_synchronization::TimeSynchronization,
+        who_is::WhoIs,
+    },
 };
 
 #[derive(Debug)]
@@ -11,6 +14,7 @@ pub enum UnconfirmedRequest<'a> {
     WhoIs(WhoIs),
     IAm(IAm),
     CovNotification(CovNotification<'a>),
+    TimeSynchronization(TimeSynchronization),
 }
 
 impl<'a> UnconfirmedRequest<'a> {
@@ -21,6 +25,7 @@ impl<'a> UnconfirmedRequest<'a> {
             Self::IAm(_) => todo!(),
             Self::WhoIs(payload) => payload.encode(writer),
             Self::CovNotification(_) => todo!(),
+            Self::TimeSynchronization(payload) => payload.encode(writer),
         }
     }
 
