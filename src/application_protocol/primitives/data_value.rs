@@ -343,7 +343,8 @@ impl<'a> ApplicationDataValue<'a> {
                 ApplicationDataValue::Time(time)
             }
             ApplicationTagNumber::Date => {
-                let date = Date::decode_from_tag(&tag);
+                // let date = Date::decode_from_tag(&tag);
+                let date = Date::decode(reader, buf);
                 ApplicationDataValue::Date(date)
             }
 
