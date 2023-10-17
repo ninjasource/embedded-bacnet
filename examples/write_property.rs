@@ -4,13 +4,14 @@ use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
         confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
-        primitives::data_value::ApplicationDataValueWrite,
+        primitives::data_value::{ApplicationDataValueWrite, Enumerated},
         services::write_property::WriteProperty,
     },
     common::{
         io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
+        spec::Binary,
     },
     network_protocol::{
         data_link::{DataLink, DataLinkFunction},
@@ -26,11 +27,11 @@ fn main() -> Result<(), Error> {
 
     // encode packet
     let write_property = WriteProperty::new(
-        ObjectId::new(ObjectType::ObjectAnalogValue, 1),
+        ObjectId::new(ObjectType::ObjectBinaryValue, 3),
         PropertyId::PropPresentValue,
         None,
         None,
-        ApplicationDataValueWrite::Real(10.0),
+        ApplicationDataValueWrite::Enumerated(Enumerated::Binary(Binary::On)),
     );
     let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::WriteProperty(write_property));
     let apdu = ApplicationPdu::ConfirmedRequest(req);

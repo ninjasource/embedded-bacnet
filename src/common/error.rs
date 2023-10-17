@@ -10,4 +10,5 @@ pub enum Error {
     SegmentationNotSupported,
     UnexpectedInvokeId,
     Io,
+    ApduTypeNotSupported,
 }

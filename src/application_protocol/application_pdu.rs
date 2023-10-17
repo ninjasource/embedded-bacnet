@@ -109,10 +109,7 @@ impl<'a> ApplicationPdu<'a> {
         }
 
         match pdu_type {
-            ApduType::ConfirmedServiceRequest => {
-                let apdu = ConfirmedRequest::decode(reader, buf);
-                Ok(ApplicationPdu::ConfirmedRequest(apdu))
-            }
+            ApduType::ConfirmedServiceRequest => Err(Error::ApduTypeNotSupported),
             ApduType::UnconfirmedServiceRequest => {
                 let apdu = UnconfirmedRequest::decode(reader, buf);
                 Ok(ApplicationPdu::UnconfirmedRequest(apdu))
