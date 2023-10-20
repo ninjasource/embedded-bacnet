@@ -13,6 +13,7 @@ pub const BACNET_MAX_PRIORITY: u32 = 16;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u32)]
 pub enum Segmentation {
     Both = 0,
@@ -39,7 +40,7 @@ impl TryFrom<u32> for Segmentation {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u32)]
 pub enum Binary {
     Off = 0,
@@ -60,6 +61,7 @@ impl TryFrom<u32> for Binary {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u16)]
 pub enum ErrorClass {
     Device = 0,
@@ -96,6 +98,7 @@ impl TryFrom<u32> for ErrorClass {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u16)]
 pub enum ErrorCode {
     // valid for all classes
@@ -549,7 +552,7 @@ impl TryFrom<u32> for ErrorCode {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u16)]
 pub enum EngineeringUnits {
     // Enumerated values 0-255 are reserved for definition by ASHRAE.
@@ -1153,6 +1156,7 @@ flags! {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LogStatus {
     LogDisabled = 0,
     BufferPurged = 1,
@@ -1161,6 +1165,7 @@ pub enum LogStatus {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AcknowledgmentFilter {
     All = 0,
     Acked = 1,
@@ -1169,7 +1174,7 @@ pub enum AcknowledgmentFilter {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u32)]
 pub enum EventState {
     Normal = 0,
@@ -1196,7 +1201,7 @@ impl TryFrom<u32> for EventState {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u32)]
 pub enum NotifyType {
     Alarm = 0,
@@ -1219,7 +1224,7 @@ impl TryFrom<u32> for NotifyType {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u32)]
 pub enum LoggingType {
     Polled = 0,
@@ -1242,6 +1247,7 @@ impl TryFrom<u32> for LoggingType {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SelectionLogic {
     And = 0,
     Or = 1,
@@ -1250,6 +1256,7 @@ pub enum SelectionLogic {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RelationSpecifier {
     Equal = 0,
     NotEqual = 1,
@@ -1261,6 +1268,7 @@ pub enum RelationSpecifier {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CommunicationEnableDisable {
     Enable = 0,
     Disable = 1,
@@ -1269,6 +1277,7 @@ pub enum CommunicationEnableDisable {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum MessagePriority {
     Normal = 0,
     Urgent = 1,
