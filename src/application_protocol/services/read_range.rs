@@ -148,6 +148,7 @@ pub struct ReadRangeItems<'a> {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum ReadRangeValue {
     Status,
     Bool(bool),

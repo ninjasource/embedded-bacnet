@@ -10,6 +10,7 @@ use super::{
 // A simplified version of the ApplicationDataValue struct to avoid a recursive structure
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum SimpleApplicationDataValue {
     Boolean(bool),
     SignedInt(i32),
@@ -81,6 +82,7 @@ impl SimpleApplicationDataValue {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct TimeValue {
     pub time: Time,
     pub value: SimpleApplicationDataValue,

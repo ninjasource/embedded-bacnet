@@ -39,6 +39,7 @@ impl TryFrom<u32> for Segmentation {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[repr(u32)]
 pub enum Binary {
     Off = 0,
@@ -548,6 +549,7 @@ impl TryFrom<u32> for ErrorCode {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[repr(u16)]
 pub enum EngineeringUnits {
     // Enumerated values 0-255 are reserved for definition by ASHRAE.
@@ -1167,6 +1169,7 @@ pub enum AcknowledgmentFilter {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[repr(u32)]
 pub enum EventState {
     Normal = 0,
@@ -1193,6 +1196,7 @@ impl TryFrom<u32> for EventState {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[repr(u32)]
 pub enum NotifyType {
     Alarm = 0,
@@ -1215,6 +1219,7 @@ impl TryFrom<u32> for NotifyType {
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[repr(u32)]
 pub enum LoggingType {
     Polled = 0,

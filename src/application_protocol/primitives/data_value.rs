@@ -43,6 +43,7 @@ pub enum ApplicationDataValueWrite<'a> {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum Enumerated {
     Units(EngineeringUnits),
     Binary(Binary),
@@ -76,6 +77,7 @@ impl Enumerated {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Date {
     pub year: u16,
     pub month: u8,
@@ -123,6 +125,7 @@ impl Date {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Time {
     pub hour: u8,
     pub minute: u8,

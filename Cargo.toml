@@ -15,6 +15,9 @@ arrayref = { version = "0.3.7", default-features = false }
 log = { version = "0.4.19", default-features = false }
 flagset = { version = "0.4.3", default-features = false }
 defmt = { version = "0.3.5", optional = true }
+serde = { version = "1.0", default-features = false, features = [
+    "derive",
+], optional = true }
 
 [dev-dependencies]
 simple_logger = "4.2.0"
@@ -23,3 +26,4 @@ chrono = { version = "0.4.28" }
 [features]
 #default = ["defmt"]
 defmt = ["dep:defmt"]
+serde = ["dep:serde", "flagset/serde"]
