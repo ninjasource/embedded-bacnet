@@ -4,7 +4,7 @@ use std::{collections::HashMap, io::Error, net::UdpSocket};
 
 use embedded_bacnet::{
     application_protocol::{
-        confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
+        confirmed::{ConfirmedRequest, ConfirmedRequestService},
         primitives::data_value::{ApplicationDataValue, BitString, Enumerated},
         services::{
             read_property::{ReadProperty, ReadPropertyValue},
@@ -37,7 +37,7 @@ fn main() -> Result<(), Error> {
     // encode packet
     let object_id = ObjectId::new(ObjectType::ObjectDevice, DEVICE_ID);
     let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(read_property));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadProperty(read_property));
     let data_link = DataLink::new_confirmed_req(req);
     let mut buf = vec![0; 16 * 1024];
     let mut writer = Writer::new(&mut buf);
@@ -249,7 +249,7 @@ fn get_multi_analog(
 }
 
 fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple, writer: &mut Writer) {
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadPropertyMultiple(rpm));
     let data_link = DataLink::new_confirmed_req(req);
     data_link.encode(writer);
 }

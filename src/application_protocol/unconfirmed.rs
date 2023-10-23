@@ -28,21 +28,20 @@ impl<'a> UnconfirmedRequest<'a> {
             Self::TimeSynchronization(payload) => payload.encode(writer),
         }
     }
-
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
         let choice: UnconfirmedServiceChoice = reader.read_byte(buf).into();
         match choice {
             UnconfirmedServiceChoice::IAm => {
                 let apdu = IAm::decode(reader, buf).unwrap();
-                UnconfirmedRequest::IAm(apdu)
+                Self::IAm(apdu)
             }
             UnconfirmedServiceChoice::WhoIs => {
                 let apdu = WhoIs::decode(reader, buf);
-                UnconfirmedRequest::WhoIs(apdu)
+                Self::WhoIs(apdu)
             }
             UnconfirmedServiceChoice::CovNotification => {
                 let apdu = CovNotification::decode(reader, buf).unwrap();
-                UnconfirmedRequest::CovNotification(apdu)
+                Self::CovNotification(apdu)
             }
             _ => unimplemented!(),
         }

@@ -62,8 +62,9 @@ impl TryFrom<u8> for DataLinkFunction {
     }
 }
 
+const BVLL_TYPE_BACNET_IP: u8 = 0x81;
+
 impl<'a> DataLink<'a> {
-    const BVLL_TYPE_BACNET_IP: u8 = 0x81;
     //    const BVLC_ORIGINAL_UNICAST_NPDU: u8 = 10;
     //    const BVLC_ORIGINAL_BROADCAST_NPDU: u8 = 11;
 
@@ -76,6 +77,55 @@ impl<'a> DataLink<'a> {
         let message = NetworkMessage::Apdu(apdu);
         let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
         DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu))
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push(BVLL_TYPE_BACNET_IP);
+        writer.push(self.function as u8);
+        match &self.function {
+            DataLinkFunction::OriginalBroadcastNpdu | DataLinkFunction::OriginalUnicastNpdu => {
+                writer.extend_from_slice(&[0, 0]); // length placeholder
+                self.npdu.as_ref().unwrap().encode(writer);
+                Self::update_len(writer);
+            }
+            _ => todo!(),
+        }
+    }
+
+    fn update_len(writer: &mut Writer) {
+        let len = writer.index as u16;
+        let src = len.to_be_bytes();
+        writer.buf[2..4].copy_from_slice(&src);
+    }
+
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let bvll_type = reader.read_byte(buf);
+        if bvll_type != BVLL_TYPE_BACNET_IP {
+            panic!("only BACNET_IP supported");
+        }
+
+        let function = reader
+            .read_byte(buf)
+            .try_into()
+            .map_err(|_| Error::InvalidValue("bvll function value out of range"))?;
+        let len: u16 = u16::from_be_bytes(reader.read_bytes(buf));
+
+        if len as usize > buf.len() {
+            return Err(Error::Length(
+                "read buffer too small to fit entire bacnet payload",
+            ));
+        }
+        reader.set_len(len as usize);
+
+        let npdu = match function {
+            // see h_bbmd.c for all the types (only 2 are supported here)
+            DataLinkFunction::OriginalBroadcastNpdu | DataLinkFunction::OriginalUnicastNpdu => {
+                Some(NetworkPdu::decode(reader, buf)?)
+            }
+            _ => None,
+        };
+
+        Ok(Self { function, npdu })
     }
 
     pub fn get_ack_into(self) -> Option<ComplexAck<'a>> {
@@ -109,54 +159,5 @@ impl<'a> DataLink<'a> {
             },
             None => None,
         }
-    }
-
-    pub fn encode(&self, writer: &mut Writer) {
-        writer.push(Self::BVLL_TYPE_BACNET_IP);
-        writer.push(self.function as u8);
-        match &self.function {
-            DataLinkFunction::OriginalBroadcastNpdu | DataLinkFunction::OriginalUnicastNpdu => {
-                writer.extend_from_slice(&[0, 0]); // length placeholder
-                self.npdu.as_ref().unwrap().encode(writer);
-                Self::update_len(writer);
-            }
-            _ => todo!(),
-        }
-    }
-
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
-        let bvll_type = reader.read_byte(buf);
-        if bvll_type != Self::BVLL_TYPE_BACNET_IP {
-            panic!("only BACNET_IP supported");
-        }
-
-        let function = reader
-            .read_byte(buf)
-            .try_into()
-            .map_err(|_| Error::InvalidValue("bvll function value out of range"))?;
-        let len: u16 = u16::from_be_bytes(reader.read_bytes(buf));
-
-        if len as usize > buf.len() {
-            return Err(Error::Length(
-                "read buffer too small to fit entire bacnet payload",
-            ));
-        }
-        reader.set_len(len as usize);
-
-        let npdu = match function {
-            // see h_bbmd.c for all the types (only 2 are supported here)
-            DataLinkFunction::OriginalBroadcastNpdu | DataLinkFunction::OriginalUnicastNpdu => {
-                Some(NetworkPdu::decode(reader, buf)?)
-            }
-            _ => None,
-        };
-
-        Ok(DataLink { function, npdu })
-    }
-
-    fn update_len(writer: &mut Writer) {
-        let len = writer.index as u16;
-        let src = len.to_be_bytes();
-        writer.buf[2..4].copy_from_slice(&src);
     }
 }

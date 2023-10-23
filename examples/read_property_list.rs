@@ -3,7 +3,7 @@ use std::{io::Error, net::UdpSocket};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ComplexAckService, ConfirmedRequest, ConfirmedRequestSerivice},
+        confirmed::{ComplexAckService, ConfirmedRequest, ConfirmedRequestService},
         services::read_property::{ReadProperty, ReadPropertyValue},
     },
     common::{
@@ -29,7 +29,7 @@ fn main() -> Result<(), Error> {
     // encode packet
     let object_id = ObjectId::new(ObjectType::ObjectDevice, DEVICE_ID);
     let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(read_property));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadProperty(read_property));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let src = None;
     let dst = None;

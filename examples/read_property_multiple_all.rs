@@ -3,7 +3,7 @@ use std::{io::Error, net::UdpSocket};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
+        confirmed::{ConfirmedRequest, ConfirmedRequestService},
         services::read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleObject},
     },
     common::{
@@ -30,7 +30,7 @@ fn main() -> Result<(), Error> {
     let rpm = ReadPropertyMultipleObject::new(object_id, &[PropertyId::PropAll]);
     let objects = [rpm];
     let rpm = ReadPropertyMultiple::new(&objects);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadPropertyMultiple(rpm));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let src = None;
     let dst = None;

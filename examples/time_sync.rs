@@ -4,7 +4,7 @@ use chrono::{Datelike, Local, Timelike};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
+        confirmed::{ConfirmedRequest, ConfirmedRequestService},
         primitives::data_value::{Date, Time},
         services::{
             read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleObject},
@@ -81,7 +81,7 @@ fn request_date_time(socket: &UdpSocket) -> Result<(), Error> {
     let rpm = ReadPropertyMultipleObject::new(object_id, &property_ids);
     let objects = [rpm];
     let rpm = ReadPropertyMultiple::new(&objects);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadPropertyMultiple(rpm));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let src = None;
     let dst = None;

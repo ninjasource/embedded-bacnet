@@ -3,7 +3,7 @@ use std::{io::Error, net::UdpSocket};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
+        confirmed::{ConfirmedRequest, ConfirmedRequestService},
         primitives::data_value::{ApplicationDataValueWrite, Enumerated},
         services::write_property::WriteProperty,
     },
@@ -33,7 +33,7 @@ fn main() -> Result<(), Error> {
         None,
         ApplicationDataValueWrite::Enumerated(Enumerated::Binary(Binary::On)),
     );
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::WriteProperty(write_property));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::WriteProperty(write_property));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);

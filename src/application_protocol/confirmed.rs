@@ -25,11 +25,11 @@ pub struct ConfirmedRequest<'a> {
     pub invoke_id: u8,             // starts at 0
     pub sequence_num: u8,          // default to 0
     pub proposed_window_size: u8,  // default to 0
-    pub service: ConfirmedRequestSerivice<'a>,
+    pub service: ConfirmedRequestService<'a>,
 }
 
 impl<'a> ConfirmedRequest<'a> {
-    pub fn new(invoke_id: u8, service: ConfirmedRequestSerivice<'a>) -> Self {
+    pub fn new(invoke_id: u8, service: ConfirmedRequestService<'a>) -> Self {
         Self {
             max_segments: MaxSegments::_65,
             max_adpu: MaxAdpu::_1476,
@@ -54,31 +54,53 @@ impl<'a> ConfirmedRequest<'a> {
         // NOTE: Segment pdu not supported / implemented
 
         match &self.service {
-            ConfirmedRequestSerivice::ReadProperty(service) => {
+            ConfirmedRequestService::ReadProperty(service) => {
                 writer.push(ConfirmedServiceChoice::ReadProperty as u8);
                 service.encode(writer)
             }
-            ConfirmedRequestSerivice::ReadPropertyMultiple(service) => {
+            ConfirmedRequestService::ReadPropertyMultiple(service) => {
                 writer.push(ConfirmedServiceChoice::ReadPropMultiple as u8);
                 service.encode(writer)
             }
-            ConfirmedRequestSerivice::SubscribeCov(service) => {
+            ConfirmedRequestService::SubscribeCov(service) => {
                 writer.push(ConfirmedServiceChoice::SubscribeCov as u8);
                 service.encode(writer)
             }
-            ConfirmedRequestSerivice::WriteProperty(service) => {
+            ConfirmedRequestService::WriteProperty(service) => {
                 writer.push(ConfirmedServiceChoice::WriteProperty as u8);
                 service.encode(writer)
             }
-            ConfirmedRequestSerivice::ReadRange(service) => {
+            ConfirmedRequestService::ReadRange(service) => {
                 writer.push(ConfirmedServiceChoice::ReadRange as u8);
                 service.encode(writer)
             }
         };
     }
 
-    pub fn decode(_reader: &mut Reader, _buf: &[u8]) -> Self {
-        unimplemented!()
+    // the control byte has already been read
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
+        let byte0 = reader.read_byte(buf);
+        let max_segments: MaxSegments = (byte0 & 0xF0).into();
+        let max_adpu: MaxAdpu = (byte0 & 0x0F).into();
+        let invoke_id = reader.read_byte(buf);
+
+        let choice: ConfirmedServiceChoice = reader.read_byte(buf).into();
+        let service = match choice {
+            ConfirmedServiceChoice::ReadPropMultiple => {
+                let service = ReadPropertyMultiple::decode(reader, buf);
+                ConfirmedRequestService::ReadPropertyMultiple(service)
+            }
+            _ => todo!("Choice not supported: {:?}", choice),
+        };
+
+        Self {
+            max_segments,
+            max_adpu,
+            sequence_num: 0,
+            proposed_window_size: 0,
+            invoke_id,
+            service,
+        }
     }
 }
 
@@ -199,6 +221,10 @@ pub struct SimpleAck {
 }
 
 impl SimpleAck {
+    pub fn encode(&self, _writer: &mut Writer) {
+        todo!()
+    }
+
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         let invoke_id = reader.read_byte(buf);
         let service_choice = reader.read_byte(buf).into();
@@ -263,6 +289,10 @@ pub struct ComplexAck<'a> {
 }
 
 impl<'a> ComplexAck<'a> {
+    pub fn encode(&self, _writer: &mut Writer) {
+        todo!()
+    }
+
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let invoke_id = reader.read_byte(buf);
         let choice = reader.read_byte(buf).into();
@@ -298,7 +328,7 @@ pub enum ComplexAckService<'a> {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum ConfirmedRequestSerivice<'a> {
+pub enum ConfirmedRequestService<'a> {
     ReadProperty(ReadProperty),
     ReadPropertyMultiple(ReadPropertyMultiple<'a>),
     SubscribeCov(SubscribeCov),

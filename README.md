@@ -66,3 +66,11 @@ Furthermore, `h_rpm_a.c` means `handle_read_property_multiple_acknowledgements` 
 
 You may notice that there are no (or very little) unit tests. This is because I am not (yet) convinced that the parsing is correct and I don't want to write tests to cover incorrect logic.
 Once I have tested this with multiple real-world controllers I will be happier with what tag numbers are unchanging and which ones are implementation specific. The tests will come.
+
+## Undersstanding the internals
+
+At its heart this library is a bacnet codec (encoder / decoder). Because it does not allocate memory AND we have to deal with varying nubers of things (for example a bacnet packet may have any number
+of objects in it) the encoding and decoding parts have different representations. 
+For example if you wanted to encode a list of objects you would pass a slice from some container because you know, beforehand, how many objects you want to include in the packet. 
+When decoding lists of things we use an iterator so the user can collect those object into a vector or simply process them on the fly. 
+Internally this is represented as a reader that decodes objects on the fly from a byte buffer.

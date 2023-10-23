@@ -3,7 +3,7 @@ use std::{io::Error, net::UdpSocket};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
+        confirmed::{ConfirmedRequest, ConfirmedRequestService},
         services::change_of_value::SubscribeCov,
         unconfirmed::UnconfirmedRequest,
     },
@@ -26,7 +26,7 @@ fn main() -> Result<(), Error> {
     // encode packet
     let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 4);
     let cov = SubscribeCov::new(1, object_id, false, 5);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::SubscribeCov(cov));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::SubscribeCov(cov));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);

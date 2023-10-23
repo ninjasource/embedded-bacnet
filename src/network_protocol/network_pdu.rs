@@ -121,7 +121,6 @@ impl TryFrom<u8> for MessageType {
 
 impl<'a> NetworkPdu<'a> {
     const VERSION: u8 = 0x01; // ASHRAE 135-1995
-
     pub fn new(
         src: Option<SourceAddress>,
         dst: Option<DestinationAddress>,
@@ -164,6 +163,44 @@ impl<'a> NetworkPdu<'a> {
                 writer.push(*message_type);
             }
         };
+    }
+
+    fn calculate_control(&self) -> u8 {
+        let is_network_layer_message = match &self.network_message {
+            NetworkMessage::Apdu(_) => 0,
+            NetworkMessage::MessageType(_) => ControlFlags::NetworkLayerMessage as u8,
+            NetworkMessage::CustomMessageType(_) => ControlFlags::NetworkLayerMessage as u8,
+        };
+
+        let has_destination = match self.dst.as_ref() {
+            Some(dst) => {
+                if dst.network_address.net > 0 {
+                    ControlFlags::HasDestination as u8
+                } else {
+                    0
+                }
+            }
+            None => 0,
+        };
+
+        let has_source = match self.src.as_ref() {
+            Some(src) => {
+                if src.net > 0 && src.net != 0xFFFF {
+                    ControlFlags::HasSource as u8
+                } else {
+                    0
+                }
+            }
+            None => 0,
+        };
+        let expecting_reply = if self.expect_reply {
+            ControlFlags::ExpectingReply as u8
+        } else {
+            0
+        };
+        let message_priority = self.message_priority as u8;
+
+        is_network_layer_message | has_destination | has_source | expecting_reply | message_priority
     }
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
@@ -219,44 +256,6 @@ impl<'a> NetworkPdu<'a> {
             message_priority,
             network_message,
         })
-    }
-
-    fn calculate_control(&self) -> u8 {
-        let is_network_layer_message = match &self.network_message {
-            NetworkMessage::Apdu(_) => 0,
-            NetworkMessage::MessageType(_) => ControlFlags::NetworkLayerMessage as u8,
-            NetworkMessage::CustomMessageType(_) => ControlFlags::NetworkLayerMessage as u8,
-        };
-
-        let has_destination = match self.dst.as_ref() {
-            Some(dst) => {
-                if dst.network_address.net > 0 {
-                    ControlFlags::HasDestination as u8
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-
-        let has_source = match self.src.as_ref() {
-            Some(src) => {
-                if src.net > 0 && src.net != 0xFFFF {
-                    ControlFlags::HasSource as u8
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        };
-        let expecting_reply = if self.expect_reply {
-            ControlFlags::ExpectingReply as u8
-        } else {
-            0
-        };
-        let message_priority = self.message_priority as u8;
-
-        is_network_layer_message | has_destination | has_source | expecting_reply | message_priority
     }
 }
 

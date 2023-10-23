@@ -3,7 +3,7 @@ use std::{io::Error, net::UdpSocket};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
+        confirmed::{ConfirmedRequest, ConfirmedRequestService},
         services::read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleObject},
     },
     common::{
@@ -18,11 +18,12 @@ use embedded_bacnet::{
 };
 
 //const IP_ADDRESS: &str = "192.168.1.215:47808";
-const IP_ADDRESS: &str = "192.168.1.249:47808";
+//const IP_ADDRESS: &str = "192.168.1.249:47808";
+const IP_ADDRESS: &str = "192.168.1.129:47808";
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
-    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
+    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
 
     // encode packet
     let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);
@@ -35,7 +36,7 @@ fn main() -> Result<(), Error> {
     let rpm = ReadPropertyMultipleObject::new(object_id, &property_ids);
     let objects = [rpm];
     let rpm = ReadPropertyMultiple::new(&objects);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadPropertyMultiple(rpm));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let src = None;
     let dst = None;

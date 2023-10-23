@@ -5,8 +5,9 @@ use crate::{
     common::{
         daily_schedule::WeeklySchedule,
         helper::{
-            decode_unsigned, encode_closing_tag, encode_context_enumerated,
-            encode_context_object_id, encode_context_unsigned, encode_opening_tag, get_tagged_body,
+            decode_context_object_id, decode_u32, decode_unsigned, encode_closing_tag,
+            encode_context_enumerated, encode_context_object_id, encode_context_unsigned,
+            encode_opening_tag, get_tagged_body,
         },
         io::{Reader, Writer},
         object_id::ObjectId,
@@ -213,19 +214,71 @@ impl<'a> Iterator for ReadPropertyMultipleAck<'a> {
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultiple<'a> {
-    pub array_index: u32, // use BACNET_ARRAY_ALL for all
-    pub objects: &'a [ReadPropertyMultipleObject<'a>],
+    array_index: u32, // use BACNET_ARRAY_ALL for all
+    objects: &'a [ReadPropertyMultipleObject<'a>],
+    buf: &'a [u8],
+    reader: Reader,
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct PropertyIdList<'a> {
+    pub property_ids: &'a [PropertyId],
+    reader: Reader,
+    buf: &'a [u8],
+}
+
+impl<'a> Iterator for PropertyIdList<'a> {
+    type Item = PropertyId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
+            None
+        } else {
+            let tag = Tag::decode(&mut self.reader, self.buf);
+            assert!(tag.number == TagNumber::ContextSpecific(0));
+            let property_id: PropertyId = decode_u32(tag.value, &mut self.reader, self.buf).into();
+            Some(property_id)
+        }
+    }
+}
+
+impl<'a> PropertyIdList<'a> {
+    pub fn new(property_ids: &'a [PropertyId]) -> Self {
+        Self {
+            property_ids,
+            reader: Reader::new(),
+            buf: &[],
+        }
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        encode_opening_tag(writer, 1);
+
+        for property_id in self.property_ids {
+            // property_id
+            encode_context_enumerated(writer, 0, *property_id);
+
+            // array_index
+            //if self.array_index != BACNET_ARRAY_ALL {
+            //    encode_context_unsigned(writer, 1, self.array_index);
+            //}
+        }
+
+        encode_closing_tag(writer, 1);
+    }
 }
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultipleObject<'a> {
     pub object_id: ObjectId, // e.g ObjectDevice:20088
-    pub property_ids: &'a [PropertyId],
+    pub property_ids: PropertyIdList<'a>,
 }
 
 impl<'a> ReadPropertyMultipleObject<'a> {
     pub fn new(object_id: ObjectId, property_ids: &'a [PropertyId]) -> Self {
+        let property_ids = PropertyIdList::new(property_ids);
         Self {
             object_id,
             property_ids,
@@ -235,9 +288,22 @@ impl<'a> ReadPropertyMultipleObject<'a> {
 
 impl<'a> ReadPropertyMultiple<'a> {
     pub fn new(objects: &'a [ReadPropertyMultipleObject]) -> Self {
+        let reader = Reader::new();
         Self {
             objects,
             array_index: BACNET_ARRAY_ALL,
+            buf: &[],
+            reader,
+        }
+    }
+
+    pub fn new_from_buf(buf: &'a [u8]) -> Self {
+        let reader = Reader::new();
+        Self {
+            objects: &[],
+            array_index: BACNET_ARRAY_ALL,
+            buf,
+            reader,
         }
     }
 
@@ -248,7 +314,7 @@ impl<'a> ReadPropertyMultiple<'a> {
 
             encode_opening_tag(writer, 1);
 
-            for property_id in object.property_ids {
+            for property_id in object.property_ids.property_ids {
                 // property_id
                 encode_context_enumerated(writer, 0, *property_id);
 
@@ -262,7 +328,46 @@ impl<'a> ReadPropertyMultiple<'a> {
         }
     }
 
-    pub fn decode(_reader: &mut Reader) -> Self {
-        unimplemented!()
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
+        let buf = &buf[reader.index..reader.end];
+        let reader = Reader::new_with_len(buf.len());
+        Self {
+            reader,
+            buf,
+            array_index: BACNET_ARRAY_ALL,
+            objects: &[],
+        }
+    }
+}
+
+impl<'a> Iterator for ReadPropertyMultiple<'a> {
+    type Item = ReadPropertyMultipleObject<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
+            return None;
+        }
+
+        let (tag, object_id) = decode_context_object_id(&mut self.reader, self.buf).unwrap();
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(0),
+            "expected object_id tag"
+        );
+
+        let (buf, tag_number) = get_tagged_body(&mut self.reader, self.buf);
+        assert_eq!(tag_number, 1, "expected list of results opening tag");
+        let property_ids = PropertyIdList {
+            property_ids: &[],
+            reader: Reader::new_with_len(buf.len()),
+            buf,
+        };
+
+        let object_with_property_ids = ReadPropertyMultipleObject {
+            object_id,
+            property_ids,
+        };
+
+        Some(object_with_property_ids)
     }
 }

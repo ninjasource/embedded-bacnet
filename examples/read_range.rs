@@ -5,7 +5,7 @@ use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ComplexAckService, ConfirmedRequest, ConfirmedRequestSerivice},
+        confirmed::{ComplexAckService, ConfirmedRequest, ConfirmedRequestService},
         primitives::data_value::ApplicationDataValue,
         services::{
             read_property::{ReadProperty, ReadPropertyValue},
@@ -196,7 +196,7 @@ fn get_items_for_range(
         count: range.end as u32,
     });
     let rp = ReadRange::new(object_id, PropertyId::PropLogBuffer, request_type);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadRange(rp));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadRange(rp));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
@@ -257,7 +257,7 @@ fn get_items_for_range(
 fn get_record_count(socket: &UdpSocket, object_id: ObjectId) -> Result<u32, Error> {
     // encode packet
     let rp = ReadProperty::new(object_id, PropertyId::PropRecordCount);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadProperty(rp));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadProperty(rp));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let src = None;
     let dst = None;

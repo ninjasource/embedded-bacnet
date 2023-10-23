@@ -97,6 +97,12 @@ pub fn encode_context_object_id(writer: &mut Writer, tag_number: u8, object_id: 
     object_id.encode(writer);
 }
 
+pub fn decode_context_object_id(reader: &mut Reader, buf: &[u8]) -> Result<(Tag, ObjectId), Error> {
+    let tag = Tag::decode(reader, buf);
+    let object_id = ObjectId::decode(tag.value, reader, buf)?;
+    Ok((tag, object_id))
+}
+
 pub fn encode_context_bool(writer: &mut Writer, tag_number: u8, value: bool) {
     const LEN: u32 = 1; // 1 byte
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), LEN);
@@ -207,6 +213,21 @@ pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> u64 {
         4 => u32::from_be_bytes(reader.read_bytes(buf)) as u64,
         8 => u64::from_be_bytes(reader.read_bytes(buf)) as u64,
         _ => panic!("invalid unsigned len"),
+    }
+}
+
+pub fn decode_u32(len: u32, reader: &mut Reader, buf: &[u8]) -> u32 {
+    match len {
+        1 => reader.read_byte(buf) as u32,
+        2 => u16::from_be_bytes(reader.read_bytes(buf)) as u32,
+        3 => {
+            let bytes: [u8; 3] = reader.read_bytes(buf);
+            let mut tmp: [u8; 4] = [0; 4];
+            tmp[1..].copy_from_slice(&bytes);
+            u32::from_be_bytes(tmp)
+        }
+        4 => u32::from_be_bytes(reader.read_bytes(buf)),
+        x => panic!("invalid unsigned len: {}", x),
     }
 }
 

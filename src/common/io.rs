@@ -43,6 +43,10 @@ impl Reader {
         }
     }
 
+    pub fn new_with_len(len: usize) -> Self {
+        Self { index: 0, end: len }
+    }
+
     pub fn set_len(&mut self, len: usize) {
         self.end = len;
     }

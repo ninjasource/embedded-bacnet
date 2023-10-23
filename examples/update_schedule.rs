@@ -3,7 +3,7 @@ use std::{io::Error, net::UdpSocket};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestSerivice},
+        confirmed::{ConfirmedRequest, ConfirmedRequestService},
         primitives::data_value::{ApplicationDataValue, ApplicationDataValueWrite},
         services::{
             read_property_multiple::{
@@ -36,7 +36,7 @@ fn main() -> Result<(), Error> {
     let rpm = ReadPropertyMultipleObject::new(object_id, &property_ids);
     let objects = [rpm];
     let rpm = ReadPropertyMultiple::new(&objects);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::ReadPropertyMultiple(rpm));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadPropertyMultiple(rpm));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let src = None;
     let dst = None;
@@ -109,7 +109,7 @@ fn main() -> Result<(), Error> {
         None,
         ApplicationDataValueWrite::WeeklySchedule(weekly_schedule),
     );
-    let req = ConfirmedRequest::new(0, ConfirmedRequestSerivice::WriteProperty(write_property));
+    let req = ConfirmedRequest::new(0, ConfirmedRequestService::WriteProperty(write_property));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);

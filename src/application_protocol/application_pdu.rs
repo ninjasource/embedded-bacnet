@@ -65,6 +65,22 @@ pub enum MaxSegments {
     _65 = 0x70, // default
 }
 
+impl From<u8> for MaxSegments {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => Self::_0,
+            0x10 => Self::_2,
+            0x20 => Self::_4,
+            0x30 => Self::_8,
+            0x40 => Self::_16,
+            0x50 => Self::_32,
+            0x60 => Self::_64,
+            0x70 => Self::_65,
+            _ => Self::_65,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
@@ -77,6 +93,20 @@ pub enum MaxAdpu {
     _1476 = 0x05, // default
 }
 
+impl From<u8> for MaxAdpu {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => Self::_0,
+            0x01 => Self::_128,
+            0x02 => Self::_206,
+            0x03 => Self::_480,
+            0x04 => Self::_1024,
+            0x05 => Self::_1476,
+            _ => Self::_1476,
+        }
+    }
+}
+
 pub enum PduFlags {
     Server = 0b0001,
     SegmentedResponseAccepted = 0b0010,
@@ -87,11 +117,11 @@ pub enum PduFlags {
 impl<'a> ApplicationPdu<'a> {
     pub fn encode(&self, writer: &mut Writer) {
         match self {
-            ApplicationPdu::ConfirmedRequest(req) => req.encode(writer),
-            ApplicationPdu::UnconfirmedRequest(req) => req.encode(writer),
-            ApplicationPdu::ComplexAck(_) => todo!(),
-            ApplicationPdu::SimpleAck(_) => todo!(),
-            ApplicationPdu::Error(_) => todo!(),
+            Self::ConfirmedRequest(req) => req.encode(writer),
+            Self::UnconfirmedRequest(req) => req.encode(writer),
+            Self::ComplexAck(_) => todo!(),
+            Self::SimpleAck(_) => todo!(),
+            Self::Error(_) => todo!(),
         };
     }
 
@@ -109,22 +139,25 @@ impl<'a> ApplicationPdu<'a> {
         }
 
         match pdu_type {
-            ApduType::ConfirmedServiceRequest => Err(Error::ApduTypeNotSupported),
+            ApduType::ConfirmedServiceRequest => {
+                let apdu = ConfirmedRequest::decode(reader, buf);
+                Ok(Self::ConfirmedRequest(apdu))
+            }
             ApduType::UnconfirmedServiceRequest => {
                 let apdu = UnconfirmedRequest::decode(reader, buf);
-                Ok(ApplicationPdu::UnconfirmedRequest(apdu))
+                Ok(Self::UnconfirmedRequest(apdu))
             }
             ApduType::ComplexAck => {
                 let adpu = ComplexAck::decode(reader, buf)?;
-                Ok(ApplicationPdu::ComplexAck(adpu))
+                Ok(Self::ComplexAck(adpu))
             }
             ApduType::SimpleAck => {
                 let adpu = SimpleAck::decode(reader, buf)?;
-                Ok(ApplicationPdu::SimpleAck(adpu))
+                Ok(Self::SimpleAck(adpu))
             }
             ApduType::Error => {
                 let apdu = BacnetError::decode(reader, buf)?;
-                Ok(ApplicationPdu::Error(apdu))
+                Ok(Self::Error(apdu))
             }
             _ => panic!("Unsupported pdu type: {:?}", pdu_type),
         }
