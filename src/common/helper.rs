@@ -174,6 +174,18 @@ pub fn encode_application_signed(writer: &mut Writer, value: i32) {
     encode_signed(writer, len, value);
 }
 
+pub fn get_len_u32(value: u32) -> u32 {
+    if value < 0x100 {
+        1
+    } else if value < 0x10000 {
+        2
+    } else if value < 0x1000000 {
+        3
+    } else {
+        4
+    }
+}
+
 fn get_len_u64(value: u64) -> u32 {
     if value < 0x100 {
         1

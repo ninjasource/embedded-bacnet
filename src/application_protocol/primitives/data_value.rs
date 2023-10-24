@@ -5,7 +5,7 @@ use flagset::{FlagSet, Flags};
 use crate::common::{
     daily_schedule::{WeeklySchedule, WeeklyScheduleWrite},
     error::Error,
-    helper::decode_unsigned,
+    helper::{decode_unsigned, encode_unsigned, get_len_u32},
     io::{Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
@@ -56,12 +56,6 @@ pub enum Enumerated {
 
 impl Enumerated {
     pub fn encode(&self, writer: &mut Writer) {
-        let len = 4;
-        let tag = Tag::new(
-            TagNumber::Application(ApplicationTagNumber::Enumerated),
-            len,
-        );
-        tag.encode(writer);
         let value = match self {
             Self::Units(x) => *x as u32,
             Self::Binary(x) => *x as u32,
@@ -71,7 +65,13 @@ impl Enumerated {
             Self::LoggingType(x) => *x as u32,
             Self::Unknown(x) => *x,
         };
-        writer.extend_from_slice(&value.to_be_bytes());
+        let len = get_len_u32(value);
+        let tag = Tag::new(
+            TagNumber::Application(ApplicationTagNumber::Enumerated),
+            len,
+        );
+        tag.encode(writer);
+        encode_unsigned(writer, len, value as u64);
     }
 }
 
@@ -86,6 +86,8 @@ pub struct Date {
 }
 
 impl Date {
+    pub const LEN: u32 = 4; // 4 bytes
+
     //  year = years since 1900, wildcard=1900+255
     //  month 1=Jan
     //  day = day of month
@@ -134,6 +136,8 @@ pub struct Time {
 }
 
 impl Time {
+    pub const LEN: u32 = 4; // 4 bytes
+
     // assuming that this comes from a Time tag
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
         let hour = reader.read_byte(buf);
@@ -197,6 +201,30 @@ pub struct CustomBitStream<'a> {
 }
 
 impl<'a> BitString<'a> {
+    pub fn encode(&self, writer: &mut Writer) {
+        match self {
+            Self::StatusFlags(x) => {
+                Tag::new(TagNumber::Application(ApplicationTagNumber::BitString), 2).encode(writer);
+                writer.push(0); // no unused bits
+                writer.push(x.bits());
+            }
+            Self::LogBufferResultFlags(x) => {
+                Tag::new(TagNumber::Application(ApplicationTagNumber::BitString), 2).encode(writer);
+                writer.push(0); // no unused bits
+                writer.push(x.bits());
+            }
+            Self::Custom(x) => {
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::BitString),
+                    x.bits.len() as u32 + 1,
+                )
+                .encode(writer);
+                writer.push(0); // no unused bits
+                writer.extend_from_slice(x.bits);
+            }
+        }
+    }
+
     pub fn decode(
         property_id: PropertyId,
         len: u32,
@@ -267,6 +295,70 @@ impl<'a> ApplicationDataValueWrite<'a> {
 }
 
 impl<'a> ApplicationDataValue<'a> {
+    pub fn encode(&self, writer: &mut Writer) {
+        match self {
+            ApplicationDataValue::Boolean(x) => Tag::new(
+                TagNumber::Application(ApplicationTagNumber::Boolean),
+                if *x { 1 } else { 0 },
+            )
+            .encode(writer),
+            ApplicationDataValue::Real(x) => {
+                Tag::new(TagNumber::Application(ApplicationTagNumber::Real), 4).encode(writer);
+                writer.extend_from_slice(&x.to_be_bytes());
+            }
+            ApplicationDataValue::Date(x) => {
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::Date),
+                    Date::LEN,
+                )
+                .encode(writer);
+                x.encode(writer);
+            }
+            ApplicationDataValue::Time(x) => {
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::Time),
+                    Time::LEN,
+                )
+                .encode(writer);
+                x.encode(writer);
+            }
+            ApplicationDataValue::ObjectId(x) => {
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::ObjectId),
+                    ObjectId::LEN,
+                )
+                .encode(writer);
+                x.encode(writer);
+            }
+            ApplicationDataValue::CharacterString(x) => {
+                let utf8_encoded = x.inner.as_bytes(); // strings in rust are utf8 encoded already
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::CharacterString),
+                    utf8_encoded.len() as u32 + 1, // keep space for encoding byte
+                )
+                .encode(writer);
+                writer.push(0); // utf8 encoding
+                writer.extend_from_slice(utf8_encoded);
+            }
+            ApplicationDataValue::Enumerated(x) => {
+                x.encode(writer);
+            }
+            ApplicationDataValue::BitString(x) => {
+                x.encode(writer);
+            }
+            ApplicationDataValue::UnsignedInt(x) => {
+                Tag::new(TagNumber::Application(ApplicationTagNumber::UnsignedInt), 4)
+                    .encode(writer);
+                writer.extend_from_slice(&x.to_be_bytes());
+            }
+            ApplicationDataValue::WeeklySchedule(x) => {
+                todo!("{:?}", x);
+            }
+
+            x => todo!("{:?}", x),
+        };
+    }
+
     pub fn decode(
         tag: &Tag,
         object_id: &ObjectId,

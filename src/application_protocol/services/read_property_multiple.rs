@@ -1,7 +1,9 @@
 use core::fmt::Display;
 
 use crate::{
-    application_protocol::primitives::data_value::ApplicationDataValue,
+    application_protocol::{
+        confirmed::ConfirmedServiceChoice, primitives::data_value::ApplicationDataValue,
+    },
     common::{
         daily_schedule::WeeklySchedule,
         helper::{
@@ -10,7 +12,7 @@ use crate::{
             encode_opening_tag, get_tagged_body,
         },
         io::{Reader, Writer},
-        object_id::ObjectId,
+        object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
         spec::{ErrorClass, ErrorCode, BACNET_ARRAY_ALL},
         tag::{ApplicationTagNumber, Tag, TagNumber},
@@ -20,6 +22,7 @@ use crate::{
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultipleAck<'a> {
+    pub objects_with_results: &'a [ObjectWithResults<'a>],
     buf: &'a [u8],
     reader: Reader,
 }
@@ -28,11 +31,43 @@ pub struct ReadPropertyMultipleAck<'a> {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectWithResults<'a> {
     pub object_id: ObjectId,
-    buf: &'a [u8],
-    reader: Reader,
+    pub property_results: PropertyResultList<'a>,
 }
 
-impl<'a> Iterator for ObjectWithResults<'a> {
+impl<'a> ObjectWithResults<'a> {
+    pub fn encode(&self, writer: &mut Writer) {
+        encode_context_object_id(writer, 0, &self.object_id);
+        encode_opening_tag(writer, 1);
+        self.property_results.encode(writer);
+        encode_closing_tag(writer, 1);
+    }
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
+        let tag = Tag::decode(reader, buf);
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(0),
+            "expected object_id tag"
+        );
+        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
+
+        let (buf, tag_number) = get_tagged_body(reader, buf);
+        assert_eq!(tag_number, 1, "expected list of results opening tag");
+
+        let property_results = PropertyResultList {
+            object_id,
+            buf,
+            reader: Reader::new_with_len(buf.len()),
+            property_results: &[],
+        };
+
+        ObjectWithResults {
+            object_id,
+            property_results,
+        }
+    }
+}
+
+impl<'a> Iterator for PropertyResultList<'a> {
     type Item = PropertyResult<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -104,21 +139,6 @@ impl<'a> Iterator for ObjectWithResults<'a> {
     }
 }
 
-impl<'a> ObjectWithResults<'a> {
-    pub fn new(object_id: ObjectId, buf: &'a [u8]) -> Self {
-        let reader = Reader {
-            index: 0,
-            end: buf.len(),
-        };
-
-        Self {
-            object_id,
-            buf,
-            reader,
-        }
-    }
-}
-
 fn read_error(reader: &mut Reader, buf: &[u8]) -> PropertyAccessError {
     // error class enumerated
     let tag = Tag::decode(reader, buf);
@@ -146,9 +166,42 @@ fn read_error(reader: &mut Reader, buf: &[u8]) -> PropertyAccessError {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct PropertyResultList<'a> {
+    pub property_results: &'a [PropertyResult<'a>],
+    object_id: ObjectId,
+    reader: Reader,
+    buf: &'a [u8],
+}
+
+impl<'a> PropertyResultList<'a> {
+    pub fn new(property_results: &'a [PropertyResult<'a>]) -> Self {
+        Self {
+            property_results,
+            object_id: ObjectId::new(ObjectType::Invalid, 0),
+            reader: Reader::new(),
+            buf: &[],
+        }
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        for item in self.property_results {
+            item.encode(writer);
+        }
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PropertyResult<'a> {
     pub id: PropertyId,
     pub value: PropertyValue<'a>,
+}
+
+impl<'a> PropertyResult<'a> {
+    pub fn encode(&self, writer: &mut Writer) {
+        encode_context_unsigned(writer, 2, self.id as u32);
+        self.value.encode(writer);
+    }
 }
 
 #[derive(Debug)]
@@ -159,6 +212,21 @@ pub enum PropertyValue<'a> {
     // TODO: figure out is we need these
     PropDescription(&'a str),
     PropObjectName(&'a str),
+}
+
+impl<'a> PropertyValue<'a> {
+    pub fn encode(&self, writer: &mut Writer) {
+        match self {
+            Self::PropValue(val) => {
+                encode_opening_tag(writer, 4);
+                val.encode(writer);
+                encode_closing_tag(writer, 4);
+            }
+            Self::PropError(_) => todo!(),
+            Self::PropObjectName(_) => todo!(),
+            Self::PropDescription(_) => todo!(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -178,12 +246,31 @@ impl<'a> Display for PropertyValue<'a> {
 }
 
 impl<'a> ReadPropertyMultipleAck<'a> {
-    pub fn new(buf: &'a [u8]) -> Self {
+    pub fn new(objects_with_results: &'a [ObjectWithResults<'a>]) -> Self {
+        Self {
+            objects_with_results,
+            buf: &[],
+            reader: Reader::new(),
+        }
+    }
+
+    pub fn new_from_buf(buf: &'a [u8]) -> Self {
         let reader = Reader {
             index: 0,
             end: buf.len(),
         };
-        Self { buf, reader }
+        Self {
+            buf,
+            reader,
+            objects_with_results: &[],
+        }
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push(ConfirmedServiceChoice::ReadPropMultiple as u8);
+        for item in self.objects_with_results {
+            item.encode(writer);
+        }
     }
 }
 
@@ -195,18 +282,7 @@ impl<'a> Iterator for ReadPropertyMultipleAck<'a> {
             return None;
         }
 
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecific(0),
-            "expected object_id tag"
-        );
-        let object_id = ObjectId::decode(tag.value, &mut self.reader, self.buf).unwrap();
-
-        let (buf, tag_number) = get_tagged_body(&mut self.reader, self.buf);
-        assert_eq!(tag_number, 1, "expected list of results opening tag");
-
-        let object_with_results = ObjectWithResults::new(object_id, buf);
+        let object_with_results = ObjectWithResults::decode(&mut self.reader, self.buf);
         Some(object_with_results)
     }
 }

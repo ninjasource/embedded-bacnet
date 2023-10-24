@@ -289,8 +289,16 @@ pub struct ComplexAck<'a> {
 }
 
 impl<'a> ComplexAck<'a> {
-    pub fn encode(&self, _writer: &mut Writer) {
-        todo!()
+    pub fn encode(&self, writer: &mut Writer) {
+        let control = (ApduType::ComplexAck as u8) << 4;
+        writer.push(control);
+        writer.push(self.invoke_id);
+
+        match &self.service {
+            ComplexAckService::ReadProperty(_) => todo!(),
+            ComplexAckService::ReadPropertyMultiple(service) => service.encode(writer),
+            ComplexAckService::ReadRange(_) => todo!(),
+        }
     }
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
@@ -304,7 +312,7 @@ impl<'a> ComplexAck<'a> {
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
                 let buf = &buf[reader.index..reader.end];
-                ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck::new(buf))
+                ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck::new_from_buf(buf))
             }
             ConfirmedServiceChoice::ReadRange => {
                 let apdu = ReadRangeAck::decode(reader, buf);

@@ -64,7 +64,7 @@ fn main() -> Result<(), Error> {
     // read values
     if let Some(message) = message.get_read_property_multiple_ack_into() {
         for values in message {
-            for x in values {
+            for x in values.property_results {
                 println!("{:?}", x);
             }
         }

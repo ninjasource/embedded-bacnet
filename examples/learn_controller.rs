@@ -153,8 +153,8 @@ fn get_multi_binary(
     if let Some(ack) = message.get_read_property_multiple_ack_into() {
         let mut items = vec![];
 
-        for x in ack {
-            let mut x = x.into_iter();
+        for obj in ack {
+            let mut x = obj.property_results.into_iter();
             let name = x.next().unwrap().value.to_string();
             let value = match x.next().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Binary(
@@ -170,7 +170,7 @@ fn get_multi_binary(
             };
 
             items.push(BinaryValue {
-                id: x.object_id,
+                id: obj.object_id,
                 name,
                 value,
                 status_flags,
@@ -213,8 +213,8 @@ fn get_multi_analog(
     if let Some(ack) = message.get_read_property_multiple_ack_into() {
         let mut items = vec![];
 
-        for x in ack {
-            let mut x = x.into_iter();
+        for obj in ack {
+            let mut x = obj.property_results.into_iter();
             let name = x.next().unwrap().value.to_string();
             let value = match x.next().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::Real(val)) => val,
@@ -234,7 +234,7 @@ fn get_multi_analog(
             };
 
             items.push(AnalogValue {
-                id: x.object_id,
+                id: obj.object_id,
                 name,
                 value,
                 units,
