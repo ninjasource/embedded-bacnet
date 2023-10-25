@@ -90,10 +90,13 @@ impl<'a> ConfirmedRequest<'a> {
                 let service = ReadProperty::decode(reader, buf);
                 ConfirmedRequestService::ReadProperty(service)
             }
-
             ConfirmedServiceChoice::ReadPropMultiple => {
                 let service = ReadPropertyMultiple::decode(reader, buf);
                 ConfirmedRequestService::ReadPropertyMultiple(service)
+            }
+            ConfirmedServiceChoice::ReadRange => {
+                let service = ReadRange::decode(reader, buf);
+                ConfirmedRequestService::ReadRange(service)
             }
             _ => todo!("Choice not supported: {:?}", choice),
         };
@@ -302,7 +305,7 @@ impl<'a> ComplexAck<'a> {
         match &self.service {
             ComplexAckService::ReadProperty(service) => service.encode(writer),
             ComplexAckService::ReadPropertyMultiple(service) => service.encode(writer),
-            ComplexAckService::ReadRange(_) => todo!(),
+            ComplexAckService::ReadRange(service) => service.encode(writer),
         }
     }
 

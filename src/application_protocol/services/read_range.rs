@@ -1,10 +1,14 @@
 use crate::{
-    application_protocol::primitives::data_value::{BitString, Date, Time},
+    application_protocol::{
+        confirmed::ConfirmedServiceChoice,
+        primitives::data_value::{BitString, Date, Time},
+    },
     common::{
         helper::{
-            decode_context_enumerated, decode_unsigned, encode_application_signed,
-            encode_application_unsigned, encode_closing_tag, encode_context_enumerated,
-            encode_context_object_id, encode_context_unsigned, encode_opening_tag, get_tagged_body,
+            decode_context_enumerated, decode_context_object_id, decode_signed, decode_unsigned,
+            encode_application_signed, encode_application_unsigned, encode_closing_tag,
+            encode_context_enumerated, encode_context_object_id, encode_context_unsigned,
+            encode_opening_tag, get_tagged_body,
         },
         io::{Reader, Writer},
         object_id::ObjectId,
@@ -73,6 +77,23 @@ impl<'a> ReadRangeAck<'a> {
     const ITEM_COUNT_TAG: u8 = 4;
     const ITEM_DATA_TAG: u8 = 5;
 
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push(ConfirmedServiceChoice::ReadRange as u8);
+        encode_context_object_id(writer, Self::OBJECT_ID_TAG, &self.object_id);
+        encode_context_enumerated(writer, Self::PROPERTY_ID_TAG, self.property_id);
+        if self.array_index != BACNET_ARRAY_ALL {
+            encode_context_unsigned(writer, Self::ARRAY_INDEX_TAG, self.array_index)
+        }
+        self.result_flags
+            .encode_context(Self::RESULT_FLAGS_TAG, writer);
+        encode_context_unsigned(writer, Self::ITEM_COUNT_TAG, self.item_count as u32);
+
+        // item data
+        encode_opening_tag(writer, Self::ITEM_DATA_TAG);
+        self.item_data.encode(writer);
+        encode_closing_tag(writer, Self::ITEM_DATA_TAG);
+    }
+
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
         // object_id
         let tag = Tag::decode(reader, buf);
@@ -126,7 +147,7 @@ impl<'a> ReadRangeAck<'a> {
             assert_eq!(tag_number, Self::ITEM_DATA_TAG, "invalid item_data tag");
             buf
         };
-        let item_data = ReadRangeItems::new(buf);
+        let item_data = ReadRangeItems::new_from_buf(buf);
 
         Self {
             object_id,
@@ -142,11 +163,12 @@ impl<'a> ReadRangeAck<'a> {
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRangeItems<'a> {
+    pub items: &'a [ReadRangeItem<'a>],
     reader: Reader,
     buf: &'a [u8],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ReadRangeValue {
@@ -206,13 +228,64 @@ impl<'a> ReadRangeItems<'a> {
     const VALUE_TAG: u8 = 1;
     const STATUS_FLAGS_TAG: u8 = 2;
 
-    pub fn new(buf: &'a [u8]) -> Self {
+    pub fn new_from_buf(buf: &'a [u8]) -> Self {
         let reader = Reader {
             index: 0,
             end: buf.len(),
         };
 
-        Self { reader, buf }
+        Self {
+            items: &[],
+            reader,
+            buf,
+        }
+    }
+
+    pub fn new(items: &'a [ReadRangeItem<'a>]) -> Self {
+        Self {
+            items,
+            reader: Reader::new(),
+            buf: &[],
+        }
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        for item in self.items {
+            // date and time
+            Tag::new(TagNumber::ContextSpecificOpening(Self::DATE_TIME_TAG), 0).encode(writer);
+            Tag::new(
+                TagNumber::Application(ApplicationTagNumber::Date),
+                Date::LEN,
+            )
+            .encode(writer);
+            item.date.encode(writer);
+            Tag::new(
+                TagNumber::Application(ApplicationTagNumber::Time),
+                Time::LEN,
+            )
+            .encode(writer);
+            item.time.encode(writer);
+            Tag::new(TagNumber::ContextSpecificClosing(Self::DATE_TIME_TAG), 0).encode(writer);
+
+            // value
+            Tag::new(TagNumber::ContextSpecificOpening(Self::VALUE_TAG), 0).encode(writer);
+            match item.value {
+                ReadRangeValue::Real(value) => {
+                    Tag::new(
+                        TagNumber::ContextSpecific(ReadRangeValueType::Real as u8),
+                        4,
+                    )
+                    .encode(writer);
+                    writer.extend_from_slice(&value.to_be_bytes());
+                }
+                _ => todo!("{:?}", item.value),
+            }
+            Tag::new(TagNumber::ContextSpecificClosing(Self::VALUE_TAG), 0).encode(writer);
+
+            // status
+            item.status_flags
+                .encode_context(Self::STATUS_FLAGS_TAG, writer);
+        }
     }
 }
 
@@ -332,8 +405,73 @@ impl ReadRange {
         }
     }
 
-    pub fn decode(_reader: &mut Reader) {
-        unimplemented!("handle read_range only required for a server. see ReadRangeAck for client");
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+        let (tag, object_id) = decode_context_object_id(reader, buf).unwrap();
+        assert_eq!(tag.number, TagNumber::ContextSpecific(Self::OBJECT_ID_TAG));
+
+        let (tag, property_id) = decode_context_enumerated(reader, buf);
+        assert_eq!(
+            tag.number,
+            TagNumber::ContextSpecific(Self::PROPERTY_ID_TAG)
+        );
+
+        let mut tag = Tag::decode(reader, buf);
+        let array_index = if tag.number == TagNumber::ContextSpecific(Self::ARRAY_INDEX_TAG) {
+            let value = decode_unsigned(tag.value, reader, buf) as u32;
+            tag = Tag::decode(reader, buf);
+            value
+        } else {
+            BACNET_ARRAY_ALL
+        };
+
+        let request_type = match tag.number {
+            TagNumber::ContextSpecificOpening(Self::BY_POSITION_TAG) => {
+                // index
+                let index_tag = Tag::decode(reader, buf);
+                assert_eq!(
+                    index_tag.number,
+                    TagNumber::Application(ApplicationTagNumber::UnsignedInt)
+                );
+                let index = decode_unsigned(index_tag.value, reader, buf) as u32;
+
+                // count
+                let count_tag = Tag::decode(reader, buf);
+                let count = match count_tag.number {
+                    TagNumber::Application(ApplicationTagNumber::UnsignedInt) => {
+                        decode_unsigned(count_tag.value, reader, buf) as u32
+                    }
+                    TagNumber::Application(ApplicationTagNumber::SignedInt) => {
+                        let count = decode_signed(count_tag.value, reader, buf);
+                        if count < 0 {
+                            panic!("invalid count: {count}");
+                        }
+
+                        count as u32
+                    }
+                    _ => panic!("invalid count tag: {:?}", count_tag),
+                };
+
+                // closing tag
+                let tag = Tag::decode(reader, buf);
+                assert_eq!(
+                    tag.number,
+                    TagNumber::ContextSpecificClosing(Self::BY_POSITION_TAG)
+                );
+
+                ReadRangeRequestType::ByPosition(ReadRangeByPosition {
+                    count: count as u32,
+                    index,
+                })
+            }
+            _ => unimplemented!("{:?}", tag),
+        };
+
+        Self {
+            array_index,
+            object_id,
+            property_id,
+            request_type,
+        }
     }
 
     pub fn encode(&self, writer: &mut Writer) {

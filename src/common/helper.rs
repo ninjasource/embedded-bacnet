@@ -262,6 +262,21 @@ pub fn decode_u32(len: u32, reader: &mut Reader, buf: &[u8]) -> u32 {
     }
 }
 
+pub fn decode_signed(len: u32, reader: &mut Reader, buf: &[u8]) -> i32 {
+    match len {
+        1 => reader.read_byte(buf) as i32,
+        2 => u16::from_be_bytes(reader.read_bytes(buf)) as i32,
+        3 => {
+            let bytes: [u8; 3] = reader.read_bytes(buf);
+            let mut tmp: [u8; 4] = [0; 4];
+            tmp[1..].copy_from_slice(&bytes);
+            i32::from_be_bytes(tmp) as i32
+        }
+        4 => i32::from_be_bytes(reader.read_bytes(buf)) as i32,
+        _ => panic!("invalid unsigned len"),
+    }
+}
+
 pub fn encode_unsigned(writer: &mut Writer, len: u32, value: u64) {
     match len {
         1 => writer.push(value as u8),

@@ -69,7 +69,7 @@ impl Enumerated {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Date {
@@ -119,7 +119,7 @@ impl Date {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Time {
@@ -195,7 +195,7 @@ pub struct CustomBitStream<'a> {
 }
 
 impl<'a> BitString<'a> {
-    pub fn encode(&self, writer: &mut Writer) {
+    pub fn encode_application(&self, writer: &mut Writer) {
         match self {
             Self::StatusFlags(x) => {
                 Tag::new(TagNumber::Application(ApplicationTagNumber::BitString), 2).encode(writer);
@@ -213,6 +213,27 @@ impl<'a> BitString<'a> {
                     x.bits.len() as u32 + 1,
                 )
                 .encode(writer);
+                writer.push(0); // no unused bits
+                writer.extend_from_slice(x.bits);
+            }
+        }
+    }
+
+    pub fn encode_context(&self, tag_num: u8, writer: &mut Writer) {
+        match self {
+            Self::StatusFlags(x) => {
+                Tag::new(TagNumber::ContextSpecific(tag_num), 2).encode(writer);
+                writer.push(0); // no unused bits
+                writer.push(x.bits());
+            }
+            Self::LogBufferResultFlags(x) => {
+                Tag::new(TagNumber::ContextSpecific(tag_num), 2).encode(writer);
+                writer.push(0); // no unused bits
+                writer.push(x.bits());
+            }
+            Self::Custom(x) => {
+                Tag::new(TagNumber::ContextSpecific(tag_num), x.bits.len() as u32 + 1)
+                    .encode(writer);
                 writer.push(0); // no unused bits
                 writer.extend_from_slice(x.bits);
             }
@@ -338,7 +359,7 @@ impl<'a> ApplicationDataValue<'a> {
                 x.encode(writer);
             }
             ApplicationDataValue::BitString(x) => {
-                x.encode(writer);
+                x.encode_application(writer);
             }
             ApplicationDataValue::UnsignedInt(x) => {
                 Tag::new(TagNumber::Application(ApplicationTagNumber::UnsignedInt), 4)

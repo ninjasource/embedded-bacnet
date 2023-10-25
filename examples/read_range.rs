@@ -24,11 +24,12 @@ use embedded_bacnet::{
 };
 
 //const IP_ADDRESS: &str = "192.168.1.215:47808";
-const IP_ADDRESS: &str = "192.168.1.249:47808";
+//const IP_ADDRESS: &str = "192.168.1.249:47808";
+const IP_ADDRESS: &str = "192.168.1.129:47808";
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
-    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
+    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
     let object_id = ObjectId::new(ObjectType::ObjectTrendlog, 4);
 
     let record_count = get_record_count(&socket, object_id)? as usize;
