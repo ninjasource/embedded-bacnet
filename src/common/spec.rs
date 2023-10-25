@@ -11,7 +11,7 @@ pub const BACNET_NO_PRIORITY: u32 = 0;
 pub const BACNET_MIN_PRIORITY: u32 = 1;
 pub const BACNET_MAX_PRIORITY: u32 = 16;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u32)]

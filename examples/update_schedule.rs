@@ -13,7 +13,7 @@ use embedded_bacnet::{
         },
     },
     common::{
-        daily_schedule::WeeklyScheduleWrite,
+        daily_schedule::WeeklySchedule,
         io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
@@ -95,7 +95,7 @@ fn main() -> Result<(), Error> {
     // change the schedule
     monday[0].time.hour = 8;
 
-    let weekly_schedule = WeeklyScheduleWrite::new(
+    let weekly_schedule = WeeklySchedule::new(
         &monday, &tuesday, &wednesday, &thursday, &friday, &saturday, &sunday,
     );
 

@@ -86,6 +86,11 @@ impl<'a> ConfirmedRequest<'a> {
 
         let choice: ConfirmedServiceChoice = reader.read_byte(buf).into();
         let service = match choice {
+            ConfirmedServiceChoice::ReadProperty => {
+                let service = ReadProperty::decode(reader, buf);
+                ConfirmedRequestService::ReadProperty(service)
+            }
+
             ConfirmedServiceChoice::ReadPropMultiple => {
                 let service = ReadPropertyMultiple::decode(reader, buf);
                 ConfirmedRequestService::ReadPropertyMultiple(service)
@@ -295,7 +300,7 @@ impl<'a> ComplexAck<'a> {
         writer.push(self.invoke_id);
 
         match &self.service {
-            ComplexAckService::ReadProperty(_) => todo!(),
+            ComplexAckService::ReadProperty(service) => service.encode(writer),
             ComplexAckService::ReadPropertyMultiple(service) => service.encode(writer),
             ComplexAckService::ReadRange(_) => todo!(),
         }

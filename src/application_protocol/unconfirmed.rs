@@ -22,7 +22,7 @@ impl<'a> UnconfirmedRequest<'a> {
         writer.push((ApduType::UnconfirmedServiceRequest as u8) << 4);
 
         match &self {
-            Self::IAm(_) => todo!(),
+            Self::IAm(payload) => payload.encode(writer),
             Self::WhoIs(payload) => payload.encode(writer),
             Self::CovNotification(_) => todo!(),
             Self::TimeSynchronization(payload) => payload.encode(writer),

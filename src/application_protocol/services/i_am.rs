@@ -1,10 +1,16 @@
-use crate::common::{
-    error::Error,
-    helper::decode_unsigned,
-    io::Reader,
-    object_id::{ObjectId, ObjectType},
-    spec::Segmentation,
-    tag::{ApplicationTagNumber, Tag, TagNumber},
+use crate::{
+    application_protocol::unconfirmed::UnconfirmedServiceChoice,
+    common::{
+        error::Error,
+        helper::{
+            decode_unsigned, encode_application_enumerated, encode_application_object_id,
+            encode_application_unsigned,
+        },
+        io::{Reader, Writer},
+        object_id::{ObjectId, ObjectType},
+        spec::Segmentation,
+        tag::{ApplicationTagNumber, Tag, TagNumber},
+    },
 };
 
 #[derive(Debug)]
@@ -17,6 +23,14 @@ pub struct IAm {
 }
 
 impl IAm {
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push(UnconfirmedServiceChoice::IAm as u8);
+        encode_application_object_id(writer, &self.device_id);
+        encode_application_unsigned(writer, self.max_apdu as u64);
+        encode_application_enumerated(writer, self.segmentation as u32);
+        encode_application_unsigned(writer, self.vendor_id as u64);
+    }
+
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         // parse a tag, starting from after the pdu type and service choice, then the object_id
         let tag = Tag::decode(reader, buf);

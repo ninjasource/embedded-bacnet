@@ -18,6 +18,7 @@ use embedded_bacnet::{
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
         spec::{Binary, EngineeringUnits, StatusFlags},
+        time_value::TimeValue,
     },
     network_protocol::data_link::DataLink,
 };
@@ -26,13 +27,14 @@ use flagset::FlagSet;
 //const IP_ADDRESS: &str = "192.168.1.215:47808";
 //const DEVICE_ID: u32 = 76011;
 
-const IP_ADDRESS: &str = "192.168.1.249:47808";
+//const IP_ADDRESS: &str = "192.168.1.249:47808";
 const DEVICE_ID: u32 = 79079;
+const IP_ADDRESS: &str = "192.168.1.129:47808";
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
 
-    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
+    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
 
     // encode packet
     let object_id = ObjectId::new(ObjectType::ObjectDevice, DEVICE_ID);
@@ -69,7 +71,9 @@ fn main() -> Result<(), Error> {
                     | ObjectType::ObjectBinaryValue
                     | ObjectType::ObjectAnalogInput
                     | ObjectType::ObjectAnalogOutput
-                    | ObjectType::ObjectAnalogValue => {
+                    | ObjectType::ObjectAnalogValue
+                    | ObjectType::ObjectSchedule
+                    | ObjectType::ObjectTrendlog => {
                         let list = map.entry(item.object_type as u32).or_insert(vec![]);
                         list.push(item);
                     }
@@ -97,6 +101,19 @@ fn main() -> Result<(), Error> {
                         println!("{:?}", _values);
                     }
                 }
+                ObjectType::ObjectSchedule => {
+                    for object_id in ids.as_slice() {
+                        let values = get_multi_schedule(&socket, object_id)?;
+                        println!("{:?}", values);
+                    }
+                }
+                ObjectType::ObjectTrendlog => {
+                    for chunk in ids.as_slice().chunks(10).into_iter() {
+                        let values = get_multi_trend_log(&socket, chunk)?;
+                        println!("{:?}", values);
+                    }
+                }
+
                 _ => {}
             }
         }
@@ -120,6 +137,26 @@ struct BinaryValue {
     pub name: String,
     pub value: bool,
     pub status_flags: FlagSet<StatusFlags>,
+}
+
+#[derive(Debug)]
+struct ScheduleValue {
+    pub id: ObjectId,
+    pub name: String,
+    pub monday: Vec<TimeValue>,
+    pub tuesday: Vec<TimeValue>,
+    pub wednesday: Vec<TimeValue>,
+    pub thursday: Vec<TimeValue>,
+    pub friday: Vec<TimeValue>,
+    pub saturday: Vec<TimeValue>,
+    pub sunday: Vec<TimeValue>,
+}
+
+#[derive(Debug)]
+struct TrendLogValue {
+    pub id: ObjectId,
+    pub name: String,
+    pub record_count: u32,
 }
 
 fn get_multi_binary(
@@ -240,6 +277,103 @@ fn get_multi_analog(
                 units,
                 status_flags,
             })
+        }
+
+        return Ok(items);
+    }
+
+    Ok(vec![])
+}
+
+fn get_multi_trend_log(
+    socket: &UdpSocket,
+    object_ids: &[ObjectId],
+) -> Result<Vec<TrendLogValue>, Error> {
+    let property_ids = [PropertyId::PropObjectName, PropertyId::PropRecordCount];
+
+    let items: Vec<ReadPropertyMultipleObject> = object_ids
+        .iter()
+        .map(|x| ReadPropertyMultipleObject::new(*x, &property_ids))
+        .collect();
+
+    let rpm = ReadPropertyMultiple::new(&items);
+    let mut buf = vec![0; 16 * 1024];
+    let mut buffer = Writer::new(&mut buf);
+    read_property_multiple_to_bytes(rpm, &mut buffer);
+    socket.send_to(buffer.to_bytes(), &IP_ADDRESS)?;
+    let mut buf = vec![0; 16 * 1024];
+    let (n, _) = socket.recv_from(&mut buf).unwrap();
+    let buf = &buf[..n];
+    let mut reader = Reader::new();
+    let message = DataLink::decode(&mut reader, buf).unwrap();
+
+    if let Some(ack) = message.get_read_property_multiple_ack_into() {
+        let mut items = vec![];
+
+        for obj in ack {
+            let mut x = obj.property_results.into_iter();
+            let name = x.next().unwrap().value.to_string();
+            let record_count = match x.next().unwrap().value {
+                PropertyValue::PropValue(ApplicationDataValue::UnsignedInt(val)) => val,
+                _ => unreachable!(),
+            };
+
+            items.push(TrendLogValue {
+                id: obj.object_id,
+                name,
+                record_count,
+            })
+        }
+
+        return Ok(items);
+    }
+
+    Ok(vec![])
+}
+
+fn get_multi_schedule(
+    socket: &UdpSocket,
+    object_id: &ObjectId,
+) -> Result<Vec<ScheduleValue>, Error> {
+    let property_ids = [PropertyId::PropObjectName, PropertyId::PropWeeklySchedule];
+    let objects = [ReadPropertyMultipleObject::new(*object_id, &property_ids)];
+    let rpm = ReadPropertyMultiple::new(&objects);
+    let mut buf = vec![0; 4 * 1024];
+    let mut writer = Writer::new(&mut buf);
+    read_property_multiple_to_bytes(rpm, &mut writer);
+    socket.send_to(writer.to_bytes(), &IP_ADDRESS)?;
+    let mut buf = vec![0; 16 * 1024];
+    let (n, _) = socket.recv_from(&mut buf).unwrap();
+    let buf = &buf[..n];
+    let mut reader = Reader::new();
+    let message = DataLink::decode(&mut reader, buf).unwrap();
+
+    //let message = send_and_recv(items, socket)?;
+
+    if let Some(ack) = message.get_read_property_multiple_ack_into() {
+        let mut items = vec![];
+
+        for obj in ack {
+            let mut x = obj.property_results.into_iter();
+            let name = x.next().unwrap().value.to_string();
+            let value = match x.next().unwrap().value {
+                PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(schedule)) => {
+                    schedule
+                }
+                _ => panic!("expected weekly schedule"),
+            };
+
+            items.push(ScheduleValue {
+                id: obj.object_id,
+                name,
+                monday: value.monday.collect(),
+                tuesday: value.tuesday.collect(),
+                wednesday: value.wednesday.collect(),
+                thursday: value.thursday.collect(),
+                friday: value.friday.collect(),
+                saturday: value.saturday.collect(),
+                sunday: value.sunday.collect(),
+            });
         }
 
         return Ok(items);

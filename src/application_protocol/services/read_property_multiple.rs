@@ -99,7 +99,7 @@ impl<'a> Iterator for PropertyResultList<'a> {
                         PropertyValue::PropValue(ApplicationDataValue::Boolean(false))
                     }
                     PropertyId::PropWeeklySchedule => {
-                        let weekly_schedule = WeeklySchedule::new(&mut reader, buf);
+                        let weekly_schedule = WeeklySchedule::new_from_buf(&mut reader, buf);
                         PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
                             weekly_schedule,
                         ))

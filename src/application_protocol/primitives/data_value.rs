@@ -3,9 +3,9 @@ use core::{fmt::Display, str::from_utf8};
 use flagset::{FlagSet, Flags};
 
 use crate::common::{
-    daily_schedule::{WeeklySchedule, WeeklyScheduleWrite},
+    daily_schedule::WeeklySchedule,
     error::Error,
-    helper::{decode_unsigned, encode_unsigned, get_len_u32},
+    helper::{decode_unsigned, encode_application_enumerated},
     io::{Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
@@ -38,7 +38,7 @@ pub enum ApplicationDataValueWrite<'a> {
     Boolean(bool),
     Enumerated(Enumerated),
     Real(f32),
-    WeeklySchedule(WeeklyScheduleWrite<'a>),
+    WeeklySchedule(WeeklySchedule<'a>),
 }
 
 #[derive(Debug)]
@@ -65,13 +65,7 @@ impl Enumerated {
             Self::LoggingType(x) => *x as u32,
             Self::Unknown(x) => *x,
         };
-        let len = get_len_u32(value);
-        let tag = Tag::new(
-            TagNumber::Application(ApplicationTagNumber::Enumerated),
-            len,
-        );
-        tag.encode(writer);
-        encode_unsigned(writer, len, value as u64);
+        encode_application_enumerated(writer, value);
     }
 }
 
@@ -352,7 +346,8 @@ impl<'a> ApplicationDataValue<'a> {
                 writer.extend_from_slice(&x.to_be_bytes());
             }
             ApplicationDataValue::WeeklySchedule(x) => {
-                todo!("{:?}", x);
+                // no application tag required for weekly schedule
+                x.encode(writer);
             }
 
             x => todo!("{:?}", x),

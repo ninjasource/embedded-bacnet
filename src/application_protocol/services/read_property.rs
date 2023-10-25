@@ -1,9 +1,12 @@
 use crate::{
-    application_protocol::primitives::data_value::ApplicationDataValue,
+    application_protocol::{
+        confirmed::ConfirmedServiceChoice, primitives::data_value::ApplicationDataValue,
+    },
     common::{
         helper::{
-            decode_context_enumerated, encode_context_enumerated, encode_context_object_id,
-            encode_context_unsigned, get_tagged_body,
+            decode_context_enumerated, decode_context_object_id, encode_closing_tag,
+            encode_context_enumerated, encode_context_object_id, encode_context_unsigned,
+            encode_opening_tag, get_tagged_body,
         },
         io::{Reader, Writer},
         object_id::ObjectId,
@@ -23,8 +26,38 @@ pub enum ReadPropertyValue<'a> {
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectIdList<'a> {
+    pub object_ids: &'a [ObjectId],
     reader: Reader,
     buf: &'a [u8],
+}
+
+impl<'a> ObjectIdList<'a> {
+    pub fn new(object_ids: &'a [ObjectId]) -> Self {
+        Self {
+            object_ids,
+            reader: Reader::new(),
+            buf: &[],
+        }
+    }
+
+    pub fn new_from_buf(buf: &'a [u8]) -> Self {
+        Self {
+            object_ids: &[],
+            reader: Reader::new_with_len(buf.len()),
+            buf,
+        }
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        for object_id in self.object_ids {
+            Tag::new(
+                TagNumber::Application(ApplicationTagNumber::ObjectId),
+                ObjectId::LEN,
+            )
+            .encode(writer);
+            object_id.encode(writer);
+        }
+    }
 }
 
 impl<'a> Iterator for ObjectIdList<'a> {
@@ -56,6 +89,22 @@ pub struct ReadPropertyAck<'a> {
 }
 
 impl<'a> ReadPropertyAck<'a> {
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push(ConfirmedServiceChoice::ReadProperty as u8);
+        encode_context_object_id(writer, 0, &self.object_id);
+        encode_context_enumerated(writer, 1, self.property_id);
+        encode_opening_tag(writer, 3);
+        match &self.property_value {
+            ReadPropertyValue::ApplicationDataValue(value) => {
+                value.encode(writer);
+            }
+            ReadPropertyValue::ObjectIdList(value) => {
+                value.encode(writer);
+            }
+        }
+        encode_closing_tag(writer, 3);
+    }
+
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
         let tag = Tag::decode(reader, buf);
         assert_eq!(
@@ -86,7 +135,8 @@ impl<'a> ReadPropertyAck<'a> {
 
         match property_id {
             PropertyId::PropObjectList => {
-                let property_value = ReadPropertyValue::ObjectIdList(ObjectIdList { reader, buf });
+                let property_value =
+                    ReadPropertyValue::ObjectIdList(ObjectIdList::new_from_buf(buf));
 
                 return Self {
                     object_id,
@@ -147,7 +197,19 @@ impl ReadProperty {
         }
     }
 
-    pub fn decode(_reader: &mut Reader) -> Self {
-        unimplemented!()
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+        // object_id
+        let (tag, object_id) = decode_context_object_id(reader, buf).unwrap();
+        assert_eq!(tag.number, TagNumber::ContextSpecific(0));
+
+        // property_id
+        let (tag, property_id) = decode_context_enumerated(reader, buf);
+        assert_eq!(tag.number, TagNumber::ContextSpecific(1));
+
+        Self {
+            object_id,
+            property_id,
+            array_index: BACNET_ARRAY_ALL,
+        }
     }
 }

@@ -167,6 +167,25 @@ pub fn encode_application_unsigned(writer: &mut Writer, value: u64) {
     encode_unsigned(writer, len, value);
 }
 
+pub fn encode_application_enumerated(writer: &mut Writer, value: u32) {
+    let len = get_len_u32(value);
+    let tag = Tag::new(
+        TagNumber::Application(ApplicationTagNumber::Enumerated),
+        len,
+    );
+    tag.encode(writer);
+    encode_unsigned(writer, len, value as u64);
+}
+
+pub fn encode_application_object_id(writer: &mut Writer, object_id: &ObjectId) {
+    Tag::new(
+        TagNumber::Application(ApplicationTagNumber::ObjectId),
+        ObjectId::LEN,
+    )
+    .encode(writer);
+    object_id.encode(writer);
+}
+
 pub fn encode_application_signed(writer: &mut Writer, value: i32) {
     let mut len = get_len_i32(value);
     len = if len == 3 { 4 } else { len }; // we don't bother with 3 byte integers (just save it as a 4 byte integer)

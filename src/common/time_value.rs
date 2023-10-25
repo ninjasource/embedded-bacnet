@@ -89,9 +89,11 @@ pub struct TimeValue {
 }
 
 impl TimeValue {
+    pub const LEN: u32 = 4;
+
     pub fn decode(tag: &Tag, reader: &mut Reader, buf: &[u8]) -> TimeValue {
         // 4 bytes
-        assert_eq!(tag.value, 4);
+        assert_eq!(tag.value, Self::LEN);
         let time = match &tag.number {
             TagNumber::Application(ApplicationTagNumber::Time) => Time::decode(reader, buf),
             number => panic!("expected time application tag but got: {:?}", number),
@@ -102,7 +104,10 @@ impl TimeValue {
     }
 
     pub fn encode(&self, writer: &mut Writer) {
-        let tag = Tag::new(TagNumber::Application(ApplicationTagNumber::Time), 4);
+        let tag = Tag::new(
+            TagNumber::Application(ApplicationTagNumber::Time),
+            Self::LEN,
+        );
         tag.encode(writer);
         self.time.encode(writer);
         let tag = self.value.tag();
