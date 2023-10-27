@@ -120,7 +120,7 @@ impl<'a> ApplicationPdu<'a> {
             Self::ConfirmedRequest(req) => req.encode(writer),
             Self::UnconfirmedRequest(req) => req.encode(writer),
             Self::ComplexAck(req) => req.encode(writer),
-            Self::SimpleAck(_) => todo!(),
+            Self::SimpleAck(ack) => ack.encode(writer),
             Self::Error(_) => todo!(),
         };
     }

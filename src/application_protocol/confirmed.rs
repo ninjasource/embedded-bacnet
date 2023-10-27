@@ -98,6 +98,10 @@ impl<'a> ConfirmedRequest<'a> {
                 let service = ReadRange::decode(reader, buf);
                 ConfirmedRequestService::ReadRange(service)
             }
+            ConfirmedServiceChoice::WriteProperty => {
+                let service = WriteProperty::decode(reader, buf);
+                ConfirmedRequestService::WriteProperty(service)
+            }
             _ => todo!("Choice not supported: {:?}", choice),
         };
 
@@ -112,7 +116,7 @@ impl<'a> ConfirmedRequest<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum ConfirmedServiceChoice {
@@ -229,8 +233,11 @@ pub struct SimpleAck {
 }
 
 impl SimpleAck {
-    pub fn encode(&self, _writer: &mut Writer) {
-        todo!()
+    pub fn encode(&self, writer: &mut Writer) {
+        let control = (ApduType::SimpleAck as u8) << 4;
+        writer.push(control);
+        writer.push(self.invoke_id);
+        writer.push(self.service_choice.clone() as u8);
     }
 
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {

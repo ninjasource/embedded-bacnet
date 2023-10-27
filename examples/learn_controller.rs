@@ -28,8 +28,10 @@ use flagset::FlagSet;
 //const DEVICE_ID: u32 = 76011;
 
 //const IP_ADDRESS: &str = "192.168.1.249:47808";
-const DEVICE_ID: u32 = 79079;
-const IP_ADDRESS: &str = "192.168.1.129:47808";
+//const DEVICE_ID: u32 = 79079;
+//const IP_ADDRESS: &str = "192.168.1.101:47808";
+const DEVICE_ID: u32 = 79080;
+const IP_ADDRESS: &str = "localhost:47808";
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();

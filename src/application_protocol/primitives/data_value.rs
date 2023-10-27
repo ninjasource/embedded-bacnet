@@ -286,6 +286,27 @@ impl<'a> CharacterString<'a> {
 }
 
 impl<'a> ApplicationDataValueWrite<'a> {
+    pub fn decode(
+        object_id: &ObjectId,
+        property_id: &PropertyId,
+        reader: &mut Reader,
+        buf: &[u8],
+    ) -> Self {
+        let tag = Tag::decode(reader, buf);
+        match tag.number {
+            TagNumber::Application(ApplicationTagNumber::Boolean) => Self::Boolean(tag.value > 0),
+            TagNumber::Application(ApplicationTagNumber::Real) => {
+                assert_eq!(tag.value, 4, "read tag should have length of 4");
+                Self::Real(f32::from_be_bytes(reader.read_bytes(buf)))
+            }
+            TagNumber::Application(ApplicationTagNumber::Enumerated) => {
+                let value = decode_enumerated(object_id, property_id, &tag, reader, buf);
+                Self::Enumerated(value)
+            }
+            _ => todo!("{:?}", tag.number),
+        }
+    }
+
     pub fn encode(&self, writer: &mut Writer) {
         match self {
             Self::Boolean(x) => {
@@ -401,40 +422,7 @@ impl<'a> ApplicationDataValue<'a> {
                 ApplicationDataValue::CharacterString(text)
             }
             ApplicationTagNumber::Enumerated => {
-                let value = decode_unsigned(tag.value, reader, buf) as u32;
-                let value = match property_id {
-                    PropertyId::PropUnits => {
-                        let units = value.try_into().unwrap();
-                        Enumerated::Units(units)
-                    }
-                    PropertyId::PropPresentValue => match object_id.object_type {
-                        ObjectType::ObjectBinaryInput
-                        | ObjectType::ObjectBinaryOutput
-                        | ObjectType::ObjectBinaryValue => {
-                            let binary = value.try_into().unwrap();
-                            Enumerated::Binary(binary)
-                        }
-                        _ => Enumerated::Unknown(value),
-                    },
-                    PropertyId::PropObjectType => {
-                        let object_type = ObjectType::try_from(value).unwrap();
-                        Enumerated::ObjectType(object_type)
-                    }
-                    PropertyId::PropEventState => {
-                        let event_state = EventState::try_from(value).unwrap();
-                        Enumerated::EventState(event_state)
-                    }
-                    PropertyId::PropNotifyType => {
-                        let notify_type = NotifyType::try_from(value).unwrap();
-                        Enumerated::NotifyType(notify_type)
-                    }
-                    PropertyId::PropLoggingType => {
-                        let logging_type = LoggingType::try_from(value).unwrap();
-                        Enumerated::LoggingType(logging_type)
-                    }
-
-                    _ => Enumerated::Unknown(value),
-                };
+                let value = decode_enumerated(object_id, property_id, tag, reader, buf);
                 ApplicationDataValue::Enumerated(value)
             }
             ApplicationTagNumber::BitString => {
@@ -462,5 +450,48 @@ impl<'a> ApplicationDataValue<'a> {
 
             x => unimplemented!("{:?}", x),
         }
+    }
+}
+
+fn decode_enumerated(
+    object_id: &ObjectId,
+    property_id: &PropertyId,
+    tag: &Tag,
+    reader: &mut Reader,
+    buf: &[u8],
+) -> Enumerated {
+    let value = decode_unsigned(tag.value, reader, buf) as u32;
+    match property_id {
+        PropertyId::PropUnits => {
+            let units = value.try_into().unwrap();
+            Enumerated::Units(units)
+        }
+        PropertyId::PropPresentValue => match object_id.object_type {
+            ObjectType::ObjectBinaryInput
+            | ObjectType::ObjectBinaryOutput
+            | ObjectType::ObjectBinaryValue => {
+                let binary = value.try_into().unwrap();
+                Enumerated::Binary(binary)
+            }
+            _ => Enumerated::Unknown(value),
+        },
+        PropertyId::PropObjectType => {
+            let object_type = ObjectType::try_from(value).unwrap();
+            Enumerated::ObjectType(object_type)
+        }
+        PropertyId::PropEventState => {
+            let event_state = EventState::try_from(value).unwrap();
+            Enumerated::EventState(event_state)
+        }
+        PropertyId::PropNotifyType => {
+            let notify_type = NotifyType::try_from(value).unwrap();
+            Enumerated::NotifyType(notify_type)
+        }
+        PropertyId::PropLoggingType => {
+            let logging_type = LoggingType::try_from(value).unwrap();
+            Enumerated::LoggingType(logging_type)
+        }
+
+        _ => Enumerated::Unknown(value),
     }
 }
