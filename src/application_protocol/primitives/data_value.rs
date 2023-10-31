@@ -290,20 +290,30 @@ impl<'a> ApplicationDataValueWrite<'a> {
         object_id: &ObjectId,
         property_id: &PropertyId,
         reader: &mut Reader,
-        buf: &[u8],
+        buf: &'a [u8],
     ) -> Self {
-        let tag = Tag::decode(reader, buf);
-        match tag.number {
-            TagNumber::Application(ApplicationTagNumber::Boolean) => Self::Boolean(tag.value > 0),
-            TagNumber::Application(ApplicationTagNumber::Real) => {
-                assert_eq!(tag.value, 4, "read tag should have length of 4");
-                Self::Real(f32::from_be_bytes(reader.read_bytes(buf)))
+        match property_id {
+            PropertyId::PropWeeklySchedule => {
+                let weekly_schedule = WeeklySchedule::new_from_buf(reader, buf);
+                Self::WeeklySchedule(weekly_schedule)
             }
-            TagNumber::Application(ApplicationTagNumber::Enumerated) => {
-                let value = decode_enumerated(object_id, property_id, &tag, reader, buf);
-                Self::Enumerated(value)
+            _ => {
+                let tag = Tag::decode(reader, buf);
+                match tag.number {
+                    TagNumber::Application(ApplicationTagNumber::Boolean) => {
+                        Self::Boolean(tag.value > 0)
+                    }
+                    TagNumber::Application(ApplicationTagNumber::Real) => {
+                        assert_eq!(tag.value, 4, "read tag should have length of 4");
+                        Self::Real(f32::from_be_bytes(reader.read_bytes(buf)))
+                    }
+                    TagNumber::Application(ApplicationTagNumber::Enumerated) => {
+                        let value = decode_enumerated(object_id, property_id, &tag, reader, buf);
+                        Self::Enumerated(value)
+                    }
+                    _ => todo!("{:?}", tag.number),
+                }
             }
-            _ => todo!("{:?}", tag.number),
         }
     }
 
