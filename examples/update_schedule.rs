@@ -70,17 +70,17 @@ fn main() -> Result<(), Error> {
     if let Some(message) = message.get_read_property_multiple_ack_into() {
         for values in message {
             for x in values.property_results.into_iter() {
-                match x.value {
+                match x.unwrap().value {
                     PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
                         weekly_schedule,
                     )) => {
-                        monday = weekly_schedule.monday.collect();
-                        tuesday = weekly_schedule.tuesday.collect();
-                        wednesday = weekly_schedule.wednesday.collect();
-                        thursday = weekly_schedule.thursday.collect();
-                        friday = weekly_schedule.friday.collect();
-                        saturday = weekly_schedule.saturday.collect();
-                        sunday = weekly_schedule.sunday.collect();
+                        monday = weekly_schedule.monday.map(|x| x.unwrap()).collect();
+                        tuesday = weekly_schedule.tuesday.map(|x| x.unwrap()).collect();
+                        wednesday = weekly_schedule.wednesday.map(|x| x.unwrap()).collect();
+                        thursday = weekly_schedule.thursday.map(|x| x.unwrap()).collect();
+                        friday = weekly_schedule.friday.map(|x| x.unwrap()).collect();
+                        saturday = weekly_schedule.saturday.map(|x| x.unwrap()).collect();
+                        sunday = weekly_schedule.sunday.map(|x| x.unwrap()).collect();
                     }
                     _ => {
                         // do nothing

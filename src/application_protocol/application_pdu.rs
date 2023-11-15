@@ -1,5 +1,5 @@
 use crate::common::{
-    error::Error,
+    error::{self, Error},
     io::{Reader, Writer},
 };
 
@@ -34,18 +34,20 @@ pub enum ApduType {
     Abort = 7,
 }
 
-impl From<u8> for ApduType {
-    fn from(value: u8) -> Self {
+impl TryFrom<u8> for ApduType {
+    type Error = error::Error;
+
+    fn try_from(value: u8) -> Result<Self, Error> {
         match value {
-            0 => Self::ConfirmedServiceRequest,
-            1 => Self::UnconfirmedServiceRequest,
-            2 => Self::SimpleAck,
-            3 => Self::ComplexAck,
-            4 => Self::SegmentAck,
-            5 => Self::Error,
-            6 => Self::Reject,
-            7 => Self::Abort,
-            _ => panic!("invalid pdu type"),
+            0 => Ok(Self::ConfirmedServiceRequest),
+            1 => Ok(Self::UnconfirmedServiceRequest),
+            2 => Ok(Self::SimpleAck),
+            3 => Ok(Self::ComplexAck),
+            4 => Ok(Self::SegmentAck),
+            5 => Ok(Self::Error),
+            6 => Ok(Self::Reject),
+            7 => Ok(Self::Abort),
+            x => Err(Error::InvalidVariant(("ApduType", x as u32))),
         }
     }
 }
@@ -128,7 +130,7 @@ impl<'a> ApplicationPdu<'a> {
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let byte0 = reader.read_byte(buf);
-        let pdu_type: ApduType = (byte0 >> 4).into();
+        let pdu_type: ApduType = (byte0 >> 4).try_into()?;
         let pdu_flags = byte0 & 0x0F;
         let segmented_message = (pdu_flags & PduFlags::SegmentedMessage as u8) > 0;
         let _more_follows = (pdu_flags & PduFlags::MoreFollows as u8) > 0;
@@ -141,11 +143,11 @@ impl<'a> ApplicationPdu<'a> {
 
         match pdu_type {
             ApduType::ConfirmedServiceRequest => {
-                let apdu = ConfirmedRequest::decode(reader, buf);
+                let apdu = ConfirmedRequest::decode(reader, buf)?;
                 Ok(Self::ConfirmedRequest(apdu))
             }
             ApduType::UnconfirmedServiceRequest => {
-                let apdu = UnconfirmedRequest::decode(reader, buf);
+                let apdu = UnconfirmedRequest::decode(reader, buf)?;
                 Ok(Self::UnconfirmedRequest(apdu))
             }
             ApduType::ComplexAck => {
@@ -160,7 +162,7 @@ impl<'a> ApplicationPdu<'a> {
                 let apdu = BacnetError::decode(reader, buf)?;
                 Ok(Self::Error(apdu))
             }
-            _ => panic!("Unsupported pdu type: {:?}", pdu_type),
+            apdu_type => Err(Error::ApduTypeNotSupported(apdu_type)),
         }
     }
 }

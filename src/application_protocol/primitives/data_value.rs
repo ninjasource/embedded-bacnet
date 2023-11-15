@@ -291,27 +291,30 @@ impl<'a> ApplicationDataValueWrite<'a> {
         property_id: &PropertyId,
         reader: &mut Reader,
         buf: &'a [u8],
-    ) -> Self {
+    ) -> Result<Self, Error> {
         match property_id {
             PropertyId::PropWeeklySchedule => {
                 let weekly_schedule = WeeklySchedule::new_from_buf(reader, buf);
-                Self::WeeklySchedule(weekly_schedule)
+                Ok(Self::WeeklySchedule(weekly_schedule))
             }
             _ => {
                 let tag = Tag::decode(reader, buf);
                 match tag.number {
                     TagNumber::Application(ApplicationTagNumber::Boolean) => {
-                        Self::Boolean(tag.value > 0)
+                        Ok(Self::Boolean(tag.value > 0))
                     }
                     TagNumber::Application(ApplicationTagNumber::Real) => {
                         assert_eq!(tag.value, 4, "read tag should have length of 4");
-                        Self::Real(f32::from_be_bytes(reader.read_bytes(buf)))
+                        Ok(Self::Real(f32::from_be_bytes(reader.read_bytes(buf))))
                     }
                     TagNumber::Application(ApplicationTagNumber::Enumerated) => {
                         let value = decode_enumerated(object_id, property_id, &tag, reader, buf);
-                        Self::Enumerated(value)
+                        Ok(Self::Enumerated(value))
                     }
-                    _ => todo!("{:?}", tag.number),
+                    tag_number => Err(Error::TagNotSupported((
+                        "ApplicationDataValueWrite decode",
+                        tag_number,
+                    ))),
                 }
             }
         }

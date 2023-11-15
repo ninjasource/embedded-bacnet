@@ -224,6 +224,7 @@ fn get_items_for_range(
         match ack.service {
             ComplexAckService::ReadRange(read_range) => {
                 for item in read_range.item_data {
+                    let item = item.unwrap();
                     let value = match item.value {
                         ReadRangeValue::Real(x) => x,
                         _ => 0.0,

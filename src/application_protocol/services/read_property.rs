@@ -3,8 +3,9 @@ use crate::{
         confirmed::ConfirmedServiceChoice, primitives::data_value::ApplicationDataValue,
     },
     common::{
+        error::Error,
         helper::{
-            decode_context_enumerated, decode_context_object_id, encode_closing_tag,
+            decode_context_object_id, decode_context_property_id, encode_closing_tag,
             encode_context_enumerated, encode_context_object_id, encode_context_unsigned,
             encode_opening_tag, get_tagged_body,
         },
@@ -61,21 +62,25 @@ impl<'a> ObjectIdList<'a> {
 }
 
 impl<'a> Iterator for ObjectIdList<'a> {
-    type Item = ObjectId;
+    type Item = Result<ObjectId, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.reader.eof() {
             None
         } else {
-            let tag = Tag::decode(&mut self.reader, self.buf);
-            match tag.number {
-                TagNumber::Application(ApplicationTagNumber::ObjectId) => {
-                    // ok
+            match Tag::decode_expected(
+                &mut self.reader,
+                self.buf,
+                TagNumber::Application(ApplicationTagNumber::ObjectId),
+                "ObjectIdList nex",
+            ) {
+                Ok(tag) => {
+                    let object_id =
+                        ObjectId::decode(tag.value, &mut self.reader, self.buf).unwrap();
+                    Some(Ok(object_id))
                 }
-                x => panic!("Unexpected tag number: {:?}", x),
+                Err(e) => Some(Err(e)),
             }
-            let object_id = ObjectId::decode(tag.value, &mut self.reader, self.buf).unwrap();
-            Some(object_id)
         }
     }
 }
@@ -105,20 +110,16 @@ impl<'a> ReadPropertyAck<'a> {
         encode_closing_tag(writer, 3);
     }
 
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
             TagNumber::ContextSpecific(0),
             "invalid object id tag"
         );
-        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
-        let (tag, property_id) = decode_context_enumerated(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecific(1),
-            "invalid property id tag"
-        );
+        let object_id = ObjectId::decode(tag.value, reader, buf)?;
+        let property_id =
+            decode_context_property_id(reader, buf, 1, "ReadPropertyAck decode property_id")?;
 
         //let tag = Tag::decode(reader, buf);
         let (buf, tag_number) = get_tagged_body(reader, buf);
@@ -138,11 +139,11 @@ impl<'a> ReadPropertyAck<'a> {
                 let property_value =
                     ReadPropertyValue::ObjectIdList(ObjectIdList::new_from_buf(buf));
 
-                Self {
+                Ok(Self {
                     object_id,
                     property_id,
                     property_value,
-                }
+                })
             }
             property_id => {
                 let tag = Tag::decode(&mut reader, buf);
@@ -157,11 +158,11 @@ impl<'a> ReadPropertyAck<'a> {
                 //    "expected closing tag"
                 //);
 
-                Self {
+                Ok(Self {
                     object_id,
                     property_id,
                     property_value,
-                }
+                })
             }
         }
     }
@@ -197,19 +198,18 @@ impl ReadProperty {
         }
     }
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         // object_id
-        let (tag, object_id) = decode_context_object_id(reader, buf).unwrap();
-        assert_eq!(tag.number, TagNumber::ContextSpecific(0));
+        let object_id = decode_context_object_id(reader, buf, 0)?;
 
         // property_id
-        let (tag, property_id) = decode_context_enumerated(reader, buf);
-        assert_eq!(tag.number, TagNumber::ContextSpecific(1));
+        let property_id =
+            decode_context_property_id(reader, buf, 1, "ReadProperty decode property_id")?;
 
-        Self {
+        Ok(Self {
             object_id,
             property_id,
             array_index: BACNET_ARRAY_ALL,
-        }
+        })
     }
 }

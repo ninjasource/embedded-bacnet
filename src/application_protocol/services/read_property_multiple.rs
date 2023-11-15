@@ -6,6 +6,7 @@ use crate::{
     },
     common::{
         daily_schedule::WeeklySchedule,
+        error::Error,
         helper::{
             decode_context_object_id, decode_u32, decode_unsigned, encode_closing_tag,
             encode_context_enumerated, encode_context_object_id, encode_context_unsigned,
@@ -68,7 +69,7 @@ impl<'a> ObjectWithResults<'a> {
 }
 
 impl<'a> Iterator for PropertyResultList<'a> {
-    type Item = PropertyResult<'a>;
+    type Item = Result<PropertyResult<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.reader.eof() {
@@ -119,8 +120,10 @@ impl<'a> Iterator for PropertyResultList<'a> {
             }
             5 => {
                 // property read error
-                let error = read_error(&mut reader, buf);
-                PropertyValue::PropError(error)
+                match read_error(&mut reader, buf) {
+                    Ok(error) => PropertyValue::PropError(error),
+                    Err(e) => return Some(Err(e)),
+                }
             }
             x => {
                 panic!(
@@ -135,33 +138,39 @@ impl<'a> Iterator for PropertyResultList<'a> {
             value: property_value,
         };
 
-        Some(property_result)
+        Some(Ok(property_result))
     }
 }
 
-fn read_error(reader: &mut Reader, buf: &[u8]) -> PropertyAccessError {
+fn read_error(reader: &mut Reader, buf: &[u8]) -> Result<PropertyAccessError, Error> {
     // error class enumerated
-    let tag = Tag::decode(reader, buf);
-    match &tag.number {
-        TagNumber::Application(ApplicationTagNumber::Enumerated) => {}
-        _unknown => panic!("enumerated application tag number expected for error class"),
-    };
+    let tag = Tag::decode_expected(
+        reader,
+        buf,
+        TagNumber::Application(ApplicationTagNumber::Enumerated),
+        "read_error error_class",
+    )?;
     let value = decode_unsigned(tag.value, reader, buf) as u32;
-    let error_class = value.try_into().unwrap();
+    let error_class = value
+        .try_into()
+        .map_err(|x| Error::InvalidVariant(("ErrorClass", x)))?;
 
     // error code enumerated
-    let tag = Tag::decode(reader, buf);
-    match &tag.number {
-        TagNumber::Application(ApplicationTagNumber::Enumerated) => {}
-        _unknown => panic!("enumerated application tag number expected for error code"),
-    };
+    let tag = Tag::decode_expected(
+        reader,
+        buf,
+        TagNumber::Application(ApplicationTagNumber::Enumerated),
+        "read_error error code",
+    )?;
     let value = decode_unsigned(tag.value, reader, buf) as u32;
-    let error_code = value.try_into().unwrap();
+    let error_code = value
+        .try_into()
+        .map_err(|x| Error::InvalidVariant(("ErrorCode", x)))?;
 
-    PropertyAccessError {
+    Ok(PropertyAccessError {
         error_class,
         error_code,
-    }
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -424,12 +433,7 @@ impl<'a> Iterator for ReadPropertyMultiple<'a> {
             return None;
         }
 
-        let (tag, object_id) = decode_context_object_id(&mut self.reader, self.buf).unwrap();
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecific(0),
-            "expected object_id tag"
-        );
+        let object_id = decode_context_object_id(&mut self.reader, self.buf, 0).unwrap();
 
         let (buf, tag_number) = get_tagged_body(&mut self.reader, self.buf);
         assert_eq!(tag_number, 1, "expected list of results opening tag");

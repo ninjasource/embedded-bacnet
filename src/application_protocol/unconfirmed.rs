@@ -1,4 +1,7 @@
-use crate::common::io::{Reader, Writer};
+use crate::common::{
+    error::Error,
+    io::{Reader, Writer},
+};
 
 use super::{
     application_pdu::ApduType,
@@ -28,20 +31,23 @@ impl<'a> UnconfirmedRequest<'a> {
             Self::TimeSynchronization(payload) => payload.encode(writer),
         }
     }
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
-        let choice: UnconfirmedServiceChoice = reader.read_byte(buf).into();
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let choice: UnconfirmedServiceChoice = reader
+            .read_byte(buf)
+            .try_into()
+            .map_err(|x| Error::InvalidVariant(("UnconfirmedRequest choice", x as u32)))?;
         match choice {
             UnconfirmedServiceChoice::IAm => {
-                let apdu = IAm::decode(reader, buf).unwrap();
-                Self::IAm(apdu)
+                let apdu = IAm::decode(reader, buf)?;
+                Ok(Self::IAm(apdu))
             }
             UnconfirmedServiceChoice::WhoIs => {
                 let apdu = WhoIs::decode(reader, buf);
-                Self::WhoIs(apdu)
+                Ok(Self::WhoIs(apdu))
             }
             UnconfirmedServiceChoice::CovNotification => {
-                let apdu = CovNotification::decode(reader, buf).unwrap();
-                Self::CovNotification(apdu)
+                let apdu = CovNotification::decode(reader, buf)?;
+                Ok(Self::CovNotification(apdu))
             }
             _ => unimplemented!(),
         }
@@ -83,26 +89,27 @@ pub enum UnconfirmedServiceChoice {
     MaxBacnetUnconfirmedService = 15,
 }
 
-impl From<u8> for UnconfirmedServiceChoice {
-    fn from(value: u8) -> Self {
+impl TryFrom<u8> for UnconfirmedServiceChoice {
+    type Error = u8;
+    fn try_from(value: u8) -> Result<Self, u8> {
         match value {
-            0 => Self::IAm,
-            1 => Self::IHave,
-            2 => Self::CovNotification,
-            3 => Self::EventNotification,
-            4 => Self::PrivateTransfer,
-            5 => Self::TextMessage,
-            6 => Self::TimeSynchronization,
-            7 => Self::WhoHas,
-            8 => Self::WhoIs,
-            9 => Self::UtcTimeSynchronization,
-            10 => Self::WriteGroup,
-            11 => Self::CovNotificationMultiple,
-            12 => Self::AuditNotification,
-            13 => Self::WhoAmI,
-            14 => Self::YouAre,
-            15 => Self::MaxBacnetUnconfirmedService,
-            _ => panic!("invalid unconfirmed service choice"),
+            0 => Ok(Self::IAm),
+            1 => Ok(Self::IHave),
+            2 => Ok(Self::CovNotification),
+            3 => Ok(Self::EventNotification),
+            4 => Ok(Self::PrivateTransfer),
+            5 => Ok(Self::TextMessage),
+            6 => Ok(Self::TimeSynchronization),
+            7 => Ok(Self::WhoHas),
+            8 => Ok(Self::WhoIs),
+            9 => Ok(Self::UtcTimeSynchronization),
+            10 => Ok(Self::WriteGroup),
+            11 => Ok(Self::CovNotificationMultiple),
+            12 => Ok(Self::AuditNotification),
+            13 => Ok(Self::WhoAmI),
+            14 => Ok(Self::YouAre),
+            15 => Ok(Self::MaxBacnetUnconfirmedService),
+            x => Err(x),
         }
     }
 }

@@ -1,5 +1,3 @@
-use arrayref::array_ref;
-
 use super::{
     error::Error,
     io::{Reader, Writer},
@@ -69,38 +67,25 @@ pub fn encode_u64(writer: &mut Writer, value: u64) {
     writer.extend_from_slice(&value.to_be_bytes());
 }
 
-pub fn _parse_unsigned(bytes: &[u8], len: u32) -> Result<(&[u8], u32), Error> {
-    let len = len as usize;
-    if len > 4 || len == 0 {
-        return Err(Error::InvalidValue(
-            "unsigned len value is 0 or greater than 4",
-        ));
-    }
-    if bytes.len() < len {
-        return Err(Error::Length(
-            "unsigned len value greater than remaining bytes",
-        ));
-    }
-    let val = match len {
-        1 => bytes[0] as u32,
-        2 => u16::from_be_bytes(*array_ref!(bytes, 0, 2)) as u32,
-        3 => (bytes[0] as u32) << 16 | (bytes[1] as u32) << 8 | bytes[2] as u32,
-        4 => u32::from_be_bytes(*array_ref!(bytes, 0, 4)),
-        _ => panic!("invalid unsigned len"),
-    };
-    Ok((&bytes[len..], val))
-}
-
 pub fn encode_context_object_id(writer: &mut Writer, tag_number: u8, object_id: &ObjectId) {
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), ObjectId::LEN);
     tag.encode(writer);
     object_id.encode(writer);
 }
 
-pub fn decode_context_object_id(reader: &mut Reader, buf: &[u8]) -> Result<(Tag, ObjectId), Error> {
-    let tag = Tag::decode(reader, buf);
+pub fn decode_context_object_id(
+    reader: &mut Reader,
+    buf: &[u8],
+    expected_tag_num: u8,
+) -> Result<ObjectId, Error> {
+    let tag = Tag::decode_expected(
+        reader,
+        buf,
+        TagNumber::ContextSpecific(expected_tag_num),
+        "decode_context_object_id",
+    )?;
     let object_id = ObjectId::decode(tag.value, reader, buf)?;
-    Ok((tag, object_id))
+    Ok(object_id)
 }
 
 pub fn encode_context_bool(writer: &mut Writer, tag_number: u8, value: bool) {
@@ -141,11 +126,21 @@ pub fn encode_context_unsigned(writer: &mut Writer, tag_number: u8, value: u32) 
     encode_unsigned(writer, len, value as u64);
 }
 
-pub fn decode_context_enumerated(reader: &mut Reader, buf: &[u8]) -> (Tag, PropertyId) {
-    let tag = Tag::decode(reader, buf);
+pub fn decode_context_property_id(
+    reader: &mut Reader,
+    buf: &[u8],
+    expected_tag_number: u8,
+    context: &'static str,
+) -> Result<PropertyId, Error> {
+    let tag = Tag::decode_expected(
+        reader,
+        buf,
+        TagNumber::ContextSpecific(expected_tag_number),
+        context,
+    )?;
     let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf) as u32).into();
 
-    (tag, property_id)
+    Ok(property_id)
 }
 
 pub fn encode_context_enumerated(writer: &mut Writer, tag_number: u8, property_id: &PropertyId) {
@@ -258,7 +253,7 @@ pub fn decode_u32(len: u32, reader: &mut Reader, buf: &[u8]) -> u32 {
             u32::from_be_bytes(tmp)
         }
         4 => u32::from_be_bytes(reader.read_bytes(buf)),
-        x => panic!("invalid unsigned len: {}", x),
+        x => panic!("invalid u32 len: {}", x),
     }
 }
 
@@ -273,7 +268,7 @@ pub fn decode_signed(len: u32, reader: &mut Reader, buf: &[u8]) -> i32 {
             i32::from_be_bytes(tmp)
         }
         4 => i32::from_be_bytes(reader.read_bytes(buf)),
-        _ => panic!("invalid unsigned len"),
+        _ => panic!("invalid signed len"),
     }
 }
 

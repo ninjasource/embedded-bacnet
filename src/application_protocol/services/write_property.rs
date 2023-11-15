@@ -1,8 +1,9 @@
 use crate::{
     application_protocol::primitives::data_value::ApplicationDataValueWrite,
     common::{
+        error::Error,
         helper::{
-            decode_context_enumerated, decode_context_object_id, decode_unsigned,
+            decode_context_object_id, decode_context_property_id, decode_unsigned,
             encode_closing_tag, encode_context_enumerated, encode_context_object_id,
             encode_context_unsigned, encode_opening_tag,
         },
@@ -48,14 +49,14 @@ impl<'a> WriteProperty<'a> {
         }
     }
 
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
-        let (tag, object_id) = decode_context_object_id(reader, buf).unwrap();
-        assert_eq!(tag.number, TagNumber::ContextSpecific(Self::TAG_OBJECT_ID));
-        let (tag, property_id) = decode_context_enumerated(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecific(Self::TAG_PROPERTY_ID)
-        );
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let object_id = decode_context_object_id(reader, buf, Self::TAG_OBJECT_ID)?;
+        let property_id = decode_context_property_id(
+            reader,
+            buf,
+            Self::TAG_PROPERTY_ID,
+            "WriteProperty decode property_id",
+        )?;
 
         // array_index
         let mut tag = Tag::decode(reader, buf);
@@ -74,7 +75,7 @@ impl<'a> WriteProperty<'a> {
             tag.number,
             TagNumber::ContextSpecificOpening(Self::TAG_VALUE)
         );
-        let value = ApplicationDataValueWrite::decode(&object_id, &property_id, reader, buf);
+        let value = ApplicationDataValueWrite::decode(&object_id, &property_id, reader, buf)?;
         tag = Tag::decode(reader, buf);
         assert_eq!(
             tag.number,
@@ -90,13 +91,13 @@ impl<'a> WriteProperty<'a> {
             Some(priority)
         };
 
-        Self {
+        Ok(Self {
             object_id,
             property_id,
             array_index,
             value,
             priority,
-        }
+        })
     }
 
     pub fn encode(&self, writer: &mut Writer) {

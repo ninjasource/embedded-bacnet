@@ -1,4 +1,7 @@
-use super::io::{Reader, Writer};
+use super::{
+    error::{Error, ExpectedTag},
+    io::{Reader, Writer},
+};
 
 // byte0:
 // bits 7-4 tag_num
@@ -184,6 +187,44 @@ impl Tag {
         } else {
             let value = (byte0 & 0x07).into();
             Self { number, value }
+        }
+    }
+
+    pub fn decode_expected(
+        reader: &mut Reader,
+        buf: &[u8],
+        expected: TagNumber,
+        context: &'static str,
+    ) -> Result<Self, Error> {
+        let tag = Self::decode(reader, buf);
+        if tag.number == expected {
+            Ok(tag)
+        } else {
+            Err(Error::ExpectedTag(ExpectedTag {
+                context,
+                expected,
+                actual: tag.number,
+            }))
+        }
+    }
+
+    pub fn expect_value(&self, context: &'static str, value: u32) -> Result<(), Error> {
+        if self.value != value {
+            Err(Error::TagValueInvalid((context, self.clone(), value)))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn expect_number(&self, context: &'static str, tag_number: TagNumber) -> Result<(), Error> {
+        if self.number == tag_number {
+            Ok(())
+        } else {
+            Err(Error::ExpectedTag(ExpectedTag {
+                actual: self.number.clone(),
+                expected: tag_number,
+                context,
+            }))
         }
     }
 }

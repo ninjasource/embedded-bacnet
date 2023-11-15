@@ -105,34 +105,25 @@ impl<'a> CovNotification<'a> {
             reader,
         })
     }
-}
 
-impl<'a> Iterator for CovNotification<'a> {
-    type Item = PropertyResult<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.reader.eof() {
-            return None;
-        }
-
-        let tag = Tag::decode(&mut self.reader, self.buf);
-
-        assert_eq!(
-            tag.number,
+    fn next_internal(&mut self) -> Result<PropertyResult<'a>, Error> {
+        // property id
+        let tag = Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::ContextSpecific(0),
-            "invalid property id tag"
-        );
-
+            "CovNotification next property_id",
+        )?;
         let property_id: PropertyId =
             (decode_unsigned(tag.value, &mut self.reader, self.buf) as u32).into();
 
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
+        // value
+        Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::ContextSpecificOpening(2),
-            "expected value opening tag"
-        );
-
+            "CovNotification next expected value opening tag",
+        )?;
         let tag = Tag::decode(&mut self.reader, self.buf);
         let value = ApplicationDataValue::decode(
             &tag,
@@ -141,18 +132,30 @@ impl<'a> Iterator for CovNotification<'a> {
             &mut self.reader,
             self.buf,
         );
-
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
+        Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::ContextSpecificClosing(2),
-            "expected value closing tag"
-        );
+            "CovNotification next expected value closing tag",
+        )?;
 
-        Some(PropertyResult {
+        Ok(PropertyResult {
             id: property_id,
             value,
         })
+    }
+}
+
+impl<'a> Iterator for CovNotification<'a> {
+    type Item = Result<PropertyResult<'a>, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
+            return None;
+        }
+
+        let result = self.next_internal();
+        Some(result)
     }
 }
 

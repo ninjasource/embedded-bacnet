@@ -1,6 +1,7 @@
 use core::fmt::Debug;
 
 use super::{
+    error::Error,
     helper::{encode_closing_tag, encode_opening_tag, get_tagged_body},
     io::{Reader, Writer},
     tag::{ApplicationTagNumber, Tag, TagNumber},
@@ -113,23 +114,24 @@ impl<'a> TimeValueList<'a> {
 }
 
 impl<'a> Iterator for TimeValueList<'a> {
-    type Item = TimeValue;
+    type Item = Result<TimeValue, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.reader.eof() {
             return None;
         }
 
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        match tag.number {
-            TagNumber::Application(ApplicationTagNumber::Time) => {
+        match Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
+            TagNumber::Application(ApplicationTagNumber::Time),
+            "Decode weekly schedule TimeValueList next",
+        ) {
+            Ok(tag) => {
                 let time_value = TimeValue::decode(&tag, &mut self.reader, self.buf);
-                Some(time_value)
+                Some(Ok(time_value))
             }
-            unexpected => panic!(
-                "unexpected tag when decoding weekly schedule: {:?}",
-                unexpected
-            ),
+            Err(e) => Some(Err(e)),
         }
     }
 }

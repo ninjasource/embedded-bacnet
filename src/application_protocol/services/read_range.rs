@@ -4,8 +4,9 @@ use crate::{
         primitives::data_value::{BitString, Date, Time},
     },
     common::{
+        error::Error,
         helper::{
-            decode_context_enumerated, decode_context_object_id, decode_signed, decode_unsigned,
+            decode_context_object_id, decode_context_property_id, decode_signed, decode_unsigned,
             encode_application_signed, encode_application_unsigned, encode_closing_tag,
             encode_context_enumerated, encode_context_object_id, encode_context_unsigned,
             encode_opening_tag, get_tagged_body,
@@ -94,23 +95,23 @@ impl<'a> ReadRangeAck<'a> {
         encode_closing_tag(writer, Self::ITEM_DATA_TAG);
     }
 
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         // object_id
-        let tag = Tag::decode(reader, buf);
-        assert_eq!(
-            tag.number,
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
             TagNumber::ContextSpecific(Self::OBJECT_ID_TAG),
-            "invalid object id tag"
-        );
-        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
+            "ReadRangeAck decode object_id",
+        )?;
+        let object_id = ObjectId::decode(tag.value, reader, buf)?;
 
         // property_id
-        let (tag, property_id) = decode_context_enumerated(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecific(Self::PROPERTY_ID_TAG),
-            "invalid property id tag"
-        );
+        let property_id = decode_context_property_id(
+            reader,
+            buf,
+            Self::PROPERTY_ID_TAG,
+            "ReadRangeAck decode property_id",
+        )?;
 
         // array_index
         let mut tag = Tag::decode(reader, buf);
@@ -123,20 +124,19 @@ impl<'a> ReadRangeAck<'a> {
         }
 
         // result flags
-        assert_eq!(
-            tag.number,
+        tag.expect_number(
+            "ReadRangeAck decode result_flag",
             TagNumber::ContextSpecific(Self::RESULT_FLAGS_TAG),
-            "invalid result flags tag"
-        );
+        )?;
         let result_flags = BitString::decode(&property_id, tag.value, reader, buf).unwrap();
 
         // item_count
-        let tag = Tag::decode(reader, buf);
-        assert_eq!(
-            tag.number,
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
             TagNumber::ContextSpecific(Self::ITEM_COUNT_TAG),
-            "invalid item_count tag"
-        );
+            "ReadRangeAck decode item_count",
+        )?;
         let item_count = decode_unsigned(tag.value, reader, buf) as usize;
 
         // item_data
@@ -149,14 +149,14 @@ impl<'a> ReadRangeAck<'a> {
         };
         let item_data = ReadRangeItems::new_from_buf(buf);
 
-        Self {
+        Ok(Self {
             object_id,
             property_id,
             array_index,
             result_flags,
             item_count,
             item_data,
-        }
+        })
     }
 }
 
@@ -287,51 +287,43 @@ impl<'a> ReadRangeItems<'a> {
                 .encode_context(Self::STATUS_FLAGS_TAG, writer);
         }
     }
-}
 
-impl<'a> Iterator for ReadRangeItems<'a> {
-    type Item = ReadRangeItem<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.reader.eof() {
-            return None;
-        }
-
+    fn next_internal(&mut self) -> Result<ReadRangeItem<'a>, Error> {
         // date and time
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
+        Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::ContextSpecificOpening(Self::DATE_TIME_TAG),
-            "invalid date time opening tag"
-        );
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
+            "ReadRangeItems next_internal",
+        )?;
+        Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::Application(ApplicationTagNumber::Date),
-            "expected date application tag"
-        );
+            "ReadRangeItems next_internal",
+        )?;
         let date = Date::decode(&mut self.reader, self.buf);
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
+        Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::Application(ApplicationTagNumber::Time),
-            "expected time application tag"
-        );
+            "ReadRangeItems next_internal",
+        )?;
         let time = Time::decode(&mut self.reader, self.buf);
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
+        Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::ContextSpecificClosing(Self::DATE_TIME_TAG),
-            "invalid date time closing tag"
-        );
+            "ReadRangeItems next_internal",
+        )?;
 
         // value
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
+        Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::ContextSpecificOpening(Self::VALUE_TAG),
-            "invalid value opening tag"
-        );
+            "ReadRangeItems next_internal",
+        )?;
         let tag = Tag::decode(&mut self.reader, self.buf);
         let value_type: ReadRangeValueType = match tag.number {
             TagNumber::ContextSpecific(tag_number) => tag_number.try_into().unwrap(),
@@ -344,34 +336,46 @@ impl<'a> Iterator for ReadRangeItems<'a> {
             }
             _x => unimplemented!(),
         };
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
+        Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::ContextSpecificClosing(Self::VALUE_TAG),
-            "invalid value closing tag"
-        );
+            "ReadRangeItems next_internal",
+        )?;
 
         // status flags
-        let tag = Tag::decode(&mut self.reader, self.buf);
-        assert_eq!(
-            tag.number,
+        Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
             TagNumber::ContextSpecific(Self::STATUS_FLAGS_TAG),
-            "invalid status flags tag"
-        );
+            "ReadRangeItems next_internal",
+        )?;
         let status_flags = BitString::decode(
             &PropertyId::PropStatusFlags,
             tag.value,
             &mut self.reader,
             self.buf,
-        )
-        .unwrap();
+        )?;
 
-        Some(ReadRangeItem {
+        Ok(ReadRangeItem {
             date,
             time,
             value,
             status_flags,
         })
+    }
+}
+
+impl<'a> Iterator for ReadRangeItems<'a> {
+    type Item = Result<ReadRangeItem<'a>, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
+            return None;
+        }
+
+        let item = self.next_internal();
+        Some(item)
     }
 }
 
@@ -405,15 +409,14 @@ impl ReadRange {
         }
     }
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
-        let (tag, object_id) = decode_context_object_id(reader, buf).unwrap();
-        assert_eq!(tag.number, TagNumber::ContextSpecific(Self::OBJECT_ID_TAG));
-
-        let (tag, property_id) = decode_context_enumerated(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecific(Self::PROPERTY_ID_TAG)
-        );
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let object_id = decode_context_object_id(reader, buf, Self::OBJECT_ID_TAG)?;
+        let property_id = decode_context_property_id(
+            reader,
+            buf,
+            Self::PROPERTY_ID_TAG,
+            "ReadRange decode property_id",
+        )?;
 
         let mut tag = Tag::decode(reader, buf);
         let array_index = if tag.number == TagNumber::ContextSpecific(Self::ARRAY_INDEX_TAG) {
@@ -466,12 +469,12 @@ impl ReadRange {
             _ => unimplemented!("{:?}", tag),
         };
 
-        Self {
+        Ok(Self {
             array_index,
             object_id,
             property_id,
             request_type,
-        }
+        })
     }
 
     pub fn encode(&self, writer: &mut Writer) {

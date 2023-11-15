@@ -59,6 +59,7 @@ fn main() -> Result<(), Error> {
         if let ReadPropertyValue::ObjectIdList(list) = ack.property_value {
             // put all objects in their respective bins by object type
             for item in list.into_iter() {
+                let item = item.unwrap();
                 match item.object_type {
                     ObjectType::ObjectBinaryOutput
                     | ObjectType::ObjectBinaryInput
@@ -182,14 +183,14 @@ fn get_multi_binary(
 
         for obj in ack {
             let mut x = obj.property_results.into_iter();
-            let name = x.next().unwrap().value.to_string();
-            let value = match x.next().unwrap().value {
+            let name = x.next().unwrap().unwrap().value.to_string();
+            let value = match x.next().unwrap().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Binary(
                     Binary::On,
                 ))) => true,
                 _ => false,
             };
-            let status_flags = match x.next().unwrap().value {
+            let status_flags = match x.next().unwrap().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::BitString(
                     BitString::StatusFlags(x),
                 )) => x,
@@ -242,18 +243,18 @@ fn get_multi_analog(
 
         for obj in ack {
             let mut x = obj.property_results.into_iter();
-            let name = x.next().unwrap().value.to_string();
-            let value = match x.next().unwrap().value {
+            let name = x.next().unwrap().unwrap().value.to_string();
+            let value = match x.next().unwrap().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::Real(val)) => val,
                 _ => unreachable!(),
             };
-            let units = match x.next().unwrap().value {
+            let units = match x.next().unwrap().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Units(
                     u,
                 ))) => u.clone(),
                 _ => unreachable!(),
             };
-            let status_flags = match x.next().unwrap().value {
+            let status_flags = match x.next().unwrap().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::BitString(
                     BitString::StatusFlags(x),
                 )) => x,
@@ -302,8 +303,8 @@ fn get_multi_trend_log(
 
         for obj in ack {
             let mut x = obj.property_results.into_iter();
-            let name = x.next().unwrap().value.to_string();
-            let record_count = match x.next().unwrap().value {
+            let name = x.next().unwrap().unwrap().value.to_string();
+            let record_count = match x.next().unwrap().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::UnsignedInt(val)) => val,
                 _ => unreachable!(),
             };
@@ -346,8 +347,8 @@ fn get_multi_schedule(
 
         for obj in ack {
             let mut x = obj.property_results.into_iter();
-            let name = x.next().unwrap().value.to_string();
-            let value = match x.next().unwrap().value {
+            let name = x.next().unwrap().unwrap().value.to_string();
+            let value = match x.next().unwrap().unwrap().value {
                 PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(schedule)) => {
                     schedule
                 }
@@ -357,13 +358,13 @@ fn get_multi_schedule(
             items.push(ScheduleValue {
                 id: obj.object_id,
                 name,
-                monday: value.monday.collect(),
-                tuesday: value.tuesday.collect(),
-                wednesday: value.wednesday.collect(),
-                thursday: value.thursday.collect(),
-                friday: value.friday.collect(),
-                saturday: value.saturday.collect(),
-                sunday: value.sunday.collect(),
+                monday: value.monday.map(|x| x.unwrap()).collect(),
+                tuesday: value.tuesday.map(|x| x.unwrap()).collect(),
+                wednesday: value.wednesday.map(|x| x.unwrap()).collect(),
+                thursday: value.thursday.map(|x| x.unwrap()).collect(),
+                friday: value.friday.map(|x| x.unwrap()).collect(),
+                saturday: value.saturday.map(|x| x.unwrap()).collect(),
+                sunday: value.sunday.map(|x| x.unwrap()).collect(),
             });
         }
 

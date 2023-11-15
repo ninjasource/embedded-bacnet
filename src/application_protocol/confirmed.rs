@@ -1,5 +1,5 @@
 use crate::common::{
-    error::Error,
+    error::{Error, Unimplemented},
     helper::decode_unsigned,
     io::{Reader, Writer},
     spec::{ErrorClass, ErrorCode},
@@ -78,16 +78,19 @@ impl<'a> ConfirmedRequest<'a> {
     }
 
     // the control byte has already been read
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let byte0 = reader.read_byte(buf);
         let max_segments: MaxSegments = (byte0 & 0xF0).into();
         let max_adpu: MaxAdpu = (byte0 & 0x0F).into();
         let invoke_id = reader.read_byte(buf);
 
-        let choice: ConfirmedServiceChoice = reader.read_byte(buf).into();
+        let choice: ConfirmedServiceChoice = reader.read_byte(buf).try_into().map_err(|e| {
+            Error::InvalidVariant(("ConfirmedRequest decode ConfirmedServiceChoice", e as u32))
+        })?;
+
         let service = match choice {
             ConfirmedServiceChoice::ReadProperty => {
-                let service = ReadProperty::decode(reader, buf);
+                let service = ReadProperty::decode(reader, buf)?;
                 ConfirmedRequestService::ReadProperty(service)
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
@@ -95,24 +98,24 @@ impl<'a> ConfirmedRequest<'a> {
                 ConfirmedRequestService::ReadPropertyMultiple(service)
             }
             ConfirmedServiceChoice::ReadRange => {
-                let service = ReadRange::decode(reader, buf);
+                let service = ReadRange::decode(reader, buf)?;
                 ConfirmedRequestService::ReadRange(service)
             }
             ConfirmedServiceChoice::WriteProperty => {
-                let service = WriteProperty::decode(reader, buf);
+                let service = WriteProperty::decode(reader, buf)?;
                 ConfirmedRequestService::WriteProperty(service)
             }
             _ => todo!("Choice not supported: {:?}", choice),
         };
 
-        Self {
+        Ok(Self {
             max_segments,
             max_adpu,
             sequence_num: 0,
             proposed_window_size: 0,
             invoke_id,
             service,
-        }
+        })
     }
 }
 
@@ -183,45 +186,47 @@ pub enum ConfirmedServiceChoice {
     MaxBacnetConfirmedService = 34,
 }
 
-impl From<u8> for ConfirmedServiceChoice {
-    fn from(value: u8) -> Self {
+impl TryFrom<u8> for ConfirmedServiceChoice {
+    type Error = u8;
+
+    fn try_from(value: u8) -> Result<Self, u8> {
         match value {
-            0 => Self::AcknowledgeAlarm,
-            1 => Self::CovNotification,
-            2 => Self::EventNotification,
-            3 => Self::GetAlarmSummary,
-            4 => Self::GetEnrollmentSummary,
-            5 => Self::SubscribeCov,
-            6 => Self::AtomicReadFile,
-            7 => Self::AtomicWriteFile,
-            8 => Self::AddListElement,
-            9 => Self::RemoveListElement,
-            10 => Self::CreateObject,
-            11 => Self::DeleteObject,
-            12 => Self::ReadProperty,
-            13 => Self::ReadPropConditional,
-            14 => Self::ReadPropMultiple,
-            15 => Self::WriteProperty,
-            16 => Self::WritePropMultiple,
-            17 => Self::DeviceCommunicationControl,
-            18 => Self::PrivateTransfer,
-            19 => Self::TextMessage,
-            20 => Self::ReinitializeDevice,
-            21 => Self::VtOpen,
-            22 => Self::VtClose,
-            23 => Self::VtData,
-            24 => Self::Authenticate,
-            25 => Self::RequestKey,
-            26 => Self::ReadRange,
-            27 => Self::LifeSafetyOperation,
-            28 => Self::SubscribeCovProperty,
-            29 => Self::GetEventInformation,
-            30 => Self::SubscribeCovPropertyMultiple,
-            31 => Self::CovNotificationMultiple,
-            32 => Self::AuditNotification,
-            33 => Self::AuditLogQuery,
-            34 => Self::MaxBacnetConfirmedService,
-            _ => panic!("invalid confirmed service choice"),
+            0 => Ok(Self::AcknowledgeAlarm),
+            1 => Ok(Self::CovNotification),
+            2 => Ok(Self::EventNotification),
+            3 => Ok(Self::GetAlarmSummary),
+            4 => Ok(Self::GetEnrollmentSummary),
+            5 => Ok(Self::SubscribeCov),
+            6 => Ok(Self::AtomicReadFile),
+            7 => Ok(Self::AtomicWriteFile),
+            8 => Ok(Self::AddListElement),
+            9 => Ok(Self::RemoveListElement),
+            10 => Ok(Self::CreateObject),
+            11 => Ok(Self::DeleteObject),
+            12 => Ok(Self::ReadProperty),
+            13 => Ok(Self::ReadPropConditional),
+            14 => Ok(Self::ReadPropMultiple),
+            15 => Ok(Self::WriteProperty),
+            16 => Ok(Self::WritePropMultiple),
+            17 => Ok(Self::DeviceCommunicationControl),
+            18 => Ok(Self::PrivateTransfer),
+            19 => Ok(Self::TextMessage),
+            20 => Ok(Self::ReinitializeDevice),
+            21 => Ok(Self::VtOpen),
+            22 => Ok(Self::VtClose),
+            23 => Ok(Self::VtData),
+            24 => Ok(Self::Authenticate),
+            25 => Ok(Self::RequestKey),
+            26 => Ok(Self::ReadRange),
+            27 => Ok(Self::LifeSafetyOperation),
+            28 => Ok(Self::SubscribeCovProperty),
+            29 => Ok(Self::GetEventInformation),
+            30 => Ok(Self::SubscribeCovPropertyMultiple),
+            31 => Ok(Self::CovNotificationMultiple),
+            32 => Ok(Self::AuditNotification),
+            33 => Ok(Self::AuditLogQuery),
+            34 => Ok(Self::MaxBacnetConfirmedService),
+            x => Err(x),
         }
     }
 }
@@ -243,7 +248,10 @@ impl SimpleAck {
 
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         let invoke_id = reader.read_byte(buf);
-        let service_choice = reader.read_byte(buf).into();
+        let service_choice: ConfirmedServiceChoice =
+            reader.read_byte(buf).try_into().map_err(|e| {
+                Error::InvalidVariant(("SimpleAck decode ConfirmedServiceChoice", e as u32))
+            })?;
 
         Ok(Self {
             invoke_id,
@@ -264,29 +272,30 @@ pub struct BacnetError {
 impl BacnetError {
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         let invoke_id = reader.read_byte(buf);
-        let service_choice = reader.read_byte(buf).into();
+        let service_choice: ConfirmedServiceChoice =
+            reader.read_byte(buf).try_into().map_err(|e| {
+                Error::InvalidVariant(("BacnetError decode ConfirmedServiceChoice", e as u32))
+            })?;
 
-        let tag = Tag::decode(reader, buf);
-        match tag.number {
-            TagNumber::Application(ApplicationTagNumber::Enumerated) => {
-                // ok
-            }
-            x => panic!("Expected error class application tag enumerated: {:?}", x),
-        };
-
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::Application(ApplicationTagNumber::Enumerated),
+            "BacnetError error class",
+        )?;
         let value = decode_unsigned(tag.value, reader, buf) as u32;
-        let error_class = ErrorClass::try_from(value).unwrap();
+        let error_class =
+            ErrorClass::try_from(value).map_err(|e| Error::InvalidVariant(("ErrorClass", e)))?;
 
-        let tag = Tag::decode(reader, buf);
-        match tag.number {
-            TagNumber::Application(ApplicationTagNumber::Enumerated) => {
-                // ok
-            }
-            x => panic!("Expected error code application tag enumerated: {:?}", x),
-        };
-
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::Application(ApplicationTagNumber::Enumerated),
+            "BacnetError error code",
+        )?;
         let value = decode_unsigned(tag.value, reader, buf) as u32;
-        let error_code = ErrorCode::try_from(value).unwrap();
+        let error_code =
+            ErrorCode::try_from(value).map_err(|e| Error::InvalidVariant(("ErrorCode", e)))?;
 
         Ok(Self {
             invoke_id,
@@ -319,11 +328,13 @@ impl<'a> ComplexAck<'a> {
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let invoke_id = reader.read_byte(buf);
-        let choice = reader.read_byte(buf).into();
+        let choice: ConfirmedServiceChoice = reader.read_byte(buf).try_into().map_err(|e| {
+            Error::InvalidVariant(("ComplexAck decode ConfirmedServiceChoice", e as u32))
+        })?;
 
         let service = match choice {
             ConfirmedServiceChoice::ReadProperty => {
-                let apdu = ReadPropertyAck::decode(reader, buf);
+                let apdu = ReadPropertyAck::decode(reader, buf)?;
                 ComplexAckService::ReadProperty(apdu)
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
@@ -331,10 +342,14 @@ impl<'a> ComplexAck<'a> {
                 ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck::new_from_buf(buf))
             }
             ConfirmedServiceChoice::ReadRange => {
-                let apdu = ReadRangeAck::decode(reader, buf);
+                let apdu = ReadRangeAck::decode(reader, buf)?;
                 ComplexAckService::ReadRange(apdu)
             }
-            s => return Err(Error::UnimplementedConfirmedServiceChoice(s)),
+            s => {
+                return Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
+                    s,
+                )))
+            }
         };
 
         Ok(Self { invoke_id, service })
