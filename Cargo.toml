@@ -19,6 +19,9 @@ serde = { version = "1.0", default-features = false, features = [
     "derive",
 ], optional = true }
 
+# TODO: add this when it reaches 1.0
+# derive_more = { version = "^1.0.0-beta.6", default-features = false, features = [ "try_from"] }
+
 [dev-dependencies]
 simple_logger = "4.2.0"
 chrono = { version = "0.4.28" }
