@@ -7,7 +7,7 @@ use crate::{
 };
 
 // Network Layer Protocol Data Unit
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NetworkPdu<'a> {
     pub src: Option<SourceAddress>,
@@ -18,7 +18,7 @@ pub struct NetworkPdu<'a> {
 }
 
 // NOTE: this is actually a control flag
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum MessagePriority {
@@ -43,6 +43,7 @@ impl From<u8> for MessagePriority {
     }
 }
 
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 enum ControlFlags {
@@ -52,7 +53,7 @@ enum ControlFlags {
     ExpectingReply = 1 << 2,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum NetworkMessage<'a> {
     Apdu(ApplicationPdu<'a>),
@@ -61,7 +62,7 @@ pub enum NetworkMessage<'a> {
 }
 
 // Network Layer Message Type
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum MessageType {
@@ -157,7 +158,7 @@ impl<'a> NetworkPdu<'a> {
         match &self.network_message {
             NetworkMessage::Apdu(adpu) => adpu.encode(writer),
             NetworkMessage::MessageType(message_type) => {
-                writer.push(*message_type as u8);
+                writer.push(message_type.clone() as u8);
             }
             NetworkMessage::CustomMessageType(message_type) => {
                 writer.push(*message_type);
@@ -198,7 +199,7 @@ impl<'a> NetworkPdu<'a> {
         } else {
             0
         };
-        let message_priority = self.message_priority as u8;
+        let message_priority = self.message_priority.clone() as u8;
 
         is_network_layer_message | has_destination | has_source | expecting_reply | message_priority
     }
@@ -259,7 +260,7 @@ impl<'a> NetworkPdu<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Addr {
     pub ipv4: [u8; 4],
@@ -270,14 +271,14 @@ const IPV4_ADDR_LEN: u8 = 6;
 
 pub type SourceAddress = NetworkAddress;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NetworkAddress {
     pub net: u16,
     pub addr: Option<Addr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct DestinationAddress {
     pub network_address: NetworkAddress,

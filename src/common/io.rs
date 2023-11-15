@@ -24,7 +24,7 @@ impl<'a> Writer<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Reader {
     pub index: usize,
@@ -34,13 +34,6 @@ pub struct Reader {
 impl Reader {
     pub fn eof(&self) -> bool {
         self.index >= self.end
-    }
-
-    pub fn new() -> Self {
-        Self {
-            index: 0,
-            end: usize::MAX - 1000,
-        }
     }
 
     pub fn new_with_len(len: usize) -> Self {
@@ -79,6 +72,15 @@ impl Reader {
             let slice = &buf[self.index..self.index + len];
             self.index += len;
             slice
+        }
+    }
+}
+
+impl Default for Reader {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            end: usize::MAX - 1000,
         }
     }
 }

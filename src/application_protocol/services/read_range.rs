@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRange {
     pub object_id: ObjectId,     // e.g ObjectTrendLog
@@ -27,7 +27,7 @@ pub struct ReadRange {
     pub request_type: ReadRangeRequestType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ReadRangeRequestType {
     ByPosition(ReadRangeByPosition),
@@ -36,21 +36,21 @@ pub enum ReadRangeRequestType {
     All,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRangeByPosition {
     pub index: u32,
     pub count: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRangeBySequence {
     pub sequence_num: u32,
     pub count: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRangeByTime {
     pub date: Date,
@@ -58,7 +58,7 @@ pub struct ReadRangeByTime {
     pub count: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRangeAck<'a> {
     pub object_id: ObjectId,
@@ -80,7 +80,7 @@ impl<'a> ReadRangeAck<'a> {
     pub fn encode(&self, writer: &mut Writer) {
         writer.push(ConfirmedServiceChoice::ReadRange as u8);
         encode_context_object_id(writer, Self::OBJECT_ID_TAG, &self.object_id);
-        encode_context_enumerated(writer, Self::PROPERTY_ID_TAG, self.property_id);
+        encode_context_enumerated(writer, Self::PROPERTY_ID_TAG, &self.property_id);
         if self.array_index != BACNET_ARRAY_ALL {
             encode_context_unsigned(writer, Self::ARRAY_INDEX_TAG, self.array_index)
         }
@@ -128,7 +128,7 @@ impl<'a> ReadRangeAck<'a> {
             TagNumber::ContextSpecific(Self::RESULT_FLAGS_TAG),
             "invalid result flags tag"
         );
-        let result_flags = BitString::decode(property_id, tag.value, reader, buf).unwrap();
+        let result_flags = BitString::decode(&property_id, tag.value, reader, buf).unwrap();
 
         // item_count
         let tag = Tag::decode(reader, buf);
@@ -160,7 +160,7 @@ impl<'a> ReadRangeAck<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRangeItems<'a> {
     pub items: &'a [ReadRangeItem<'a>],
@@ -185,7 +185,7 @@ pub enum ReadRangeValue {
     Any,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 enum ReadRangeValueType {
@@ -244,7 +244,7 @@ impl<'a> ReadRangeItems<'a> {
     pub fn new(items: &'a [ReadRangeItem<'a>]) -> Self {
         Self {
             items,
-            reader: Reader::new(),
+            reader: Reader::default(),
             buf: &[],
         }
     }
@@ -359,7 +359,7 @@ impl<'a> Iterator for ReadRangeItems<'a> {
             "invalid status flags tag"
         );
         let status_flags = BitString::decode(
-            PropertyId::PropStatusFlags,
+            &PropertyId::PropStatusFlags,
             tag.value,
             &mut self.reader,
             self.buf,
@@ -375,7 +375,7 @@ impl<'a> Iterator for ReadRangeItems<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRangeItem<'a> {
     pub date: Date,
@@ -479,7 +479,7 @@ impl ReadRange {
         encode_context_object_id(writer, Self::OBJECT_ID_TAG, &self.object_id);
 
         // property_id
-        encode_context_enumerated(writer, Self::PROPERTY_ID_TAG, self.property_id);
+        encode_context_enumerated(writer, Self::PROPERTY_ID_TAG, &self.property_id);
 
         // array_index
         if self.array_index != BACNET_ARRAY_ALL {

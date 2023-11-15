@@ -8,7 +8,7 @@ use super::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum UnconfirmedRequest<'a> {
     WhoIs(WhoIs),
@@ -48,7 +48,7 @@ impl<'a> UnconfirmedRequest<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum UnconfirmedServiceChoice {
     IAm = 0,

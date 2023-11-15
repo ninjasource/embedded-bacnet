@@ -19,7 +19,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultipleAck<'a> {
     pub objects_with_results: &'a [ObjectWithResults<'a>],
@@ -27,7 +27,7 @@ pub struct ReadPropertyMultipleAck<'a> {
     reader: Reader,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectWithResults<'a> {
     pub object_id: ObjectId,
@@ -54,7 +54,7 @@ impl<'a> ObjectWithResults<'a> {
         assert_eq!(tag_number, 1, "expected list of results opening tag");
 
         let property_results = PropertyResultList {
-            object_id,
+            object_id: object_id.clone(),
             buf,
             reader: Reader::new_with_len(buf.len()),
             property_results: &[],
@@ -93,7 +93,7 @@ impl<'a> Iterator for PropertyResultList<'a> {
 
         let property_value = match tag_number {
             4 => {
-                match property_id {
+                match &property_id {
                     PropertyId::PropEventTimeStamps => {
                         // ignore for now
                         PropertyValue::PropValue(ApplicationDataValue::Boolean(false))
@@ -109,7 +109,7 @@ impl<'a> Iterator for PropertyResultList<'a> {
                         let value = ApplicationDataValue::decode(
                             &tag,
                             &self.object_id,
-                            &property_id,
+                            property_id,
                             &mut reader,
                             buf,
                         );
@@ -164,7 +164,7 @@ fn read_error(reader: &mut Reader, buf: &[u8]) -> PropertyAccessError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PropertyResultList<'a> {
     pub property_results: &'a [PropertyResult<'a>],
@@ -178,7 +178,7 @@ impl<'a> PropertyResultList<'a> {
         Self {
             property_results,
             object_id: ObjectId::new(ObjectType::Invalid, 0),
-            reader: Reader::new(),
+            reader: Reader::default(),
             buf: &[],
         }
     }
@@ -190,7 +190,7 @@ impl<'a> PropertyResultList<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PropertyResult<'a> {
     pub id: PropertyId,
@@ -199,12 +199,12 @@ pub struct PropertyResult<'a> {
 
 impl<'a> PropertyResult<'a> {
     pub fn encode(&self, writer: &mut Writer) {
-        encode_context_unsigned(writer, 2, self.id as u32);
+        encode_context_unsigned(writer, 2, self.id.clone() as u32);
         self.value.encode(writer);
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PropertyValue<'a> {
     PropValue(ApplicationDataValue<'a>),
@@ -229,7 +229,7 @@ impl<'a> PropertyValue<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PropertyAccessError {
     pub error_class: ErrorClass,
@@ -250,7 +250,7 @@ impl<'a> ReadPropertyMultipleAck<'a> {
         Self {
             objects_with_results,
             buf: &[],
-            reader: Reader::new(),
+            reader: Reader::default(),
         }
     }
 
@@ -287,7 +287,7 @@ impl<'a> Iterator for ReadPropertyMultipleAck<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultiple<'a> {
     array_index: u32, // use BACNET_ARRAY_ALL for all
@@ -296,7 +296,7 @@ pub struct ReadPropertyMultiple<'a> {
     reader: Reader,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PropertyIdList<'a> {
     pub property_ids: &'a [PropertyId],
@@ -323,7 +323,7 @@ impl<'a> PropertyIdList<'a> {
     pub fn new(property_ids: &'a [PropertyId]) -> Self {
         Self {
             property_ids,
-            reader: Reader::new(),
+            reader: Reader::default(),
             buf: &[],
         }
     }
@@ -333,7 +333,7 @@ impl<'a> PropertyIdList<'a> {
 
         for property_id in self.property_ids {
             // property_id
-            encode_context_enumerated(writer, 0, *property_id);
+            encode_context_enumerated(writer, 0, property_id);
 
             // array_index
             //if self.array_index != BACNET_ARRAY_ALL {
@@ -345,7 +345,7 @@ impl<'a> PropertyIdList<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultipleObject<'a> {
     pub object_id: ObjectId, // e.g ObjectDevice:20088
@@ -364,7 +364,7 @@ impl<'a> ReadPropertyMultipleObject<'a> {
 
 impl<'a> ReadPropertyMultiple<'a> {
     pub fn new(objects: &'a [ReadPropertyMultipleObject]) -> Self {
-        let reader = Reader::new();
+        let reader = Reader::default();
         Self {
             objects,
             array_index: BACNET_ARRAY_ALL,
@@ -374,7 +374,7 @@ impl<'a> ReadPropertyMultiple<'a> {
     }
 
     pub fn new_from_buf(buf: &'a [u8]) -> Self {
-        let reader = Reader::new();
+        let reader = Reader::default();
         Self {
             objects: &[],
             array_index: BACNET_ARRAY_ALL,
@@ -392,7 +392,7 @@ impl<'a> ReadPropertyMultiple<'a> {
 
             for property_id in object.property_ids.property_ids {
                 // property_id
-                encode_context_enumerated(writer, 0, *property_id);
+                encode_context_enumerated(writer, 0, property_id);
 
                 // array_index
                 if self.array_index != BACNET_ARRAY_ALL {

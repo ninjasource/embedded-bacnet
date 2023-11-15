@@ -11,6 +11,8 @@ use embedded_bacnet::{
     },
 };
 
+// NOTE: this example works with broadcast UDP packets which may be blocked by your network
+// You can get around this by sending the who_is directly to a known IP aaddress
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
@@ -18,10 +20,9 @@ fn main() -> Result<(), Error> {
 
     let who_is = WhoIs {};
     let apdu = ApplicationPdu::UnconfirmedRequest(UnconfirmedRequest::WhoIs(who_is));
-    let src = None;
     let dst = Some(DestinationAddress::new(0xffff, None));
     let message = NetworkMessage::Apdu(apdu);
-    let npdu = NetworkPdu::new(src, dst, false, MessagePriority::Normal, message);
+    let npdu = NetworkPdu::new(None, dst, false, MessagePriority::Normal, message);
     let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu, Some(npdu));
 
     let mut buffer = vec![0; 16 * 1024];
@@ -38,7 +39,7 @@ fn main() -> Result<(), Error> {
         let (n, peer) = socket.recv_from(&mut buf).unwrap();
         let payload = &buf[..n];
         println!("Received: {:02x?} from {:?}", payload, peer);
-        let mut reader = Reader::new();
+        let mut reader = Reader::default();
         let message = DataLink::decode(&mut reader, payload);
         println!("Decoded:  {:?}\n", message);
     }

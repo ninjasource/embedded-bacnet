@@ -17,7 +17,7 @@ use super::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ConfirmedRequest<'a> {
     pub max_segments: MaxSegments, // default 65
@@ -48,7 +48,7 @@ impl<'a> ConfirmedRequest<'a> {
 
         let control = ((ApduType::ConfirmedServiceRequest as u8) << 4) | max_segments_flag;
         writer.push(control);
-        writer.push(self.max_segments as u8 | self.max_adpu as u8);
+        writer.push(self.max_segments.clone() as u8 | self.max_adpu.clone() as u8);
         writer.push(self.invoke_id);
 
         // NOTE: Segment pdu not supported / implemented
@@ -118,6 +118,7 @@ impl<'a> ConfirmedRequest<'a> {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum ConfirmedServiceChoice {
     // alarm and event services
@@ -225,7 +226,7 @@ impl From<u8> for ConfirmedServiceChoice {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SimpleAck {
     pub invoke_id: u8,
@@ -251,7 +252,7 @@ impl SimpleAck {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct BacnetError {
     pub invoke_id: u8,
@@ -296,7 +297,7 @@ impl BacnetError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ComplexAck<'a> {
     pub invoke_id: u8,
@@ -340,7 +341,7 @@ impl<'a> ComplexAck<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ComplexAckService<'a> {
     ReadProperty(ReadPropertyAck<'a>),
@@ -349,7 +350,7 @@ pub enum ComplexAckService<'a> {
     // add more here
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConfirmedRequestService<'a> {
     ReadProperty(ReadProperty),

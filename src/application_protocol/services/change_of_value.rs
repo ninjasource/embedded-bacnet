@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct CovNotification<'a> {
     pub process_id: u32,
@@ -26,7 +26,7 @@ pub struct CovNotification<'a> {
     buf: &'a [u8],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PropertyResult<'a> {
     pub id: PropertyId,
@@ -156,7 +156,7 @@ impl<'a> Iterator for CovNotification<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SubscribeCov {
     process_id: u32,

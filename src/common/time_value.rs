@@ -8,7 +8,7 @@ use super::{
 };
 
 // A simplified version of the ApplicationDataValue struct to avoid a recursive structure
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SimpleApplicationDataValue {
@@ -74,13 +74,13 @@ impl SimpleApplicationDataValue {
             Self::UnsignedInt(x) => writer.extend_from_slice(&x.to_be_bytes()),
             Self::Real(x) => writer.extend_from_slice(&x.to_be_bytes()),
             Self::Double(x) => writer.extend_from_slice(&x.to_be_bytes()),
-            Self::Enumerated(Enumerated::Binary(x)) => writer.push(*x as u32 as u8),
+            Self::Enumerated(Enumerated::Binary(x)) => writer.push(x.clone() as u32 as u8),
             x => unimplemented!("{:?}", x),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TimeValue {

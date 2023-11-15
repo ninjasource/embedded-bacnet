@@ -3,7 +3,7 @@ use crate::{
     common::io::{Reader, Writer},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WhoIs {}
 

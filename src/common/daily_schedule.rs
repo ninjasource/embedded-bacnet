@@ -8,7 +8,7 @@ use super::{
 };
 
 //// note that Debug is implemented manually here because of the reader in time value iter
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WeeklySchedule<'a> {
     pub monday: TimeValueList<'a>,
@@ -75,7 +75,7 @@ impl<'a> WeeklySchedule<'a> {
 }
 
 //// note that Debug is not implemented here because if does not add value
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TimeValueList<'a> {
     pub time_values: &'a [TimeValue],
@@ -87,7 +87,7 @@ impl<'a> TimeValueList<'a> {
     pub fn new(time_values: &'a [TimeValue]) -> Self {
         Self {
             time_values,
-            reader: Reader::new(),
+            reader: Reader::default(),
             buf: &[],
         }
     }
@@ -120,11 +120,11 @@ impl<'a> Iterator for TimeValueList<'a> {
             return None;
         }
 
-        let tag = Tag::decode(&mut self.reader, &self.buf);
+        let tag = Tag::decode(&mut self.reader, self.buf);
         match tag.number {
             TagNumber::Application(ApplicationTagNumber::Time) => {
-                let time_value = TimeValue::decode(&tag, &mut self.reader, &self.buf);
-                return Some(time_value);
+                let time_value = TimeValue::decode(&tag, &mut self.reader, self.buf);
+                Some(time_value)
             }
             unexpected => panic!(
                 "unexpected tag when decoding weekly schedule: {:?}",

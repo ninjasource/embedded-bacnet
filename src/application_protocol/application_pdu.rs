@@ -9,7 +9,7 @@ use super::{
 };
 
 // Application Layer Protocol Data Unit
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationPdu<'a> {
     ConfirmedRequest(ConfirmedRequest<'a>),
@@ -20,7 +20,7 @@ pub enum ApplicationPdu<'a> {
     // add more here (see ApduType)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum ApduType {
@@ -51,7 +51,7 @@ impl From<u8> for ApduType {
 }
 
 // preshifted by 4 bits
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum MaxSegments {
@@ -81,7 +81,7 @@ impl From<u8> for MaxSegments {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum MaxAdpu {
@@ -107,6 +107,7 @@ impl From<u8> for MaxAdpu {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum PduFlags {
     Server = 0b0001,
     SegmentedResponseAccepted = 0b0010,

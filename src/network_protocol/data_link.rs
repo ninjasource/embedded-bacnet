@@ -15,14 +15,14 @@ use crate::{
 use super::network_pdu::{MessagePriority, NetworkMessage, NetworkPdu};
 
 // Bacnet Virtual Link Control
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct DataLink<'a> {
     pub function: DataLinkFunction,
     pub npdu: Option<NetworkPdu<'a>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum DataLinkFunction {
@@ -81,7 +81,7 @@ impl<'a> DataLink<'a> {
 
     pub fn encode(&self, writer: &mut Writer) {
         writer.push(BVLL_TYPE_BACNET_IP);
-        writer.push(self.function as u8);
+        writer.push(self.function.clone() as u8);
         match &self.function {
             DataLinkFunction::OriginalBroadcastNpdu | DataLinkFunction::OriginalUnicastNpdu => {
                 writer.extend_from_slice(&[0, 0]); // length placeholder
@@ -131,10 +131,7 @@ impl<'a> DataLink<'a> {
     pub fn get_ack_into(self) -> Option<ComplexAck<'a>> {
         match self.npdu {
             Some(x) => match x.network_message {
-                NetworkMessage::Apdu(apdu) => match apdu {
-                    ApplicationPdu::ComplexAck(ack) => Some(ack),
-                    _ => None,
-                },
+                NetworkMessage::Apdu(ApplicationPdu::ComplexAck(ack)) => Some(ack),
                 _ => None,
             },
             _ => None,

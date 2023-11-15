@@ -16,14 +16,14 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ReadPropertyValue<'a> {
     ObjectIdList(ObjectIdList<'a>),
     ApplicationDataValue(ApplicationDataValue<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectIdList<'a> {
     pub object_ids: &'a [ObjectId],
@@ -35,7 +35,7 @@ impl<'a> ObjectIdList<'a> {
     pub fn new(object_ids: &'a [ObjectId]) -> Self {
         Self {
             object_ids,
-            reader: Reader::new(),
+            reader: Reader::default(),
             buf: &[],
         }
     }
@@ -67,20 +67,20 @@ impl<'a> Iterator for ObjectIdList<'a> {
         if self.reader.eof() {
             None
         } else {
-            let tag = Tag::decode(&mut self.reader, &self.buf);
+            let tag = Tag::decode(&mut self.reader, self.buf);
             match tag.number {
                 TagNumber::Application(ApplicationTagNumber::ObjectId) => {
                     // ok
                 }
                 x => panic!("Unexpected tag number: {:?}", x),
             }
-            let object_id = ObjectId::decode(tag.value, &mut self.reader, &self.buf).unwrap();
+            let object_id = ObjectId::decode(tag.value, &mut self.reader, self.buf).unwrap();
             Some(object_id)
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyAck<'a> {
     pub object_id: ObjectId,
@@ -92,7 +92,7 @@ impl<'a> ReadPropertyAck<'a> {
     pub fn encode(&self, writer: &mut Writer) {
         writer.push(ConfirmedServiceChoice::ReadProperty as u8);
         encode_context_object_id(writer, 0, &self.object_id);
-        encode_context_enumerated(writer, 1, self.property_id);
+        encode_context_enumerated(writer, 1, &self.property_id);
         encode_opening_tag(writer, 3);
         match &self.property_value {
             ReadPropertyValue::ApplicationDataValue(value) => {
@@ -138,11 +138,11 @@ impl<'a> ReadPropertyAck<'a> {
                 let property_value =
                     ReadPropertyValue::ObjectIdList(ObjectIdList::new_from_buf(buf));
 
-                return Self {
+                Self {
                     object_id,
                     property_id,
                     property_value,
-                };
+                }
             }
             property_id => {
                 let tag = Tag::decode(&mut reader, buf);
@@ -157,17 +157,17 @@ impl<'a> ReadPropertyAck<'a> {
                 //    "expected closing tag"
                 //);
 
-                return Self {
+                Self {
                     object_id,
                     property_id,
                     property_value,
-                };
+                }
             }
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadProperty {
     pub object_id: ObjectId,     // e.g ObjectDevice:20088
@@ -189,7 +189,7 @@ impl ReadProperty {
         encode_context_object_id(writer, 0, &self.object_id);
 
         // property_id
-        encode_context_enumerated(writer, 1, self.property_id);
+        encode_context_enumerated(writer, 1, &self.property_id);
 
         // array_index
         if self.array_index != BACNET_ARRAY_ALL {

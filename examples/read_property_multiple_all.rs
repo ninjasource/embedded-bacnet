@@ -17,7 +17,6 @@ use embedded_bacnet::{
     },
 };
 
-//const IP_ADDRESS: &str = "192.168.1.215:47808";
 const IP_ADDRESS: &str = "192.168.1.249:47808";
 
 fn main() -> Result<(), Error> {
@@ -26,16 +25,15 @@ fn main() -> Result<(), Error> {
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
     // encode packet
-    let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 4);
-    let rpm = ReadPropertyMultipleObject::new(object_id, &[PropertyId::PropAll]);
-    let objects = [rpm];
-    let rpm = ReadPropertyMultiple::new(&objects);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadPropertyMultiple(rpm));
-    let apdu = ApplicationPdu::ConfirmedRequest(req);
-    let src = None;
-    let dst = None;
+    let objects = [ReadPropertyMultipleObject::new(
+        ObjectId::new(ObjectType::ObjectAnalogInput, 4),
+        &[PropertyId::PropAll],
+    )];
+    let service =
+        ConfirmedRequestService::ReadPropertyMultiple(ReadPropertyMultiple::new(&objects));
+    let apdu = ApplicationPdu::ConfirmedRequest(ConfirmedRequest::new(0, service));
     let message = NetworkMessage::Apdu(apdu);
-    let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
+    let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
     let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
     let mut buffer = vec![0; 16 * 1024];
     let mut buffer = Writer::new(&mut buffer);
@@ -51,7 +49,7 @@ fn main() -> Result<(), Error> {
     let (n, peer) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::new();
+    let mut reader = Reader::default();
     let message = DataLink::decode(&mut reader, buf).unwrap();
     println!("Decoded:  {:?}\n", message);
 

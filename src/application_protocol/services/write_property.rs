@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WriteProperty<'a> {
     pub object_id: ObjectId,
@@ -104,7 +104,7 @@ impl<'a> WriteProperty<'a> {
         encode_context_object_id(writer, Self::TAG_OBJECT_ID, &self.object_id);
 
         // property_id
-        encode_context_enumerated(writer, Self::TAG_PROPERTY_ID, self.property_id);
+        encode_context_enumerated(writer, Self::TAG_PROPERTY_ID, &self.property_id);
 
         // array_index
         if let Some(array_index) = self.array_index {

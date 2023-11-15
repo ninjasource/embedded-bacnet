@@ -19,8 +19,7 @@ use embedded_bacnet::{
     },
 };
 
-const IP_ADDRESS: &str = "localhost:47808";
-//const IP_ADDRESS: &str = "192.168.1.249:47808";
+const IP_ADDRESS: &str = "192.168.1.249:47808";
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
@@ -53,7 +52,7 @@ fn main() -> Result<(), Error> {
     let (n, peer) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::new();
+    let mut reader = Reader::default();
     let message = DataLink::decode(&mut reader, buf);
     println!("Decoded:  {:?}\n", message);
 

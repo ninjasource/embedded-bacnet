@@ -16,7 +16,7 @@ use crate::common::{
     tag::{ApplicationTagNumber, Tag, TagNumber},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationDataValue<'a> {
     Boolean(bool),
@@ -32,7 +32,7 @@ pub enum ApplicationDataValue<'a> {
     WeeklySchedule(WeeklySchedule<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationDataValueWrite<'a> {
     Boolean(bool),
@@ -41,7 +41,7 @@ pub enum ApplicationDataValueWrite<'a> {
     WeeklySchedule(WeeklySchedule<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Enumerated {
@@ -57,12 +57,12 @@ pub enum Enumerated {
 impl Enumerated {
     pub fn encode(&self, writer: &mut Writer) {
         let value = match self {
-            Self::Units(x) => *x as u32,
-            Self::Binary(x) => *x as u32,
-            Self::ObjectType(x) => *x as u32,
-            Self::EventState(x) => *x as u32,
-            Self::NotifyType(x) => *x as u32,
-            Self::LoggingType(x) => *x as u32,
+            Self::Units(x) => x.clone() as u32,
+            Self::Binary(x) => x.clone() as u32,
+            Self::ObjectType(x) => x.clone() as u32,
+            Self::EventState(x) => x.clone() as u32,
+            Self::NotifyType(x) => x.clone() as u32,
+            Self::LoggingType(x) => x.clone() as u32,
             Self::Unknown(x) => *x,
         };
         encode_application_enumerated(writer, value);
@@ -154,7 +154,7 @@ impl Time {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CharacterString<'a> {
@@ -173,7 +173,7 @@ impl<'a> Display for ApplicationDataValue<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BitString<'a> {
     StatusFlags(FlagSet<StatusFlags>),
     LogBufferResultFlags(FlagSet<LogBufferResultFlags>),
@@ -187,7 +187,7 @@ impl<'a> defmt::Format for BitString<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct CustomBitStream<'a> {
     pub unused_bits: u8,
@@ -241,7 +241,7 @@ impl<'a> BitString<'a> {
     }
 
     pub fn decode(
-        property_id: PropertyId,
+        property_id: &PropertyId,
         len: u32,
         reader: &mut Reader,
         buf: &'a [u8],
@@ -258,7 +258,7 @@ impl<'a> BitString<'a> {
             }
             _ => {
                 let len = (len - 1) as usize; // we have already read a byte
-                let bits = reader.read_slice(len as usize, buf);
+                let bits = reader.read_slice(len, buf);
                 Ok(Self::Custom(CustomBitStream { unused_bits, bits }))
             }
         }
@@ -436,7 +436,7 @@ impl<'a> ApplicationDataValue<'a> {
                 ApplicationDataValue::Enumerated(value)
             }
             ApplicationTagNumber::BitString => {
-                let bit_string = BitString::decode(*property_id, tag.value, reader, buf).unwrap();
+                let bit_string = BitString::decode(property_id, tag.value, reader, buf).unwrap();
                 ApplicationDataValue::BitString(bit_string)
             }
             ApplicationTagNumber::Boolean => {

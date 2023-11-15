@@ -13,7 +13,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct IAm {
     pub device_id: ObjectId,
@@ -27,7 +27,7 @@ impl IAm {
         writer.push(UnconfirmedServiceChoice::IAm as u8);
         encode_application_object_id(writer, &self.device_id);
         encode_application_unsigned(writer, self.max_apdu as u64);
-        encode_application_enumerated(writer, self.segmentation as u32);
+        encode_application_enumerated(writer, self.segmentation.clone() as u32);
         encode_application_unsigned(writer, self.vendor_id as u64);
     }
 

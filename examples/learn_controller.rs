@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{collections::HashMap, io::Error, net::UdpSocket};
 
 use embedded_bacnet::{
@@ -24,14 +22,8 @@ use embedded_bacnet::{
 };
 use flagset::FlagSet;
 
-//const IP_ADDRESS: &str = "192.168.1.215:47808";
-//const DEVICE_ID: u32 = 76011;
-
-//const IP_ADDRESS: &str = "192.168.1.249:47808";
-//const DEVICE_ID: u32 = 79079;
-//const IP_ADDRESS: &str = "192.168.1.101:47808";
-const DEVICE_ID: u32 = 79080;
-const IP_ADDRESS: &str = "localhost:47808";
+const IP_ADDRESS: &str = "192.168.1.249:47808";
+const DEVICE_ID: u32 = 79079;
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
@@ -57,7 +49,7 @@ fn main() -> Result<(), Error> {
     let (n, peer) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::new();
+    let mut reader = Reader::default();
     let message = DataLink::decode(&mut reader, buf).unwrap();
     println!("Decoded: {:?}", message);
 
@@ -76,7 +68,7 @@ fn main() -> Result<(), Error> {
                     | ObjectType::ObjectAnalogValue
                     | ObjectType::ObjectSchedule
                     | ObjectType::ObjectTrendlog => {
-                        let list = map.entry(item.object_type as u32).or_insert(vec![]);
+                        let list = map.entry(item.object_type.clone() as u32).or_insert(vec![]);
                         list.push(item);
                     }
                     _ => {}
@@ -124,8 +116,8 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Debug)]
-struct AnalogValue {
+#[derive(Debug, Clone)]
+pub struct AnalogValue {
     pub id: ObjectId,
     pub name: String,
     pub value: f32,
@@ -133,16 +125,16 @@ struct AnalogValue {
     pub status_flags: FlagSet<StatusFlags>,
 }
 
-#[derive(Debug)]
-struct BinaryValue {
+#[derive(Debug, Clone)]
+pub struct BinaryValue {
     pub id: ObjectId,
     pub name: String,
     pub value: bool,
     pub status_flags: FlagSet<StatusFlags>,
 }
 
-#[derive(Debug)]
-struct ScheduleValue {
+#[derive(Debug, Clone)]
+pub struct ScheduleValue {
     pub id: ObjectId,
     pub name: String,
     pub monday: Vec<TimeValue>,
@@ -154,8 +146,8 @@ struct ScheduleValue {
     pub sunday: Vec<TimeValue>,
 }
 
-#[derive(Debug)]
-struct TrendLogValue {
+#[derive(Debug, Clone)]
+pub struct TrendLogValue {
     pub id: ObjectId,
     pub name: String,
     pub record_count: u32,
@@ -170,12 +162,10 @@ fn get_multi_binary(
         PropertyId::PropPresentValue,
         PropertyId::PropStatusFlags,
     ];
-
     let items: Vec<ReadPropertyMultipleObject> = object_ids
         .iter()
-        .map(|x| ReadPropertyMultipleObject::new(*x, &property_ids))
+        .map(|x| ReadPropertyMultipleObject::new(x.clone(), &property_ids))
         .collect();
-
     let rpm = ReadPropertyMultiple::new(&items);
     let mut buf = vec![0; 16 * 1024];
     let mut writer = Writer::new(&mut buf);
@@ -184,10 +174,8 @@ fn get_multi_binary(
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
-    let mut reader = Reader::new();
+    let mut reader = Reader::default();
     let message = DataLink::decode(&mut reader, buf).unwrap();
-
-    //let message = send_and_recv(items, socket)?;
 
     if let Some(ack) = message.get_read_property_multiple_ack_into() {
         let mut items = vec![];
@@ -235,7 +223,7 @@ fn get_multi_analog(
 
     let items: Vec<ReadPropertyMultipleObject> = object_ids
         .iter()
-        .map(|x| ReadPropertyMultipleObject::new(*x, &property_ids))
+        .map(|x| ReadPropertyMultipleObject::new(x.clone(), &property_ids))
         .collect();
 
     let rpm = ReadPropertyMultiple::new(&items);
@@ -246,7 +234,7 @@ fn get_multi_analog(
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
-    let mut reader = Reader::new();
+    let mut reader = Reader::default();
     let message = DataLink::decode(&mut reader, buf).unwrap();
 
     if let Some(ack) = message.get_read_property_multiple_ack_into() {
@@ -295,7 +283,7 @@ fn get_multi_trend_log(
 
     let items: Vec<ReadPropertyMultipleObject> = object_ids
         .iter()
-        .map(|x| ReadPropertyMultipleObject::new(*x, &property_ids))
+        .map(|x| ReadPropertyMultipleObject::new(x.clone(), &property_ids))
         .collect();
 
     let rpm = ReadPropertyMultiple::new(&items);
@@ -306,7 +294,7 @@ fn get_multi_trend_log(
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
-    let mut reader = Reader::new();
+    let mut reader = Reader::default();
     let message = DataLink::decode(&mut reader, buf).unwrap();
 
     if let Some(ack) = message.get_read_property_multiple_ack_into() {
@@ -338,7 +326,10 @@ fn get_multi_schedule(
     object_id: &ObjectId,
 ) -> Result<Vec<ScheduleValue>, Error> {
     let property_ids = [PropertyId::PropObjectName, PropertyId::PropWeeklySchedule];
-    let objects = [ReadPropertyMultipleObject::new(*object_id, &property_ids)];
+    let objects = [ReadPropertyMultipleObject::new(
+        object_id.clone(),
+        &property_ids,
+    )];
     let rpm = ReadPropertyMultiple::new(&objects);
     let mut buf = vec![0; 4 * 1024];
     let mut writer = Writer::new(&mut buf);
@@ -347,10 +338,8 @@ fn get_multi_schedule(
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
-    let mut reader = Reader::new();
+    let mut reader = Reader::default();
     let message = DataLink::decode(&mut reader, buf).unwrap();
-
-    //let message = send_and_recv(items, socket)?;
 
     if let Some(ack) = message.get_read_property_multiple_ack_into() {
         let mut items = vec![];

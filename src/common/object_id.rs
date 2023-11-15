@@ -5,7 +5,7 @@ use super::{
     spec::{BACNET_INSTANCE_BITS, BACNET_MAX_INSTANCE, BACNET_MAX_OBJECT},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ObjectId {
@@ -21,7 +21,7 @@ impl ObjectId {
     }
 
     pub fn encode(&self, writer: &mut Writer) {
-        let value = ((self.object_type as u32 & BACNET_MAX_OBJECT) << BACNET_INSTANCE_BITS)
+        let value = ((self.object_type.clone() as u32 & BACNET_MAX_OBJECT) << BACNET_INSTANCE_BITS)
             | (self.id & BACNET_MAX_INSTANCE);
         writer.extend_from_slice(&value.to_be_bytes());
     }
@@ -36,7 +36,7 @@ impl ObjectId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u32)]

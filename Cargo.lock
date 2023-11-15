@@ -133,7 +133,7 @@ dependencies = [
 
 [[package]]
 name = "embedded-bacnet"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "arrayref",
  "chrono",

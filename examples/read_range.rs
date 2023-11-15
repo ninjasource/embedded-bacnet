@@ -23,16 +23,14 @@ use embedded_bacnet::{
     },
 };
 
-//const IP_ADDRESS: &str = "192.168.1.215:47808";
-//const IP_ADDRESS: &str = "192.168.1.249:47808";
-const IP_ADDRESS: &str = "192.168.1.129:47808";
+const IP_ADDRESS: &str = "192.168.1.249:47808";
 
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
     let object_id = ObjectId::new(ObjectType::ObjectTrendlog, 4);
 
-    let record_count = get_record_count(&socket, object_id)? as usize;
+    let record_count = get_record_count(&socket, object_id.clone())? as usize;
     println!("Record count {record_count}");
 
     const MAX_LOG_COUNT_PER_REQ: usize = 55;
@@ -40,7 +38,12 @@ fn main() -> Result<(), Error> {
     let mut log_set = LogSet::new(record_count);
 
     for row in (1..=record_count).step_by(MAX_LOG_COUNT_PER_REQ) {
-        get_items_for_range(&socket, object_id, row..MAX_LOG_COUNT_PER_REQ, &mut log_set)?;
+        get_items_for_range(
+            &socket,
+            object_id.clone(),
+            row..MAX_LOG_COUNT_PER_REQ,
+            &mut log_set,
+        )?;
     }
 
     log_set.finished();
@@ -48,7 +51,7 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct LogSet {
     pub level0: Vec<LogEntry>, // every 15 mins
     pub level1: Vec<LogEntry>, // every hour
@@ -74,13 +77,13 @@ impl LogSet {
     }
 
     pub fn add_entry(&mut self, log_entry: LogEntry) {
-        self.level0.push(log_entry);
+        self.level0.push(log_entry.clone());
 
-        if let Some(aggregation) = self.level1_current.add_entry(log_entry) {
+        if let Some(aggregation) = self.level1_current.add_entry(log_entry.clone()) {
             self.level1.push(aggregation);
         }
 
-        if let Some(aggregation) = self.level2_current.add_entry(log_entry) {
+        if let Some(aggregation) = self.level2_current.add_entry(log_entry.clone()) {
             let date_time =
                 NaiveDateTime::from_timestamp_opt(aggregation.timestamp as i64, 0).unwrap();
             println!("{} - {}", date_time, aggregation.value);
@@ -112,7 +115,7 @@ impl LogSet {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Aggregation {
     duration: Duration,
     date_time: Option<NaiveDateTime>,
@@ -179,7 +182,7 @@ impl Aggregation {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 struct LogEntry {
     pub timestamp: i32,
     pub value: f32,
@@ -209,16 +212,13 @@ fn get_items_for_range(
     // send packet
     let buf = buffer.to_bytes();
     socket.send_to(buf, IP_ADDRESS)?;
-    //println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
 
     // receive reply
     let mut buf = vec![0; 4096];
     let (n, _peer) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
-    //println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::new();
+    let mut reader = Reader::default();
     let message = DataLink::decode(&mut reader, buf).unwrap();
-    //println!("Decoded:  {:?}\n", message);
 
     if let Some(ack) = message.get_ack_into() {
         match ack.service {
@@ -228,7 +228,6 @@ fn get_items_for_range(
                         ReadRangeValue::Real(x) => x,
                         _ => 0.0,
                     };
-                    //let x = items.get_mut(index as usize + i - 1).unwrap();
                     let date_time = NaiveDateTime::new(
                         NaiveDate::from_ymd_opt(
                             item.date.year as i32,
@@ -279,7 +278,7 @@ fn get_record_count(socket: &UdpSocket, object_id: ObjectId) -> Result<u32, Erro
     let (n, peer) = socket.recv_from(&mut buf).unwrap();
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::new();
+    let mut reader = Reader::default();
     let message = DataLink::decode(&mut reader, buf).unwrap();
     println!("Decoded:  {:?}\n", message);
 

@@ -148,8 +148,8 @@ pub fn decode_context_enumerated(reader: &mut Reader, buf: &[u8]) -> (Tag, Prope
     (tag, property_id)
 }
 
-pub fn encode_context_enumerated(writer: &mut Writer, tag_number: u8, property_id: PropertyId) {
-    let value = property_id as u32;
+pub fn encode_context_enumerated(writer: &mut Writer, tag_number: u8, property_id: &PropertyId) {
+    let value = property_id.clone() as u32;
     let len = get_len_u64(value as u64);
 
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
@@ -220,11 +220,11 @@ fn get_len_u64(value: u64) -> u32 {
 }
 
 fn get_len_i32(value: i32) -> u32 {
-    if (value >= -128) && (value < 128) {
+    if (-128..128).contains(&value) {
         1
-    } else if (value >= -32768) && (value < 32768) {
+    } else if (-32768..32768).contains(&value) {
         2
-    } else if (value >= -8388608) && (value < 8388608) {
+    } else if (-8388608..8388608).contains(&value) {
         3
     } else {
         4
@@ -242,7 +242,7 @@ pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> u64 {
             u32::from_be_bytes(tmp) as u64
         }
         4 => u32::from_be_bytes(reader.read_bytes(buf)) as u64,
-        8 => u64::from_be_bytes(reader.read_bytes(buf)) as u64,
+        8 => u64::from_be_bytes(reader.read_bytes(buf)),
         _ => panic!("invalid unsigned len"),
     }
 }
@@ -270,9 +270,9 @@ pub fn decode_signed(len: u32, reader: &mut Reader, buf: &[u8]) -> i32 {
             let bytes: [u8; 3] = reader.read_bytes(buf);
             let mut tmp: [u8; 4] = [0; 4];
             tmp[1..].copy_from_slice(&bytes);
-            i32::from_be_bytes(tmp) as i32
+            i32::from_be_bytes(tmp)
         }
-        4 => i32::from_be_bytes(reader.read_bytes(buf)) as i32,
+        4 => i32::from_be_bytes(reader.read_bytes(buf)),
         _ => panic!("invalid unsigned len"),
     }
 }
@@ -292,7 +292,7 @@ pub fn encode_signed(writer: &mut Writer, len: u32, value: i32) {
     match len {
         1 => writer.push(value as u8),
         2 => encode_i16(writer, value as i16),
-        4 => encode_i32(writer, value as i32),
+        4 => encode_i32(writer, value),
         _ => unreachable!(),
     }
 }

@@ -7,7 +7,7 @@ use super::io::{Reader, Writer};
 //
 // Can use additional bytes as specified in bits 2-0 above
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
@@ -54,7 +54,7 @@ impl From<u8> for ApplicationTagNumber {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TagNumber {
@@ -64,24 +64,7 @@ pub enum TagNumber {
     ContextSpecificClosing(u8),
 }
 
-/*
-#[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct ContextSpecificTagNumber {
-    pub id: u8,
-    pub context_type: ContextType,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum ContextType {
-    None,
-    Opening,
-    Closing,
-}
-*/
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tag {
@@ -100,7 +83,7 @@ impl Tag {
 
         match &self.number {
             TagNumber::Application(num) => {
-                buf[0] |= (*num as u8) << 4;
+                buf[0] |= (num.clone() as u8) << 4;
             }
             TagNumber::ContextSpecificOpening(num) => {
                 let num = *num;
