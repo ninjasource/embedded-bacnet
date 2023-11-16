@@ -48,7 +48,7 @@ impl Reader {
 
     pub fn read_byte(&mut self, buf: &[u8]) -> Result<u8, Error> {
         if self.eof() {
-            return Err(Error::ReaderEof(self.end));
+            Err(Error::ReaderEof(self.end))
         } else {
             let byte = buf[self.index];
             self.index += 1;
@@ -58,7 +58,7 @@ impl Reader {
 
     pub fn read_bytes<const COUNT: usize>(&mut self, buf: &[u8]) -> Result<[u8; COUNT], Error> {
         if self.index + COUNT > self.end {
-            return Err(Error::ReaderEof(self.index + COUNT));
+            Err(Error::ReaderEof(self.index + COUNT))
         } else {
             let mut tmp: [u8; COUNT] = [0; COUNT];
             tmp.copy_from_slice(&buf[self.index..self.index + COUNT]);
@@ -69,7 +69,7 @@ impl Reader {
 
     pub fn read_slice<'a>(&mut self, len: usize, buf: &'a [u8]) -> Result<&'a [u8], Error> {
         if self.index + len > self.end {
-            return Err(Error::ReaderEof(self.index + len));
+            Err(Error::ReaderEof(self.index + len))
         } else {
             let slice = &buf[self.index..self.index + len];
             self.index += len;

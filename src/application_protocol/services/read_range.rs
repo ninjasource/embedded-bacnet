@@ -143,13 +143,12 @@ impl<'a> ReadRangeAck<'a> {
         let buf = if reader.eof() {
             &[]
         } else {
-            let buf = get_tagged_body_for_tag(
+            get_tagged_body_for_tag(
                 reader,
                 buf,
                 Self::ITEM_DATA_TAG,
                 "ReadRangeAck decode item_data",
-            )?;
-            buf
+            )?
         };
         let item_data = ReadRangeItems::new_from_buf(buf);
 

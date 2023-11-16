@@ -75,11 +75,9 @@ impl SimpleApplicationDataValue {
                 Ok(SimpleApplicationDataValue::Enumerated(value))
             }
 
-            x => {
-                return Err(Error::Unimplemented(Unimplemented::ApplicationTagNumber(
-                    x.clone(),
-                )))
-            }
+            x => Err(Error::Unimplemented(Unimplemented::ApplicationTagNumber(
+                x.clone(),
+            ))),
         }
     }
 
