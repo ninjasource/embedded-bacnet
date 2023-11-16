@@ -58,6 +58,7 @@ impl<'a> UnconfirmedRequest<'a> {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum UnconfirmedServiceChoice {
     IAm = 0,
     IHave = 1,

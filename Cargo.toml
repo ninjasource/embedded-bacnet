@@ -27,5 +27,6 @@ simple_logger = "4.2.0"
 chrono = { version = "0.4.28" }
 
 [features]
+default = []
 defmt = ["dep:defmt"]
 serde = ["dep:serde", "flagset/serde"]

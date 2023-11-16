@@ -171,7 +171,7 @@ pub fn decode_context_property_id(
 }
 
 pub fn encode_context_enumerated(writer: &mut Writer, tag_number: u8, property_id: &PropertyId) {
-    let value = property_id.clone() as u32;
+    let value = *property_id as u32;
     let len = get_len_u64(value as u64);
 
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);

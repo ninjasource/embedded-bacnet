@@ -22,6 +22,7 @@ pub enum ApplicationPdu<'a> {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum ApduType {
     ConfirmedServiceRequest = 0,

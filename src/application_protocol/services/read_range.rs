@@ -190,6 +190,7 @@ pub enum ReadRangeValue {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum ReadRangeValueType {
     Status = 0,

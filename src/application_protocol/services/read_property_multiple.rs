@@ -200,7 +200,7 @@ pub struct PropertyResult<'a> {
 
 impl<'a> PropertyResult<'a> {
     pub fn encode(&self, writer: &mut Writer) {
-        encode_context_unsigned(writer, 2, self.id.clone() as u32);
+        encode_context_unsigned(writer, 2, self.id as u32);
         self.value.encode(writer);
     }
 }
