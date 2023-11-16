@@ -1,5 +1,5 @@
 use crate::common::{
-    error::Error,
+    error::{Error, Unimplemented},
     io::{Reader, Writer},
 };
 
@@ -33,7 +33,7 @@ impl<'a> UnconfirmedRequest<'a> {
     }
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let choice: UnconfirmedServiceChoice = reader
-            .read_byte(buf)
+            .read_byte(buf)?
             .try_into()
             .map_err(|x| Error::InvalidVariant(("UnconfirmedRequest choice", x as u32)))?;
         match choice {
@@ -49,7 +49,9 @@ impl<'a> UnconfirmedRequest<'a> {
                 let apdu = CovNotification::decode(reader, buf)?;
                 Ok(Self::CovNotification(apdu))
             }
-            _ => unimplemented!(),
+            x => Err(Error::Unimplemented(
+                Unimplemented::UnconfirmedServiceChoice(x),
+            )),
         }
     }
 }

@@ -1,6 +1,7 @@
 use crate::application_protocol::primitives::data_value::{Enumerated, Time};
 
 use super::{
+    error::{Error, Unimplemented},
     helper::decode_unsigned,
     io::{Reader, Writer},
     spec::Binary,
@@ -37,33 +38,48 @@ impl SimpleApplicationDataValue {
             }
         }
     }
-    pub fn decode(tag: &Tag, reader: &mut Reader, buf: &[u8]) -> Self {
+    pub fn decode(tag: &Tag, reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         let tag_num = match &tag.number {
             TagNumber::Application(x) => x,
-            unknown => panic!("application tag number expected: {:?}", unknown),
+            unknown => {
+                return Err(Error::TagNotSupported((
+                    "SimpleApplicationDataValue decode",
+                    unknown.clone(),
+                )));
+            }
         };
 
         match tag_num {
             ApplicationTagNumber::Boolean => {
                 let value = tag.value > 0;
-                SimpleApplicationDataValue::Boolean(value)
+                Ok(SimpleApplicationDataValue::Boolean(value))
             }
             ApplicationTagNumber::UnsignedInt => {
-                let value = decode_unsigned(tag.value, reader, buf) as u32;
-                SimpleApplicationDataValue::UnsignedInt(value)
+                let value = decode_unsigned(tag.value, reader, buf)? as u32;
+                Ok(SimpleApplicationDataValue::UnsignedInt(value))
             }
             ApplicationTagNumber::Real => {
-                assert_eq!(tag.value, 4, "read tag should have length of 4");
-                SimpleApplicationDataValue::Real(f32::from_be_bytes(reader.read_bytes(buf)))
+                if tag.value != 4 {
+                    return Err(Error::InvalidValue(
+                        "real value tag should have length of 4",
+                    ));
+                }
+                Ok(SimpleApplicationDataValue::Real(f32::from_be_bytes(
+                    reader.read_bytes(buf)?,
+                )))
             }
             ApplicationTagNumber::Enumerated => {
-                let value = decode_unsigned(tag.value, reader, buf) as u32;
+                let value = decode_unsigned(tag.value, reader, buf)? as u32;
                 let value = if value > 0 { Binary::On } else { Binary::Off };
                 let value = Enumerated::Binary(value);
-                SimpleApplicationDataValue::Enumerated(value)
+                Ok(SimpleApplicationDataValue::Enumerated(value))
             }
 
-            x => unimplemented!("{:?}", x),
+            x => {
+                return Err(Error::Unimplemented(Unimplemented::ApplicationTagNumber(
+                    x.clone(),
+                )))
+            }
         }
     }
 
@@ -91,16 +107,26 @@ pub struct TimeValue {
 impl TimeValue {
     pub const LEN: u32 = 4;
 
-    pub fn decode(tag: &Tag, reader: &mut Reader, buf: &[u8]) -> TimeValue {
+    pub fn decode(tag: &Tag, reader: &mut Reader, buf: &[u8]) -> Result<TimeValue, Error> {
         // 4 bytes
-        assert_eq!(tag.value, Self::LEN);
+        if tag.value != Self::LEN {
+            return Err(Error::Length((
+                "time tag should have length value 4",
+                tag.value,
+            )));
+        }
         let time = match &tag.number {
-            TagNumber::Application(ApplicationTagNumber::Time) => Time::decode(reader, buf),
-            number => panic!("expected time application tag but got: {:?}", number),
+            TagNumber::Application(ApplicationTagNumber::Time) => Time::decode(reader, buf)?,
+            number => {
+                return Err(Error::TagNotSupported((
+                    "TimeValue decode time application tag expected",
+                    number.clone(),
+                )))
+            }
         };
-        let tag = Tag::decode(reader, buf);
-        let value = SimpleApplicationDataValue::decode(&tag, reader, buf);
-        TimeValue { time, value }
+        let tag = Tag::decode(reader, buf)?;
+        let value = SimpleApplicationDataValue::decode(&tag, reader, buf)?;
+        Ok(TimeValue { time, value })
     }
 
     pub fn encode(&self, writer: &mut Writer) {

@@ -4,12 +4,12 @@ use crate::{
         primitives::data_value::{BitString, Date, Time},
     },
     common::{
-        error::Error,
+        error::{Error, Unimplemented},
         helper::{
             decode_context_object_id, decode_context_property_id, decode_signed, decode_unsigned,
             encode_application_signed, encode_application_unsigned, encode_closing_tag,
             encode_context_enumerated, encode_context_object_id, encode_context_unsigned,
-            encode_opening_tag, get_tagged_body,
+            encode_opening_tag, get_tagged_body_for_tag,
         },
         io::{Reader, Writer},
         object_id::ObjectId,
@@ -114,13 +114,13 @@ impl<'a> ReadRangeAck<'a> {
         )?;
 
         // array_index
-        let mut tag = Tag::decode(reader, buf);
+        let mut tag = Tag::decode(reader, buf)?;
         let mut array_index = BACNET_ARRAY_ALL;
         if let TagNumber::ContextSpecific(Self::ARRAY_INDEX_TAG) = tag.number {
-            array_index = decode_unsigned(tag.value, reader, buf) as u32;
+            array_index = decode_unsigned(tag.value, reader, buf)? as u32;
 
             // read another tag
-            tag = Tag::decode(reader, buf);
+            tag = Tag::decode(reader, buf)?;
         }
 
         // result flags
@@ -128,7 +128,7 @@ impl<'a> ReadRangeAck<'a> {
             "ReadRangeAck decode result_flag",
             TagNumber::ContextSpecific(Self::RESULT_FLAGS_TAG),
         )?;
-        let result_flags = BitString::decode(&property_id, tag.value, reader, buf).unwrap();
+        let result_flags = BitString::decode(&property_id, tag.value, reader, buf)?;
 
         // item_count
         let tag = Tag::decode_expected(
@@ -137,14 +137,18 @@ impl<'a> ReadRangeAck<'a> {
             TagNumber::ContextSpecific(Self::ITEM_COUNT_TAG),
             "ReadRangeAck decode item_count",
         )?;
-        let item_count = decode_unsigned(tag.value, reader, buf) as usize;
+        let item_count = decode_unsigned(tag.value, reader, buf)? as usize;
 
         // item_data
         let buf = if reader.eof() {
             &[]
         } else {
-            let (buf, tag_number) = get_tagged_body(reader, buf);
-            assert_eq!(tag_number, Self::ITEM_DATA_TAG, "invalid item_data tag");
+            let buf = get_tagged_body_for_tag(
+                reader,
+                buf,
+                Self::ITEM_DATA_TAG,
+                "ReadRangeAck decode item_data",
+            )?;
             buf
         };
         let item_data = ReadRangeItems::new_from_buf(buf);
@@ -188,7 +192,7 @@ pub enum ReadRangeValue {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
-enum ReadRangeValueType {
+pub enum ReadRangeValueType {
     Status = 0,
     Bool = 1,
     Real = 2,
@@ -302,14 +306,14 @@ impl<'a> ReadRangeItems<'a> {
             TagNumber::Application(ApplicationTagNumber::Date),
             "ReadRangeItems next_internal",
         )?;
-        let date = Date::decode(&mut self.reader, self.buf);
+        let date = Date::decode(&mut self.reader, self.buf)?;
         Tag::decode_expected(
             &mut self.reader,
             self.buf,
             TagNumber::Application(ApplicationTagNumber::Time),
             "ReadRangeItems next_internal",
         )?;
-        let time = Time::decode(&mut self.reader, self.buf);
+        let time = Time::decode(&mut self.reader, self.buf)?;
         Tag::decode_expected(
             &mut self.reader,
             self.buf,
@@ -324,17 +328,19 @@ impl<'a> ReadRangeItems<'a> {
             TagNumber::ContextSpecificOpening(Self::VALUE_TAG),
             "ReadRangeItems next_internal",
         )?;
-        let tag = Tag::decode(&mut self.reader, self.buf);
+        let tag = Tag::decode(&mut self.reader, self.buf)?;
         let value_type: ReadRangeValueType = match tag.number {
-            TagNumber::ContextSpecific(tag_number) => tag_number.try_into().unwrap(),
-            x => panic!("Unexpected tag found when reading value type: {:?}", x),
+            TagNumber::ContextSpecific(tag_number) => tag_number
+                .try_into()
+                .map_err(|x| Error::InvalidVariant(("ReadRangeValueType", x as u32)))?,
+            x => return Err(Error::TagNotSupported(("ReadRangeItems next value", x))),
         };
         let value = match value_type {
             ReadRangeValueType::Real => {
-                let value = f32::from_be_bytes(self.reader.read_bytes(self.buf));
+                let value = f32::from_be_bytes(self.reader.read_bytes(self.buf)?);
                 ReadRangeValue::Real(value)
             }
-            _x => unimplemented!(),
+            x => return Err(Error::Unimplemented(Unimplemented::ReadRangeValueType(x))),
         };
         Tag::decode_expected(
             &mut self.reader,
@@ -410,7 +416,12 @@ impl ReadRange {
     }
 
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
-        let object_id = decode_context_object_id(reader, buf, Self::OBJECT_ID_TAG)?;
+        let object_id = decode_context_object_id(
+            reader,
+            buf,
+            Self::OBJECT_ID_TAG,
+            "ReadRange decode object_id",
+        )?;
         let property_id = decode_context_property_id(
             reader,
             buf,
@@ -418,10 +429,10 @@ impl ReadRange {
             "ReadRange decode property_id",
         )?;
 
-        let mut tag = Tag::decode(reader, buf);
+        let mut tag = Tag::decode(reader, buf)?;
         let array_index = if tag.number == TagNumber::ContextSpecific(Self::ARRAY_INDEX_TAG) {
-            let value = decode_unsigned(tag.value, reader, buf) as u32;
-            tag = Tag::decode(reader, buf);
+            let value = decode_unsigned(tag.value, reader, buf)? as u32;
+            tag = Tag::decode(reader, buf)?;
             value
         } else {
             BACNET_ARRAY_ALL
@@ -430,43 +441,50 @@ impl ReadRange {
         let request_type = match tag.number {
             TagNumber::ContextSpecificOpening(Self::BY_POSITION_TAG) => {
                 // index
-                let index_tag = Tag::decode(reader, buf);
-                assert_eq!(
-                    index_tag.number,
-                    TagNumber::Application(ApplicationTagNumber::UnsignedInt)
-                );
-                let index = decode_unsigned(index_tag.value, reader, buf) as u32;
+                let index_tag = Tag::decode_expected(
+                    reader,
+                    buf,
+                    TagNumber::Application(ApplicationTagNumber::UnsignedInt),
+                    "ReadRange decode index",
+                )?;
+                let index = decode_unsigned(index_tag.value, reader, buf)? as u32;
 
                 // count
-                let count_tag = Tag::decode(reader, buf);
+                let count_tag = Tag::decode(reader, buf)?;
                 let count = match count_tag.number {
                     TagNumber::Application(ApplicationTagNumber::UnsignedInt) => {
-                        decode_unsigned(count_tag.value, reader, buf) as u32
+                        decode_unsigned(count_tag.value, reader, buf)? as u32
                     }
                     TagNumber::Application(ApplicationTagNumber::SignedInt) => {
-                        let count = decode_signed(count_tag.value, reader, buf);
+                        let count = decode_signed(count_tag.value, reader, buf)?;
                         if count < 0 {
-                            panic!("invalid count: {count}");
+                            return Err(Error::InvalidValue("ReadRange count cannot be negative"));
                         }
 
                         count as u32
                     }
-                    _ => panic!("invalid count tag: {:?}", count_tag),
+                    _ => {
+                        return Err(Error::TagNotSupported((
+                            "ReadRange count tag",
+                            count_tag.number,
+                        )))
+                    }
                 };
 
                 // closing tag
-                let tag = Tag::decode(reader, buf);
-                assert_eq!(
-                    tag.number,
-                    TagNumber::ContextSpecificClosing(Self::BY_POSITION_TAG)
-                );
+                Tag::decode_expected(
+                    reader,
+                    buf,
+                    TagNumber::ContextSpecificClosing(Self::BY_POSITION_TAG),
+                    "ReadRange decode closing position",
+                )?;
 
                 ReadRangeRequestType::ByPosition(ReadRangeByPosition {
                     count: count as u32,
                     index,
                 })
             }
-            _ => unimplemented!("{:?}", tag),
+            number => return Err(Error::TagNotSupported(("ReadRange opening tag", number))),
         };
 
         Ok(Self {

@@ -69,6 +69,7 @@ fn main() -> Result<(), Error> {
 
     if let Some(message) = message.get_read_property_multiple_ack_into() {
         for values in message {
+            let values = values.unwrap();
             for x in values.property_results.into_iter() {
                 match x.unwrap().value {
                     PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(

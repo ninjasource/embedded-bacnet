@@ -85,7 +85,7 @@ impl<'a> DataLink<'a> {
         match &self.function {
             DataLinkFunction::OriginalBroadcastNpdu | DataLinkFunction::OriginalUnicastNpdu => {
                 writer.extend_from_slice(&[0, 0]); // length placeholder
-                self.npdu.as_ref().unwrap().encode(writer);
+                self.npdu.as_ref().unwrap().encode(writer); // should be ok to unwrap here since it has already been checked
                 Self::update_len(writer);
             }
             _ => todo!(),
@@ -99,21 +99,22 @@ impl<'a> DataLink<'a> {
     }
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
-        let bvll_type = reader.read_byte(buf);
+        let bvll_type = reader.read_byte(buf)?;
         if bvll_type != BVLL_TYPE_BACNET_IP {
-            panic!("only BACNET_IP supported");
+            return Err(Error::InvalidValue("only BACNET_IP supported"));
         }
 
         let function = reader
-            .read_byte(buf)
+            .read_byte(buf)?
             .try_into()
             .map_err(|_| Error::InvalidValue("bvll function value out of range"))?;
-        let len: u16 = u16::from_be_bytes(reader.read_bytes(buf));
+        let len: u16 = u16::from_be_bytes(reader.read_bytes(buf)?);
 
         if len as usize > buf.len() {
-            return Err(Error::Length(
+            return Err(Error::Length((
                 "read buffer too small to fit entire bacnet payload",
-            ));
+                len as u32,
+            )));
         }
         reader.set_len(len as usize);
 

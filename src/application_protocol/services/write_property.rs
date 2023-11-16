@@ -50,7 +50,12 @@ impl<'a> WriteProperty<'a> {
     }
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
-        let object_id = decode_context_object_id(reader, buf, Self::TAG_OBJECT_ID)?;
+        let object_id = decode_context_object_id(
+            reader,
+            buf,
+            Self::TAG_OBJECT_ID,
+            "WriteProperty decode object_id",
+        )?;
         let property_id = decode_context_property_id(
             reader,
             buf,
@@ -59,31 +64,38 @@ impl<'a> WriteProperty<'a> {
         )?;
 
         // array_index
-        let mut tag = Tag::decode(reader, buf);
+        let mut tag = Tag::decode(reader, buf)?;
         let mut array_index = None;
         if let TagNumber::ContextSpecific(Self::TAG_ARRAY_INDEX) = tag.number {
-            let array_index_tmp = decode_unsigned(tag.value, reader, buf) as u32;
+            let array_index_tmp = decode_unsigned(tag.value, reader, buf)? as u32;
             if array_index_tmp != BACNET_ARRAY_ALL {
                 array_index = Some(array_index_tmp)
             }
 
             // read another tag
-            tag = Tag::decode(reader, buf);
+            tag = Tag::decode(reader, buf)?;
         }
 
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecificOpening(Self::TAG_VALUE)
-        );
+        // value
+        tag.expect_number(
+            "WriteProperty decode value",
+            TagNumber::ContextSpecificOpening(Self::TAG_VALUE),
+        )?;
         let value = ApplicationDataValueWrite::decode(&object_id, &property_id, reader, buf)?;
-        tag = Tag::decode(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecificClosing(Self::TAG_VALUE)
-        );
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecificClosing(Self::TAG_VALUE),
+            "WriteProperty decode value",
+        )?;
 
-        let tag = Tag::decode(reader, buf);
-        assert_eq!(tag.number, TagNumber::ContextSpecific(Self::TAG_PRIORITY));
+        // priority
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecific(Self::TAG_PRIORITY),
+            "WriteProperty decode priority",
+        )?;
         let priority = tag.value as u8;
         let priority = if priority == Self::LOWEST_PRIORITY {
             None

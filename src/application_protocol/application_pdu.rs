@@ -129,7 +129,7 @@ impl<'a> ApplicationPdu<'a> {
     }
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
-        let byte0 = reader.read_byte(buf);
+        let byte0 = reader.read_byte(buf)?;
         let pdu_type: ApduType = (byte0 >> 4).try_into()?;
         let pdu_flags = byte0 & 0x0F;
         let segmented_message = (pdu_flags & PduFlags::SegmentedMessage as u8) > 0;

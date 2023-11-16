@@ -206,10 +206,10 @@ impl<'a> NetworkPdu<'a> {
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         // ignore version
-        let _version = reader.read_byte(buf);
+        let _version = reader.read_byte(buf)?;
 
         // read and decode control byte
-        let control = reader.read_byte(buf);
+        let control = reader.read_byte(buf)?;
         let has_dst = (control & ControlFlags::HasDestination as u8) > 0;
         let has_src = (control & ControlFlags::HasSource as u8) > 0;
         let is_network_message = (control & ControlFlags::NetworkLayerMessage as u8) > 0;
@@ -217,20 +217,20 @@ impl<'a> NetworkPdu<'a> {
         let message_priority: MessagePriority = control.into();
 
         let dst = if has_dst {
-            Some(NetworkAddress::decode(reader, buf))
+            Some(NetworkAddress::decode(reader, buf)?)
         } else {
             None
         };
 
         let src = if has_src {
-            Some(NetworkAddress::decode(reader, buf))
+            Some(NetworkAddress::decode(reader, buf)?)
         } else {
             None
         };
 
         // if dst exists then read the hop_count (it comes after src for some reason)
         let dst = if let Some(dst) = dst {
-            let hop_count = reader.read_byte(buf);
+            let hop_count = reader.read_byte(buf)?;
             Some(DestinationAddress {
                 network_address: dst,
                 hop_count,
@@ -240,7 +240,7 @@ impl<'a> NetworkPdu<'a> {
         };
 
         let network_message = if is_network_message {
-            let message_type = reader.read_byte(buf);
+            let message_type = reader.read_byte(buf)?;
             match message_type.try_into() {
                 Ok(message_type) => NetworkMessage::MessageType(message_type),
                 Err(custom_message_type) => NetworkMessage::CustomMessageType(custom_message_type),
@@ -307,21 +307,24 @@ impl NetworkAddress {
         }
     }
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
-        let net = u16::from_be_bytes(reader.read_bytes(buf));
-        let len = reader.read_byte(buf);
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let net = u16::from_be_bytes(reader.read_bytes(buf)?);
+        let len = reader.read_byte(buf)?;
         match len {
             IPV4_ADDR_LEN => {
-                let ipv4: [u8; 4] = reader.read_bytes(buf);
-                let port = u16::from_be_bytes(reader.read_bytes(buf));
+                let ipv4: [u8; 4] = reader.read_bytes(buf)?;
+                let port = u16::from_be_bytes(reader.read_bytes(buf)?);
 
-                Self {
+                Ok(Self {
                     net,
                     addr: Some(Addr { ipv4, port }),
-                }
+                })
             }
-            0 => Self { net, addr: None },
-            _ => unreachable!(), // TODO: return proper error here
+            0 => Ok(Self { net, addr: None }),
+            x => Err(Error::Length((
+                "NetworkAddress decode ip len can only be 6 or 0",
+                x as u32,
+            ))),
         }
     }
 }

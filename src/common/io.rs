@@ -1,3 +1,5 @@
+use super::error::Error;
+
 pub struct Writer<'a> {
     pub buf: &'a mut [u8],
     pub index: usize,
@@ -44,34 +46,34 @@ impl Reader {
         self.end = len;
     }
 
-    pub fn read_byte(&mut self, buf: &[u8]) -> u8 {
+    pub fn read_byte(&mut self, buf: &[u8]) -> Result<u8, Error> {
         if self.eof() {
-            panic!("read_byte attempt to read past end of buffer");
+            return Err(Error::ReaderEof(self.end));
         } else {
             let byte = buf[self.index];
             self.index += 1;
-            byte
+            Ok(byte)
         }
     }
 
-    pub fn read_bytes<const COUNT: usize>(&mut self, buf: &[u8]) -> [u8; COUNT] {
+    pub fn read_bytes<const COUNT: usize>(&mut self, buf: &[u8]) -> Result<[u8; COUNT], Error> {
         if self.index + COUNT > self.end {
-            panic!("read_bytes attempt to read past end of buffer");
+            return Err(Error::ReaderEof(self.index + COUNT));
         } else {
             let mut tmp: [u8; COUNT] = [0; COUNT];
             tmp.copy_from_slice(&buf[self.index..self.index + COUNT]);
             self.index += COUNT;
-            tmp
+            Ok(tmp)
         }
     }
 
-    pub fn read_slice<'a>(&mut self, len: usize, buf: &'a [u8]) -> &'a [u8] {
+    pub fn read_slice<'a>(&mut self, len: usize, buf: &'a [u8]) -> Result<&'a [u8], Error> {
         if self.index + len > self.end {
-            panic!("read_slice attempt to read past end of buffer");
+            return Err(Error::ReaderEof(self.index + len));
         } else {
             let slice = &buf[self.index..self.index + len];
             self.index += len;
-            slice
+            Ok(slice)
         }
     }
 }

@@ -8,9 +8,9 @@ use crate::{
         daily_schedule::WeeklySchedule,
         error::Error,
         helper::{
-            decode_context_object_id, decode_u32, decode_unsigned, encode_closing_tag,
-            encode_context_enumerated, encode_context_object_id, encode_context_unsigned,
-            encode_opening_tag, get_tagged_body,
+            decode_context_object_id, decode_context_property_id, decode_unsigned,
+            encode_closing_tag, encode_context_enumerated, encode_context_object_id,
+            encode_context_unsigned, encode_opening_tag, get_tagged_body, get_tagged_body_for_tag,
         },
         io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
@@ -42,17 +42,11 @@ impl<'a> ObjectWithResults<'a> {
         self.property_results.encode(writer);
         encode_closing_tag(writer, 1);
     }
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
-        let tag = Tag::decode(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecific(0),
-            "expected object_id tag"
-        );
-        let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
-
-        let (buf, tag_number) = get_tagged_body(reader, buf);
-        assert_eq!(tag_number, 1, "expected list of results opening tag");
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let object_id =
+            decode_context_object_id(reader, buf, 0, "ObjectWithResults decode object_id")?;
+        let buf =
+            get_tagged_body_for_tag(reader, buf, 1, "ObjectWithResults decode list of results")?;
 
         let property_results = PropertyResultList {
             object_id: object_id.clone(),
@@ -61,10 +55,10 @@ impl<'a> ObjectWithResults<'a> {
             property_results: &[],
         };
 
-        ObjectWithResults {
+        Ok(ObjectWithResults {
             object_id,
             property_results,
-        }
+        })
     }
 }
 
@@ -76,69 +70,8 @@ impl<'a> Iterator for PropertyResultList<'a> {
             return None;
         }
 
-        let tag = Tag::decode(&mut self.reader, self.buf);
-
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecific(2),
-            "expected property identifier tag"
-        );
-        let property_id: PropertyId =
-            (decode_unsigned(tag.value, &mut self.reader, self.buf) as u32).into();
-
-        let (buf, tag_number) = get_tagged_body(&mut self.reader, self.buf);
-        let mut reader = Reader {
-            index: 0,
-            end: buf.len(),
-        };
-
-        let property_value = match tag_number {
-            4 => {
-                match &property_id {
-                    PropertyId::PropEventTimeStamps => {
-                        // ignore for now
-                        PropertyValue::PropValue(ApplicationDataValue::Boolean(false))
-                    }
-                    PropertyId::PropWeeklySchedule => {
-                        let weekly_schedule = WeeklySchedule::new_from_buf(&mut reader, buf);
-                        PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
-                            weekly_schedule,
-                        ))
-                    }
-                    property_id => {
-                        let tag = Tag::decode(&mut reader, buf);
-                        let value = ApplicationDataValue::decode(
-                            &tag,
-                            &self.object_id,
-                            property_id,
-                            &mut reader,
-                            buf,
-                        );
-                        PropertyValue::PropValue(value)
-                    }
-                }
-            }
-            5 => {
-                // property read error
-                match read_error(&mut reader, buf) {
-                    Ok(error) => PropertyValue::PropError(error),
-                    Err(e) => return Some(Err(e)),
-                }
-            }
-            x => {
-                panic!(
-                    "Unexpected tag number after property identifier {:?}: {:?}",
-                    property_id, x
-                );
-            }
-        };
-
-        let property_result = PropertyResult {
-            id: property_id,
-            value: property_value,
-        };
-
-        Some(Ok(property_result))
+        let property_result = self.next_internal();
+        Some(property_result)
     }
 }
 
@@ -150,7 +83,7 @@ fn read_error(reader: &mut Reader, buf: &[u8]) -> Result<PropertyAccessError, Er
         TagNumber::Application(ApplicationTagNumber::Enumerated),
         "read_error error_class",
     )?;
-    let value = decode_unsigned(tag.value, reader, buf) as u32;
+    let value = decode_unsigned(tag.value, reader, buf)? as u32;
     let error_class = value
         .try_into()
         .map_err(|x| Error::InvalidVariant(("ErrorClass", x)))?;
@@ -162,7 +95,7 @@ fn read_error(reader: &mut Reader, buf: &[u8]) -> Result<PropertyAccessError, Er
         TagNumber::Application(ApplicationTagNumber::Enumerated),
         "read_error error code",
     )?;
-    let value = decode_unsigned(tag.value, reader, buf) as u32;
+    let value = decode_unsigned(tag.value, reader, buf)? as u32;
     let error_code = value
         .try_into()
         .map_err(|x| Error::InvalidVariant(("ErrorCode", x)))?;
@@ -196,6 +129,65 @@ impl<'a> PropertyResultList<'a> {
         for item in self.property_results {
             item.encode(writer);
         }
+    }
+
+    fn next_internal(&mut self) -> Result<PropertyResult<'a>, Error> {
+        let property_id = decode_context_property_id(
+            &mut self.reader,
+            self.buf,
+            2,
+            "PropertyResultList next property_id",
+        )?;
+
+        let (buf, tag_number) = get_tagged_body(&mut self.reader, self.buf)?;
+        let mut reader = Reader {
+            index: 0,
+            end: buf.len(),
+        };
+
+        let property_value = match tag_number {
+            4 => {
+                match &property_id {
+                    PropertyId::PropEventTimeStamps => {
+                        // ignore for now
+                        PropertyValue::PropValue(ApplicationDataValue::Boolean(false))
+                    }
+                    PropertyId::PropWeeklySchedule => {
+                        let weekly_schedule = WeeklySchedule::new_from_buf(&mut reader, buf)?;
+                        PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
+                            weekly_schedule,
+                        ))
+                    }
+                    property_id => {
+                        let tag = Tag::decode(&mut reader, buf)?;
+                        let value = ApplicationDataValue::decode(
+                            &tag,
+                            &self.object_id,
+                            property_id,
+                            &mut reader,
+                            buf,
+                        )?;
+                        PropertyValue::PropValue(value)
+                    }
+                }
+            }
+            5 => {
+                // property read error
+                let error = read_error(&mut reader, buf)?;
+                PropertyValue::PropError(error)
+            }
+            x => {
+                return Err(Error::TagNotSupported((
+                    "PropertyResultList next",
+                    TagNumber::ContextSpecificOpening(x),
+                )));
+            }
+        };
+
+        Ok(PropertyResult {
+            id: property_id,
+            value: property_value,
+        })
     }
 }
 
@@ -284,7 +276,7 @@ impl<'a> ReadPropertyMultipleAck<'a> {
 }
 
 impl<'a> Iterator for ReadPropertyMultipleAck<'a> {
-    type Item = ObjectWithResults<'a>;
+    type Item = Result<ObjectWithResults<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.reader.eof() {
@@ -314,16 +306,21 @@ pub struct PropertyIdList<'a> {
 }
 
 impl<'a> Iterator for PropertyIdList<'a> {
-    type Item = PropertyId;
+    type Item = Result<PropertyId, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.reader.eof() {
             None
         } else {
-            let tag = Tag::decode(&mut self.reader, self.buf);
-            assert!(tag.number == TagNumber::ContextSpecific(0));
-            let property_id: PropertyId = decode_u32(tag.value, &mut self.reader, self.buf).into();
-            Some(property_id)
+            match decode_context_property_id(
+                &mut self.reader,
+                self.buf,
+                0,
+                "PropertyIdList next property_id",
+            ) {
+                Ok(property_id) => Some(Ok(property_id)),
+                Err(e) => Some(Err(e)),
+            }
         }
     }
 }
@@ -423,31 +420,43 @@ impl<'a> ReadPropertyMultiple<'a> {
             objects: &[],
         }
     }
-}
 
-impl<'a> Iterator for ReadPropertyMultiple<'a> {
-    type Item = ReadPropertyMultipleObject<'a>;
+    fn next_internal(&mut self) -> Result<ReadPropertyMultipleObject<'a>, Error> {
+        let object_id = decode_context_object_id(
+            &mut self.reader,
+            self.buf,
+            0,
+            "ReadPropertyMultiple next object_id",
+        )?;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.reader.eof() {
-            return None;
-        }
-
-        let object_id = decode_context_object_id(&mut self.reader, self.buf, 0).unwrap();
-
-        let (buf, tag_number) = get_tagged_body(&mut self.reader, self.buf);
-        assert_eq!(tag_number, 1, "expected list of results opening tag");
+        let buf = get_tagged_body_for_tag(
+            &mut self.reader,
+            self.buf,
+            1,
+            "ReadPropertyMultiple next list of results",
+        )?;
         let property_ids = PropertyIdList {
             property_ids: &[],
             reader: Reader::new_with_len(buf.len()),
             buf,
         };
 
-        let object_with_property_ids = ReadPropertyMultipleObject {
+        Ok(ReadPropertyMultipleObject {
             object_id,
             property_ids,
-        };
+        })
+    }
+}
 
+impl<'a> Iterator for ReadPropertyMultiple<'a> {
+    type Item = Result<ReadPropertyMultipleObject<'a>, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.eof() {
+            return None;
+        }
+
+        let object_with_property_ids = self.next_internal();
         Some(object_with_property_ids)
     }
 }

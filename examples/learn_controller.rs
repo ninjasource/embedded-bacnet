@@ -78,7 +78,7 @@ fn main() -> Result<(), Error> {
         }
 
         for (object_type, ids) in map.iter() {
-            let object_type = ObjectType::from(*object_type);
+            let object_type = ObjectType::try_from(*object_type).unwrap();
             match object_type {
                 ObjectType::ObjectBinaryInput
                 | ObjectType::ObjectBinaryOutput
@@ -182,6 +182,7 @@ fn get_multi_binary(
         let mut items = vec![];
 
         for obj in ack {
+            let obj = obj.unwrap();
             let mut x = obj.property_results.into_iter();
             let name = x.next().unwrap().unwrap().value.to_string();
             let value = match x.next().unwrap().unwrap().value {
@@ -242,6 +243,7 @@ fn get_multi_analog(
         let mut items = vec![];
 
         for obj in ack {
+            let obj = obj.unwrap();
             let mut x = obj.property_results.into_iter();
             let name = x.next().unwrap().unwrap().value.to_string();
             let value = match x.next().unwrap().unwrap().value {
@@ -302,6 +304,7 @@ fn get_multi_trend_log(
         let mut items = vec![];
 
         for obj in ack {
+            let obj = obj.unwrap();
             let mut x = obj.property_results.into_iter();
             let name = x.next().unwrap().unwrap().value.to_string();
             let record_count = match x.next().unwrap().unwrap().value {
@@ -346,6 +349,7 @@ fn get_multi_schedule(
         let mut items = vec![];
 
         for obj in ack {
+            let obj = obj.unwrap();
             let mut x = obj.property_results.into_iter();
             let name = x.next().unwrap().unwrap().value.to_string();
             let value = match x.next().unwrap().unwrap().value {

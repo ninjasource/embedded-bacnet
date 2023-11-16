@@ -1,15 +1,15 @@
 use crate::application_protocol::{
     application_pdu::ApduType, confirmed::ConfirmedServiceChoice,
-    unconfirmed::UnconfirmedServiceChoice,
+    services::read_range::ReadRangeValueType, unconfirmed::UnconfirmedServiceChoice,
 };
 
-use super::tag::{Tag, TagNumber};
+use super::tag::{ApplicationTagNumber, Tag, TagNumber};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Error {
-    Length(&'static str),
+    Length((&'static str, u32)),
     InvalidValue(&'static str),
     InvalidVariant((&'static str, u32)),
     Unknown,
@@ -19,8 +19,10 @@ pub enum Error {
     Io,
     ApduTypeNotSupported(ApduType),
     ExpectedTag(ExpectedTag),
+    ExpectedOpeningTag(TagNumber),
     TagNotSupported((&'static str, TagNumber)),
     TagValueInvalid((&'static str, Tag, u32)),
+    ReaderEof(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +31,8 @@ pub enum Error {
 pub enum Unimplemented {
     ConfirmedServiceChoice(ConfirmedServiceChoice),
     UnconfirmedServiceChoice(UnconfirmedServiceChoice),
+    ReadRangeValueType(ReadRangeValueType),
+    ApplicationTagNumber(ApplicationTagNumber),
 }
 
 #[derive(Debug, Clone)]

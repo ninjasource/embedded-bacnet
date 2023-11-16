@@ -44,16 +44,16 @@ impl<'a> WeeklySchedule<'a> {
 
     // due to the fact that WeeklySchedule contains an arbitrary number of TimeValue pairs we need to return an iterator
     // because we cannot use an allocator
-    pub fn new_from_buf(reader: &mut Reader, buf: &'a [u8]) -> Self {
-        let monday = TimeValueList::new_from_buf(get_tagged_body(reader, buf).0);
-        let tuesday = TimeValueList::new_from_buf(get_tagged_body(reader, buf).0);
-        let wednesday = TimeValueList::new_from_buf(get_tagged_body(reader, buf).0);
-        let thursday = TimeValueList::new_from_buf(get_tagged_body(reader, buf).0);
-        let friday = TimeValueList::new_from_buf(get_tagged_body(reader, buf).0);
-        let saturday = TimeValueList::new_from_buf(get_tagged_body(reader, buf).0);
-        let sunday = TimeValueList::new_from_buf(get_tagged_body(reader, buf).0);
+    pub fn new_from_buf(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let monday = TimeValueList::new_from_buf(get_tagged_body(reader, buf)?.0);
+        let tuesday = TimeValueList::new_from_buf(get_tagged_body(reader, buf)?.0);
+        let wednesday = TimeValueList::new_from_buf(get_tagged_body(reader, buf)?.0);
+        let thursday = TimeValueList::new_from_buf(get_tagged_body(reader, buf)?.0);
+        let friday = TimeValueList::new_from_buf(get_tagged_body(reader, buf)?.0);
+        let saturday = TimeValueList::new_from_buf(get_tagged_body(reader, buf)?.0);
+        let sunday = TimeValueList::new_from_buf(get_tagged_body(reader, buf)?.0);
 
-        Self {
+        Ok(Self {
             monday,
             tuesday,
             wednesday,
@@ -61,7 +61,7 @@ impl<'a> WeeklySchedule<'a> {
             friday,
             saturday,
             sunday,
-        }
+        })
     }
 
     pub fn encode(&self, writer: &mut Writer) {
@@ -111,6 +111,17 @@ impl<'a> TimeValueList<'a> {
         }
         encode_closing_tag(writer, 0);
     }
+
+    fn next_internal(&mut self) -> Result<TimeValue, Error> {
+        let tag = Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
+            TagNumber::Application(ApplicationTagNumber::Time),
+            "Decode weekly schedule TimeValueList next",
+        )?;
+
+        TimeValue::decode(&tag, &mut self.reader, self.buf)
+    }
 }
 
 impl<'a> Iterator for TimeValueList<'a> {
@@ -121,17 +132,6 @@ impl<'a> Iterator for TimeValueList<'a> {
             return None;
         }
 
-        match Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::Application(ApplicationTagNumber::Time),
-            "Decode weekly schedule TimeValueList next",
-        ) {
-            Ok(tag) => {
-                let time_value = TimeValue::decode(&tag, &mut self.reader, self.buf);
-                Some(Ok(time_value))
-            }
-            Err(e) => Some(Err(e)),
-        }
+        Some(self.next_internal())
     }
 }

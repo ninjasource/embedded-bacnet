@@ -6,7 +6,7 @@ use crate::{
         error::Error,
         helper::{
             decode_unsigned, encode_context_bool, encode_context_object_id,
-            encode_context_unsigned, get_tagged_body,
+            encode_context_unsigned, get_tagged_body_for_tag,
         },
         io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
@@ -44,21 +44,21 @@ impl<'a> CovNotification<'a> {
         // parse a tag, starting from after the pdu type and service choice
 
         // process_id
-        let tag = Tag::decode(reader, buf);
-        if tag.number != TagNumber::ContextSpecific(Self::TAG_PROCESS_ID) {
-            return Err(Error::InvalidValue(
-                "expected process_id tag type for CovNotification",
-            ));
-        }
-        let process_id = decode_unsigned(tag.value, reader, buf) as u32;
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecific(Self::TAG_PROCESS_ID),
+            "CovNotification process_id",
+        )?;
+        let process_id = decode_unsigned(tag.value, reader, buf)? as u32;
 
         // device_id
-        let tag = Tag::decode(reader, buf);
-        if tag.number != TagNumber::ContextSpecific(Self::TAG_DEVICE_ID) {
-            return Err(Error::InvalidValue(
-                "expected device_id tag type for CovNotification",
-            ));
-        }
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecific(Self::TAG_DEVICE_ID),
+            "CovNotification device_id tag",
+        )?;
         let device_id = ObjectId::decode(tag.value, reader, buf)?;
         if device_id.object_type != ObjectType::ObjectDevice {
             return Err(Error::InvalidValue(
@@ -67,29 +67,29 @@ impl<'a> CovNotification<'a> {
         }
 
         // object_id
-        let tag = Tag::decode(reader, buf);
-        if tag.number != TagNumber::ContextSpecific(Self::TAG_OBJECT_ID) {
-            return Err(Error::InvalidValue(
-                "expected object_id tag type for CovNotification",
-            ));
-        }
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecific(Self::TAG_OBJECT_ID),
+            "CovNotification object_id",
+        )?;
         let object_id = ObjectId::decode(tag.value, reader, buf)?;
 
         // lifetime
-        let tag = Tag::decode(reader, buf);
-        if tag.number != TagNumber::ContextSpecific(Self::TAG_LIFETIME) {
-            return Err(Error::InvalidValue(
-                "expected lifetime tag type for CovNotification",
-            ));
-        }
-        let time_remaining_seconds = decode_unsigned(tag.value, reader, buf) as u32;
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecific(Self::TAG_LIFETIME),
+            "CovNotification lifetime",
+        )?;
+        let time_remaining_seconds = decode_unsigned(tag.value, reader, buf)? as u32;
 
-        let (buf, tag_number) = get_tagged_body(reader, buf);
-        if tag_number != Self::TAG_LIST_OF_VALUES {
-            return Err(Error::InvalidValue(
-                "expected list of values opening tag type for CovNotification",
-            ));
-        }
+        let buf = get_tagged_body_for_tag(
+            reader,
+            buf,
+            Self::TAG_LIST_OF_VALUES,
+            "CovNotification decode list of values",
+        )?;
 
         let reader = Reader {
             index: 0,
@@ -115,7 +115,7 @@ impl<'a> CovNotification<'a> {
             "CovNotification next property_id",
         )?;
         let property_id: PropertyId =
-            (decode_unsigned(tag.value, &mut self.reader, self.buf) as u32).into();
+            (decode_unsigned(tag.value, &mut self.reader, self.buf)? as u32).into();
 
         // value
         Tag::decode_expected(
@@ -124,14 +124,14 @@ impl<'a> CovNotification<'a> {
             TagNumber::ContextSpecificOpening(2),
             "CovNotification next expected value opening tag",
         )?;
-        let tag = Tag::decode(&mut self.reader, self.buf);
+        let tag = Tag::decode(&mut self.reader, self.buf)?;
         let value = ApplicationDataValue::decode(
             &tag,
             &self.object_id,
             &property_id,
             &mut self.reader,
             self.buf,
-        );
+        )?;
         Tag::decode_expected(
             &mut self.reader,
             self.buf,

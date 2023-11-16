@@ -79,12 +79,12 @@ impl<'a> ConfirmedRequest<'a> {
 
     // the control byte has already been read
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
-        let byte0 = reader.read_byte(buf);
+        let byte0 = reader.read_byte(buf)?;
         let max_segments: MaxSegments = (byte0 & 0xF0).into();
         let max_adpu: MaxAdpu = (byte0 & 0x0F).into();
-        let invoke_id = reader.read_byte(buf);
+        let invoke_id = reader.read_byte(buf)?;
 
-        let choice: ConfirmedServiceChoice = reader.read_byte(buf).try_into().map_err(|e| {
+        let choice: ConfirmedServiceChoice = reader.read_byte(buf)?.try_into().map_err(|e| {
             Error::InvalidVariant(("ConfirmedRequest decode ConfirmedServiceChoice", e as u32))
         })?;
 
@@ -247,9 +247,9 @@ impl SimpleAck {
     }
 
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
-        let invoke_id = reader.read_byte(buf);
+        let invoke_id = reader.read_byte(buf)?;
         let service_choice: ConfirmedServiceChoice =
-            reader.read_byte(buf).try_into().map_err(|e| {
+            reader.read_byte(buf)?.try_into().map_err(|e| {
                 Error::InvalidVariant(("SimpleAck decode ConfirmedServiceChoice", e as u32))
             })?;
 
@@ -271,9 +271,9 @@ pub struct BacnetError {
 
 impl BacnetError {
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
-        let invoke_id = reader.read_byte(buf);
+        let invoke_id = reader.read_byte(buf)?;
         let service_choice: ConfirmedServiceChoice =
-            reader.read_byte(buf).try_into().map_err(|e| {
+            reader.read_byte(buf)?.try_into().map_err(|e| {
                 Error::InvalidVariant(("BacnetError decode ConfirmedServiceChoice", e as u32))
             })?;
 
@@ -283,7 +283,7 @@ impl BacnetError {
             TagNumber::Application(ApplicationTagNumber::Enumerated),
             "BacnetError error class",
         )?;
-        let value = decode_unsigned(tag.value, reader, buf) as u32;
+        let value = decode_unsigned(tag.value, reader, buf)? as u32;
         let error_class =
             ErrorClass::try_from(value).map_err(|e| Error::InvalidVariant(("ErrorClass", e)))?;
 
@@ -293,7 +293,7 @@ impl BacnetError {
             TagNumber::Application(ApplicationTagNumber::Enumerated),
             "BacnetError error code",
         )?;
-        let value = decode_unsigned(tag.value, reader, buf) as u32;
+        let value = decode_unsigned(tag.value, reader, buf)? as u32;
         let error_code =
             ErrorCode::try_from(value).map_err(|e| Error::InvalidVariant(("ErrorCode", e)))?;
 
@@ -327,8 +327,8 @@ impl<'a> ComplexAck<'a> {
     }
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
-        let invoke_id = reader.read_byte(buf);
-        let choice: ConfirmedServiceChoice = reader.read_byte(buf).try_into().map_err(|e| {
+        let invoke_id = reader.read_byte(buf)?;
+        let choice: ConfirmedServiceChoice = reader.read_byte(buf)?.try_into().map_err(|e| {
             Error::InvalidVariant(("ComplexAck decode ConfirmedServiceChoice", e as u32))
         })?;
 

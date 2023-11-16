@@ -7,7 +7,7 @@ use crate::{
         helper::{
             decode_context_object_id, decode_context_property_id, encode_closing_tag,
             encode_context_enumerated, encode_context_object_id, encode_context_unsigned,
-            encode_opening_tag, get_tagged_body,
+            encode_opening_tag, get_tagged_body_for_tag,
         },
         io::{Reader, Writer},
         object_id::ObjectId,
@@ -59,6 +59,17 @@ impl<'a> ObjectIdList<'a> {
             object_id.encode(writer);
         }
     }
+
+    fn next_internal(&mut self) -> Result<ObjectId, Error> {
+        let tag = Tag::decode_expected(
+            &mut self.reader,
+            self.buf,
+            TagNumber::Application(ApplicationTagNumber::ObjectId),
+            "ObjectIdList nex",
+        )?;
+
+        ObjectId::decode(tag.value, &mut self.reader, self.buf)
+    }
 }
 
 impl<'a> Iterator for ObjectIdList<'a> {
@@ -68,19 +79,7 @@ impl<'a> Iterator for ObjectIdList<'a> {
         if self.reader.eof() {
             None
         } else {
-            match Tag::decode_expected(
-                &mut self.reader,
-                self.buf,
-                TagNumber::Application(ApplicationTagNumber::ObjectId),
-                "ObjectIdList nex",
-            ) {
-                Ok(tag) => {
-                    let object_id =
-                        ObjectId::decode(tag.value, &mut self.reader, self.buf).unwrap();
-                    Some(Ok(object_id))
-                }
-                Err(e) => Some(Err(e)),
-            }
+            Some(self.next_internal())
         }
     }
 }
@@ -111,28 +110,16 @@ impl<'a> ReadPropertyAck<'a> {
     }
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
-        let tag = Tag::decode(reader, buf);
-        assert_eq!(
-            tag.number,
-            TagNumber::ContextSpecific(0),
-            "invalid object id tag"
-        );
-        let object_id = ObjectId::decode(tag.value, reader, buf)?;
+        let object_id =
+            decode_context_object_id(reader, buf, 0, "ReadPropertyAck decode object_id")?;
         let property_id =
             decode_context_property_id(reader, buf, 1, "ReadPropertyAck decode property_id")?;
 
-        //let tag = Tag::decode(reader, buf);
-        let (buf, tag_number) = get_tagged_body(reader, buf);
+        let buf = get_tagged_body_for_tag(reader, buf, 3, "ReadPropertyAck decode data values")?;
         let mut reader = Reader {
             index: 0,
             end: buf.len(),
         };
-        assert_eq!(3, tag_number, "Expected opening tag");
-        //assert_eq!(
-        //    tag.number,
-        //    TagNumber::ContextSpecificOpening(3),
-        //    "expected opening tag"
-        //);
 
         match property_id {
             PropertyId::PropObjectList => {
@@ -146,17 +133,10 @@ impl<'a> ReadPropertyAck<'a> {
                 })
             }
             property_id => {
-                let tag = Tag::decode(&mut reader, buf);
+                let tag = Tag::decode(&mut reader, buf)?;
                 let value =
-                    ApplicationDataValue::decode(&tag, &object_id, &property_id, &mut reader, buf);
+                    ApplicationDataValue::decode(&tag, &object_id, &property_id, &mut reader, buf)?;
                 let property_value = ReadPropertyValue::ApplicationDataValue(value);
-
-                //let tag = Tag::decode(reader, buf);
-                //assert_eq!(
-                //    tag.number,
-                //    TagNumber::ContextSpecificClosing(3),
-                //    "expected closing tag"
-                //);
 
                 Ok(Self {
                     object_id,
@@ -200,7 +180,7 @@ impl ReadProperty {
 
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         // object_id
-        let object_id = decode_context_object_id(reader, buf, 0)?;
+        let object_id = decode_context_object_id(reader, buf, 0, "ReadProperty decode object_id")?;
 
         // property_id
         let property_id =

@@ -92,9 +92,9 @@ impl Date {
         Self::decode_inner(value)
     }
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
-        let value = reader.read_bytes(buf);
-        Self::decode_inner(value)
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let value = reader.read_bytes(buf)?;
+        Ok(Self::decode_inner(value))
     }
 
     fn decode_inner(value: [u8; 4]) -> Self {
@@ -133,17 +133,17 @@ impl Time {
     pub const LEN: u32 = 4; // 4 bytes
 
     // assuming that this comes from a Time tag
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
-        let hour = reader.read_byte(buf);
-        let minute = reader.read_byte(buf);
-        let second = reader.read_byte(buf);
-        let hundredths = reader.read_byte(buf);
-        Time {
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let hour = reader.read_byte(buf)?;
+        let minute = reader.read_byte(buf)?;
+        let second = reader.read_byte(buf)?;
+        let hundredths = reader.read_byte(buf)?;
+        Ok(Time {
             hour,
             minute,
             second,
             hundredths,
-        }
+        })
     }
 
     pub fn encode(&self, writer: &mut Writer) {
@@ -246,19 +246,19 @@ impl<'a> BitString<'a> {
         reader: &mut Reader,
         buf: &'a [u8],
     ) -> Result<Self, Error> {
-        let unused_bits = reader.read_byte(buf);
+        let unused_bits = reader.read_byte(buf)?;
         match property_id {
             PropertyId::PropStatusFlags => {
-                let status_flags = Self::decode_byte_flag(reader.read_byte(buf))?;
+                let status_flags = Self::decode_byte_flag(reader.read_byte(buf)?)?;
                 Ok(Self::StatusFlags(status_flags))
             }
             PropertyId::PropLogBuffer => {
-                let flags = Self::decode_byte_flag(reader.read_byte(buf))?;
+                let flags = Self::decode_byte_flag(reader.read_byte(buf)?)?;
                 Ok(Self::LogBufferResultFlags(flags))
             }
             _ => {
                 let len = (len - 1) as usize; // we have already read a byte
-                let bits = reader.read_slice(len, buf);
+                let bits = reader.read_slice(len, buf)?;
                 Ok(Self::Custom(CustomBitStream { unused_bits, bits }))
             }
         }
@@ -273,15 +273,17 @@ impl<'a> BitString<'a> {
 }
 
 impl<'a> CharacterString<'a> {
-    pub fn decode(len: u32, reader: &mut Reader, buf: &'a [u8]) -> Self {
-        let character_set = reader.read_byte(buf);
+    pub fn decode(len: u32, reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let character_set = reader.read_byte(buf)?;
         if character_set != 0 {
             unimplemented!("non-utf8 characterset not supported")
         }
-        let slice = reader.read_slice(len as usize - 1, buf);
-        CharacterString {
-            inner: from_utf8(slice).unwrap(),
-        }
+        let slice = reader.read_slice(len as usize - 1, buf)?;
+        let inner = from_utf8(slice).map_err(|_| {
+            Error::InvalidValue("CharacterString bytes are not a valid utf8 string")
+        })?;
+
+        Ok(CharacterString { inner })
     }
 }
 
@@ -294,21 +296,27 @@ impl<'a> ApplicationDataValueWrite<'a> {
     ) -> Result<Self, Error> {
         match property_id {
             PropertyId::PropWeeklySchedule => {
-                let weekly_schedule = WeeklySchedule::new_from_buf(reader, buf);
+                let weekly_schedule = WeeklySchedule::new_from_buf(reader, buf)?;
                 Ok(Self::WeeklySchedule(weekly_schedule))
             }
             _ => {
-                let tag = Tag::decode(reader, buf);
+                let tag = Tag::decode(reader, buf)?;
                 match tag.number {
                     TagNumber::Application(ApplicationTagNumber::Boolean) => {
                         Ok(Self::Boolean(tag.value > 0))
                     }
                     TagNumber::Application(ApplicationTagNumber::Real) => {
-                        assert_eq!(tag.value, 4, "read tag should have length of 4");
-                        Ok(Self::Real(f32::from_be_bytes(reader.read_bytes(buf))))
+                        if tag.value != 4 {
+                            return Err(Error::Length((
+                                "real tag should have length of 4",
+                                tag.value,
+                            )));
+                        }
+                        let bytes = reader.read_bytes(buf)?;
+                        Ok(Self::Real(f32::from_be_bytes(bytes)))
                     }
                     TagNumber::Application(ApplicationTagNumber::Enumerated) => {
-                        let value = decode_enumerated(object_id, property_id, &tag, reader, buf);
+                        let value = decode_enumerated(object_id, property_id, &tag, reader, buf)?;
                         Ok(Self::Enumerated(value))
                     }
                     tag_number => Err(Error::TagNotSupported((
@@ -415,53 +423,73 @@ impl<'a> ApplicationDataValue<'a> {
         property_id: &PropertyId,
         reader: &mut Reader,
         buf: &'a [u8],
-    ) -> Self {
+    ) -> Result<Self, Error> {
         let tag_num = match &tag.number {
             TagNumber::Application(x) => x,
-            unknown => panic!("application tag number expected: {:?}", unknown),
+            unknown => {
+                return Err(Error::TagNotSupported((
+                    "Expected Application tag",
+                    unknown.clone(),
+                )))
+            }
         };
 
         match tag_num {
             ApplicationTagNumber::Real => {
-                assert_eq!(tag.value, 4, "read tag should have length of 4");
-                ApplicationDataValue::Real(f32::from_be_bytes(reader.read_bytes(buf)))
+                if tag.value != 4 {
+                    return Err(Error::Length((
+                        "real tag should have length of 4",
+                        tag.value,
+                    )));
+                }
+                Ok(ApplicationDataValue::Real(f32::from_be_bytes(
+                    reader.read_bytes(buf)?,
+                )))
             }
             ApplicationTagNumber::ObjectId => {
-                let object_id = ObjectId::decode(tag.value, reader, buf).unwrap();
-                ApplicationDataValue::ObjectId(object_id)
+                let object_id = ObjectId::decode(tag.value, reader, buf)?;
+                Ok(ApplicationDataValue::ObjectId(object_id))
             }
             ApplicationTagNumber::CharacterString => {
-                let text = CharacterString::decode(tag.value, reader, buf);
-                ApplicationDataValue::CharacterString(text)
+                let text = CharacterString::decode(tag.value, reader, buf)?;
+                Ok(ApplicationDataValue::CharacterString(text))
             }
             ApplicationTagNumber::Enumerated => {
-                let value = decode_enumerated(object_id, property_id, tag, reader, buf);
-                ApplicationDataValue::Enumerated(value)
+                let value = decode_enumerated(object_id, property_id, tag, reader, buf)?;
+                Ok(ApplicationDataValue::Enumerated(value))
             }
             ApplicationTagNumber::BitString => {
-                let bit_string = BitString::decode(property_id, tag.value, reader, buf).unwrap();
-                ApplicationDataValue::BitString(bit_string)
+                let bit_string = BitString::decode(property_id, tag.value, reader, buf)?;
+                Ok(ApplicationDataValue::BitString(bit_string))
             }
             ApplicationTagNumber::Boolean => {
                 let value = tag.value > 0;
-                ApplicationDataValue::Boolean(value)
+                Ok(ApplicationDataValue::Boolean(value))
             }
             ApplicationTagNumber::UnsignedInt => {
-                let value = decode_unsigned(tag.value, reader, buf) as u32;
-                ApplicationDataValue::UnsignedInt(value)
+                let value = decode_unsigned(tag.value, reader, buf)? as u32;
+                Ok(ApplicationDataValue::UnsignedInt(value))
             }
             ApplicationTagNumber::Time => {
-                assert_eq!(tag.value, 4); // 4 bytes
-                let time = Time::decode(reader, buf);
-                ApplicationDataValue::Time(time)
+                if tag.value != 4 {
+                    return Err(Error::Length((
+                        "time tag should have length of 4",
+                        tag.value,
+                    )));
+                }
+                let time = Time::decode(reader, buf)?;
+                Ok(ApplicationDataValue::Time(time))
             }
             ApplicationTagNumber::Date => {
                 // let date = Date::decode_from_tag(&tag);
-                let date = Date::decode(reader, buf);
-                ApplicationDataValue::Date(date)
+                let date = Date::decode(reader, buf)?;
+                Ok(ApplicationDataValue::Date(date))
             }
 
-            x => unimplemented!("{:?}", x),
+            x => Err(Error::TagNotSupported((
+                "ApplicationDataValue decode",
+                TagNumber::Application(x.clone()),
+            ))),
         }
     }
 }
@@ -472,39 +500,47 @@ fn decode_enumerated(
     tag: &Tag,
     reader: &mut Reader,
     buf: &[u8],
-) -> Enumerated {
-    let value = decode_unsigned(tag.value, reader, buf) as u32;
+) -> Result<Enumerated, Error> {
+    let value = decode_unsigned(tag.value, reader, buf)? as u32;
     match property_id {
         PropertyId::PropUnits => {
-            let units = value.try_into().unwrap();
-            Enumerated::Units(units)
+            let units = value
+                .try_into()
+                .map_err(|x| Error::InvalidVariant(("EngineeringUnits", x)))?;
+            Ok(Enumerated::Units(units))
         }
         PropertyId::PropPresentValue => match object_id.object_type {
             ObjectType::ObjectBinaryInput
             | ObjectType::ObjectBinaryOutput
             | ObjectType::ObjectBinaryValue => {
-                let binary = value.try_into().unwrap();
-                Enumerated::Binary(binary)
+                let binary = value
+                    .try_into()
+                    .map_err(|x| Error::InvalidVariant(("Binary", x)))?;
+                Ok(Enumerated::Binary(binary))
             }
-            _ => Enumerated::Unknown(value),
+            _ => Ok(Enumerated::Unknown(value)),
         },
         PropertyId::PropObjectType => {
-            let object_type = ObjectType::try_from(value).unwrap();
-            Enumerated::ObjectType(object_type)
+            let object_type = ObjectType::try_from(value)
+                .map_err(|x| Error::InvalidVariant(("ObjectType", x)))?;
+            Ok(Enumerated::ObjectType(object_type))
         }
         PropertyId::PropEventState => {
-            let event_state = EventState::try_from(value).unwrap();
-            Enumerated::EventState(event_state)
+            let event_state = EventState::try_from(value)
+                .map_err(|x| Error::InvalidVariant(("EventState", x)))?;
+            Ok(Enumerated::EventState(event_state))
         }
         PropertyId::PropNotifyType => {
-            let notify_type = NotifyType::try_from(value).unwrap();
-            Enumerated::NotifyType(notify_type)
+            let notify_type = NotifyType::try_from(value)
+                .map_err(|x| Error::InvalidVariant(("NotifyType", x)))?;
+            Ok(Enumerated::NotifyType(notify_type))
         }
         PropertyId::PropLoggingType => {
-            let logging_type = LoggingType::try_from(value).unwrap();
-            Enumerated::LoggingType(logging_type)
+            let logging_type = LoggingType::try_from(value)
+                .map_err(|x| Error::InvalidVariant(("LoggingType", x)))?;
+            Ok(Enumerated::LoggingType(logging_type))
         }
 
-        _ => Enumerated::Unknown(value),
+        _ => Ok(Enumerated::Unknown(value)),
     }
 }

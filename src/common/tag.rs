@@ -158,21 +158,21 @@ impl Tag {
         writer.extend_from_slice(&buf[..len]);
     }
 
-    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Self {
-        let (number, byte0) = decode_tag_number(reader, buf);
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let (number, byte0) = decode_tag_number(reader, buf)?;
 
-        if is_extended_value(byte0) {
-            let byte = reader.read_byte(buf);
+        let value = if is_extended_value(byte0) {
+            let byte = reader.read_byte(buf)?;
             match byte {
                 // tagged as u32
                 255 => {
-                    let bytes = reader.read_bytes(buf);
+                    let bytes = reader.read_bytes(buf)?;
                     let value = u32::from_be_bytes(bytes);
                     Self { number, value }
                 }
                 // tagged as u16
                 254 => {
-                    let bytes = reader.read_bytes(buf);
+                    let bytes = reader.read_bytes(buf)?;
                     let value = u16::from_be_bytes(bytes) as u32;
                     Self { number, value }
                 }
@@ -187,7 +187,9 @@ impl Tag {
         } else {
             let value = (byte0 & 0x07).into();
             Self { number, value }
-        }
+        };
+
+        Ok(value)
     }
 
     pub fn decode_expected(
@@ -196,7 +198,7 @@ impl Tag {
         expected: TagNumber,
         context: &'static str,
     ) -> Result<Self, Error> {
-        let tag = Self::decode(reader, buf);
+        let tag = Self::decode(reader, buf)?;
         if tag.number == expected {
             Ok(tag)
         } else {
@@ -230,13 +232,13 @@ impl Tag {
 }
 
 // returns tag_number and byte0 because we need to reuse byte0 elsewhere
-fn decode_tag_number(reader: &mut Reader, buf: &[u8]) -> (TagNumber, u8) {
-    let byte0 = reader.read_byte(buf);
+fn decode_tag_number(reader: &mut Reader, buf: &[u8]) -> Result<(TagNumber, u8), Error> {
+    let byte0 = reader.read_byte(buf)?;
 
-    if is_context_specific(byte0) {
+    let value = if is_context_specific(byte0) {
         // context specific tag num
         if is_extended_tag_number(byte0) {
-            let num = reader.read_byte(buf);
+            let num = reader.read_byte(buf)?;
             (TagNumber::ContextSpecific(num), byte0)
         } else {
             let num = byte0 >> 4;
@@ -252,7 +254,9 @@ fn decode_tag_number(reader: &mut Reader, buf: &[u8]) -> (TagNumber, u8) {
         // application tag num
         let num = (byte0 >> 4).into();
         (TagNumber::Application(num), byte0)
-    }
+    };
+
+    Ok(value)
 }
 
 fn is_extended_tag_number(byte0: u8) -> bool {
