@@ -49,7 +49,7 @@ impl<'a> ObjectWithResults<'a> {
             get_tagged_body_for_tag(reader, buf, 1, "ObjectWithResults decode list of results")?;
 
         let property_results = PropertyResultList {
-            object_id: object_id.clone(),
+            object_id,
             buf,
             reader: Reader::new_with_len(buf.len()),
             property_results: &[],

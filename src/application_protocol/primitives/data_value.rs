@@ -59,7 +59,7 @@ impl Enumerated {
         let value = match self {
             Self::Units(x) => x.clone() as u32,
             Self::Binary(x) => x.clone() as u32,
-            Self::ObjectType(x) => x.clone() as u32,
+            Self::ObjectType(x) => *x as u32,
             Self::EventState(x) => x.clone() as u32,
             Self::NotifyType(x) => x.clone() as u32,
             Self::LoggingType(x) => x.clone() as u32,
