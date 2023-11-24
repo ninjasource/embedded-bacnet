@@ -1,13 +1,16 @@
-use crate::common::{
-    error::{Error, Unimplemented},
-    helper::decode_unsigned,
-    io::{Reader, Writer},
-    spec::{ErrorClass, ErrorCode},
-    tag::{ApplicationTagNumber, Tag, TagNumber},
+use crate::{
+    common::{
+        error::{Error, Unimplemented},
+        helper::decode_unsigned,
+        io::{Reader, Writer},
+        spec::{ErrorClass, ErrorCode},
+        tag::{ApplicationTagNumber, Tag, TagNumber},
+    },
+    network_protocol::{data_link::DataLink, network_pdu::NetworkMessage},
 };
 
 use super::{
-    application_pdu::{ApduType, MaxAdpu, MaxSegments, PduFlags},
+    application_pdu::{ApduType, ApplicationPdu, MaxAdpu, MaxSegments, PduFlags},
     services::{
         change_of_value::SubscribeCov,
         read_property::{ReadProperty, ReadPropertyAck},
@@ -311,6 +314,22 @@ impl BacnetError {
 pub struct ComplexAck<'a> {
     pub invoke_id: u8,
     pub service: ComplexAckService<'a>,
+}
+
+impl<'a> TryFrom<DataLink<'a>> for ComplexAck<'a> {
+    type Error = Error;
+
+    fn try_from(value: DataLink<'a>) -> Result<Self, Self::Error> {
+        match value.npdu {
+            Some(x) => match x.network_message {
+                NetworkMessage::Apdu(ApplicationPdu::ComplexAck(ack)) => Ok(ack),
+                _ => Err(Error::ConvertDataLink(
+                    "npdu message is not an apdu complex ack",
+                )),
+            },
+            _ => Err(Error::ConvertDataLink("no npdu defined in message")),
+        }
+    }
 }
 
 impl<'a> ComplexAck<'a> {

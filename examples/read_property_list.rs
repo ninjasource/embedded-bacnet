@@ -1,10 +1,10 @@
-use std::{io::Error, net::UdpSocket};
+use std::net::UdpSocket;
 
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ComplexAckService, ConfirmedRequest, ConfirmedRequestService},
-        services::read_property::{ReadProperty, ReadPropertyValue},
+        confirmed::{ConfirmedRequest, ConfirmedRequestService},
+        services::read_property::{ReadProperty, ReadPropertyAck, ReadPropertyValue},
     },
     common::{
         io::{Reader, Writer},
@@ -20,7 +20,24 @@ use embedded_bacnet::{
 const IP_ADDRESS: &str = "192.168.1.249:47808";
 const DEVICE_ID: u32 = 79079;
 
-fn main() -> Result<(), Error> {
+#[derive(Debug)]
+enum MainError {
+    Io(std::io::Error),
+    Bacnet(embedded_bacnet::common::error::Error),
+}
+
+impl From<std::io::Error> for MainError {
+    fn from(value: std::io::Error) -> Self {
+        MainError::Io(value)
+    }
+}
+
+impl From<embedded_bacnet::common::error::Error> for MainError {
+    fn from(value: embedded_bacnet::common::error::Error) -> Self {
+        MainError::Bacnet(value)
+    }
+}
+fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
@@ -43,25 +60,21 @@ fn main() -> Result<(), Error> {
 
     // receive reply
     let mut buf = vec![0; 1024];
-    let (n, peer) = socket.recv_from(&mut buf).unwrap();
+    let (n, peer) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf);
+    let message = DataLink::decode(&mut reader, buf)?;
     println!("Decoded:  {:?}\n", message);
-
-    let network_message = message.unwrap().npdu.unwrap().network_message;
-    if let NetworkMessage::Apdu(ApplicationPdu::ComplexAck(apdu)) = network_message {
-        match apdu.service {
-            ComplexAckService::ReadProperty(x) => match x.property_value {
-                ReadPropertyValue::ObjectIdList(list) => {
-                    for item in list {
-                        println!("{:?}", item);
-                    }
-                }
-                _ => {}
-            },
-            _ => {}
+    let ack: ReadPropertyAck = message.try_into()?;
+    match ack.property_value {
+        ReadPropertyValue::ObjectIdList(list) => {
+            for item in &list {
+                println!("{:?}", item);
+            }
+        }
+        _ => {
+            // ignore
         }
     }
 

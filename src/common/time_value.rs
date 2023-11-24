@@ -105,7 +105,14 @@ pub struct TimeValue {
 impl TimeValue {
     pub const LEN: u32 = 4;
 
-    pub fn decode(tag: &Tag, reader: &mut Reader, buf: &[u8]) -> Result<TimeValue, Error> {
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<TimeValue, Error> {
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::Application(ApplicationTagNumber::Time),
+            "Decode weekly schedule TimeValue",
+        )?;
+
         // 4 bytes
         if tag.value != Self::LEN {
             return Err(Error::Length((

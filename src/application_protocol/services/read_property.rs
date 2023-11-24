@@ -1,6 +1,7 @@
 use crate::{
     application_protocol::{
-        confirmed::ConfirmedServiceChoice, primitives::data_value::ApplicationDataValue,
+        confirmed::{ComplexAck, ComplexAckService, ConfirmedServiceChoice},
+        primitives::data_value::ApplicationDataValue,
     },
     common::{
         error::Error,
@@ -15,6 +16,7 @@ use crate::{
         spec::BACNET_ARRAY_ALL,
         tag::{ApplicationTagNumber, Tag, TagNumber},
     },
+    network_protocol::data_link::DataLink,
 };
 
 #[derive(Debug, Clone)]
@@ -27,7 +29,13 @@ pub enum ReadPropertyValue<'a> {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectIdList<'a> {
-    pub object_ids: &'a [ObjectId],
+    object_ids: &'a [ObjectId],
+    buf: &'a [u8],
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct ObjectIdIter<'a> {
     reader: Reader,
     buf: &'a [u8],
 }
@@ -36,7 +44,6 @@ impl<'a> ObjectIdList<'a> {
     pub fn new(object_ids: &'a [ObjectId]) -> Self {
         Self {
             object_ids,
-            reader: Reader::default(),
             buf: &[],
         }
     }
@@ -44,7 +51,6 @@ impl<'a> ObjectIdList<'a> {
     pub fn new_from_buf(buf: &'a [u8]) -> Self {
         Self {
             object_ids: &[],
-            reader: Reader::new_with_len(buf.len()),
             buf,
         }
     }
@@ -57,6 +63,15 @@ impl<'a> ObjectIdList<'a> {
             )
             .encode(writer);
             object_id.encode(writer);
+        }
+    }
+}
+
+impl<'a> ObjectIdIter<'a> {
+    pub fn new(buf: &'a [u8]) -> Self {
+        Self {
+            reader: Reader::new_with_len(buf.len()),
+            buf,
         }
     }
 
@@ -72,7 +87,16 @@ impl<'a> ObjectIdList<'a> {
     }
 }
 
-impl<'a> Iterator for ObjectIdList<'a> {
+impl<'a> IntoIterator for &'_ ObjectIdList<'a> {
+    type Item = Result<ObjectId, Error>;
+    type IntoIter = ObjectIdIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ObjectIdIter::new(self.buf)
+    }
+}
+
+impl<'a> Iterator for ObjectIdIter<'a> {
     type Item = Result<ObjectId, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -90,6 +114,20 @@ pub struct ReadPropertyAck<'a> {
     pub object_id: ObjectId,
     pub property_id: PropertyId,
     pub property_value: ReadPropertyValue<'a>,
+}
+
+impl<'a> TryFrom<DataLink<'a>> for ReadPropertyAck<'a> {
+    type Error = Error;
+
+    fn try_from(value: DataLink<'a>) -> Result<Self, Self::Error> {
+        let ack: ComplexAck = value.try_into()?;
+        match ack.service {
+            ComplexAckService::ReadProperty(ack) => Ok(ack),
+            _ => Err(Error::ConvertDataLink(
+                "apdu message is not a ComplexAckService ReadPropertyAck",
+            )),
+        }
+    }
 }
 
 impl<'a> ReadPropertyAck<'a> {

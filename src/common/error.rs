@@ -23,6 +23,7 @@ pub enum Error {
     TagNotSupported((&'static str, TagNumber)),
     TagValueInvalid((&'static str, Tag, u32)),
     ReaderEof(usize),
+    ConvertDataLink(&'static str),
 }
 
 #[derive(Debug, Clone)]

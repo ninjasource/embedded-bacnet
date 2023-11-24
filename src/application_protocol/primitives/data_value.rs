@@ -296,7 +296,7 @@ impl<'a> ApplicationDataValueWrite<'a> {
     ) -> Result<Self, Error> {
         match property_id {
             PropertyId::PropWeeklySchedule => {
-                let weekly_schedule = WeeklySchedule::new_from_buf(reader, buf)?;
+                let weekly_schedule = WeeklySchedule::decode(reader, buf)?;
                 Ok(Self::WeeklySchedule(weekly_schedule))
             }
             _ => {

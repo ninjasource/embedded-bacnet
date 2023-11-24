@@ -22,7 +22,14 @@ pub struct CovNotification<'a> {
     pub device_id: ObjectId,
     pub object_id: ObjectId,
     pub time_remaining_seconds: u32,
-    reader: Reader,
+    pub values: CovNotificationValues<'a>,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct CovNotificationValues<'a> {
+    _property_results: &'a [PropertyResult<'a>], // use this when encoding is implemented
+    object_id: ObjectId,
     buf: &'a [u8],
 }
 
@@ -31,6 +38,40 @@ pub struct CovNotification<'a> {
 pub struct PropertyResult<'a> {
     pub id: PropertyId,
     pub value: ApplicationDataValue<'a>,
+}
+
+impl<'a> PropertyResult<'a> {
+    pub fn decode(reader: &mut Reader, buf: &'a [u8], object_id: &ObjectId) -> Result<Self, Error> {
+        // property id
+        let tag = Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecific(0),
+            "CovNotification next property_id",
+        )?;
+        let property_id: PropertyId = (decode_unsigned(tag.value, reader, buf)? as u32).into();
+
+        // value
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecificOpening(2),
+            "CovNotification next expected value opening tag",
+        )?;
+        let tag = Tag::decode(reader, buf)?;
+        let value = ApplicationDataValue::decode(&tag, object_id, &property_id, reader, buf)?;
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecificClosing(2),
+            "CovNotification next expected value closing tag",
+        )?;
+
+        Ok(PropertyResult {
+            id: property_id,
+            value,
+        })
+    }
 }
 
 impl<'a> CovNotification<'a> {
@@ -84,16 +125,17 @@ impl<'a> CovNotification<'a> {
         )?;
         let time_remaining_seconds = decode_unsigned(tag.value, reader, buf)? as u32;
 
+        // values
         let buf = get_tagged_body_for_tag(
             reader,
             buf,
             Self::TAG_LIST_OF_VALUES,
             "CovNotification decode list of values",
         )?;
-
-        let reader = Reader {
-            index: 0,
-            end: buf.len(),
+        let values = CovNotificationValues {
+            buf,
+            _property_results: &[],
+            object_id,
         };
 
         Ok(Self {
@@ -101,52 +143,31 @@ impl<'a> CovNotification<'a> {
             device_id,
             object_id,
             time_remaining_seconds,
-            buf,
-            reader,
-        })
-    }
-
-    fn next_internal(&mut self) -> Result<PropertyResult<'a>, Error> {
-        // property id
-        let tag = Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::ContextSpecific(0),
-            "CovNotification next property_id",
-        )?;
-        let property_id: PropertyId =
-            (decode_unsigned(tag.value, &mut self.reader, self.buf)? as u32).into();
-
-        // value
-        Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::ContextSpecificOpening(2),
-            "CovNotification next expected value opening tag",
-        )?;
-        let tag = Tag::decode(&mut self.reader, self.buf)?;
-        let value = ApplicationDataValue::decode(
-            &tag,
-            &self.object_id,
-            &property_id,
-            &mut self.reader,
-            self.buf,
-        )?;
-        Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::ContextSpecificClosing(2),
-            "CovNotification next expected value closing tag",
-        )?;
-
-        Ok(PropertyResult {
-            id: property_id,
-            value,
+            values,
         })
     }
 }
 
-impl<'a> Iterator for CovNotification<'a> {
+impl<'a> IntoIterator for &'_ CovNotificationValues<'a> {
+    type Item = Result<PropertyResult<'a>, Error>;
+    type IntoIter = CovNotificationIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        CovNotificationIter {
+            buf: self.buf,
+            reader: Reader::new_with_len(self.buf.len()),
+            object_id: self.object_id,
+        }
+    }
+}
+
+pub struct CovNotificationIter<'a> {
+    object_id: ObjectId,
+    reader: Reader,
+    buf: &'a [u8],
+}
+
+impl<'a> Iterator for CovNotificationIter<'a> {
     type Item = Result<PropertyResult<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -154,7 +175,7 @@ impl<'a> Iterator for CovNotification<'a> {
             return None;
         }
 
-        let result = self.next_internal();
+        let result = PropertyResult::decode(&mut self.reader, self.buf, &self.object_id);
         Some(result)
     }
 }

@@ -1,13 +1,14 @@
-use std::{collections::HashMap, io::Error, net::UdpSocket};
+use std::{collections::HashMap, net::UdpSocket};
 
 use embedded_bacnet::{
     application_protocol::{
         confirmed::{ConfirmedRequest, ConfirmedRequestService},
         primitives::data_value::{ApplicationDataValue, BitString, Enumerated},
         services::{
-            read_property::{ReadProperty, ReadPropertyValue},
+            read_property::{ReadProperty, ReadPropertyAck, ReadPropertyValue},
             read_property_multiple::{
-                PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject,
+                PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleAck,
+                ReadPropertyMultipleObject,
             },
         },
     },
@@ -25,7 +26,25 @@ use flagset::FlagSet;
 const IP_ADDRESS: &str = "192.168.1.249:47808";
 const DEVICE_ID: u32 = 79079;
 
-fn main() -> Result<(), Error> {
+#[derive(Debug)]
+enum MainError {
+    Io(std::io::Error),
+    Bacnet(embedded_bacnet::common::error::Error),
+}
+
+impl From<std::io::Error> for MainError {
+    fn from(value: std::io::Error) -> Self {
+        MainError::Io(value)
+    }
+}
+
+impl From<embedded_bacnet::common::error::Error> for MainError {
+    fn from(value: embedded_bacnet::common::error::Error) -> Self {
+        MainError::Bacnet(value)
+    }
+}
+
+fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
 
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
@@ -46,71 +65,70 @@ fn main() -> Result<(), Error> {
 
     // receive reply
     let mut buf = vec![0; 64 * 1024];
-    let (n, peer) = socket.recv_from(&mut buf).unwrap();
+    let (n, peer) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf).unwrap();
+    let message = DataLink::decode(&mut reader, buf)?;
     println!("Decoded: {:?}", message);
+    let ack: ReadPropertyAck = message.try_into()?;
 
-    if let Some(ack) = message.get_read_property_ack_into() {
-        let mut map = HashMap::new();
+    let mut map = HashMap::new();
 
-        if let ReadPropertyValue::ObjectIdList(list) = ack.property_value {
-            // put all objects in their respective bins by object type
-            for item in list.into_iter() {
-                let item = item.unwrap();
-                match item.object_type {
-                    ObjectType::ObjectBinaryOutput
-                    | ObjectType::ObjectBinaryInput
-                    | ObjectType::ObjectBinaryValue
-                    | ObjectType::ObjectAnalogInput
-                    | ObjectType::ObjectAnalogOutput
-                    | ObjectType::ObjectAnalogValue
-                    | ObjectType::ObjectSchedule
-                    | ObjectType::ObjectTrendlog => {
-                        let list = map.entry(item.object_type.clone() as u32).or_insert(vec![]);
-                        list.push(item);
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        for (object_type, ids) in map.iter() {
-            let object_type = ObjectType::try_from(*object_type).unwrap();
-            match object_type {
-                ObjectType::ObjectBinaryInput
-                | ObjectType::ObjectBinaryOutput
-                | ObjectType::ObjectBinaryValue => {
-                    for chunk in ids.as_slice().chunks(10).into_iter() {
-                        let _values = get_multi_binary(&socket, chunk)?;
-                        println!("{:?}", _values);
-                    }
-                }
-                ObjectType::ObjectAnalogInput
+    if let ReadPropertyValue::ObjectIdList(list) = ack.property_value {
+        // put all objects in their respective bins by object type
+        for item in list.into_iter() {
+            let item = item?;
+            match item.object_type {
+                ObjectType::ObjectBinaryOutput
+                | ObjectType::ObjectBinaryInput
+                | ObjectType::ObjectBinaryValue
+                | ObjectType::ObjectAnalogInput
                 | ObjectType::ObjectAnalogOutput
-                | ObjectType::ObjectAnalogValue => {
-                    for chunk in ids.as_slice().chunks(10).into_iter() {
-                        let _values = get_multi_analog(&socket, chunk)?;
-                        println!("{:?}", _values);
-                    }
+                | ObjectType::ObjectAnalogValue
+                | ObjectType::ObjectSchedule
+                | ObjectType::ObjectTrendlog => {
+                    let list = map.entry(item.object_type.clone() as u32).or_insert(vec![]);
+                    list.push(item);
                 }
-                ObjectType::ObjectSchedule => {
-                    for object_id in ids.as_slice() {
-                        let values = get_multi_schedule(&socket, object_id)?;
-                        println!("{:?}", values);
-                    }
-                }
-                ObjectType::ObjectTrendlog => {
-                    for chunk in ids.as_slice().chunks(10).into_iter() {
-                        let values = get_multi_trend_log(&socket, chunk)?;
-                        println!("{:?}", values);
-                    }
-                }
-
                 _ => {}
             }
+        }
+    }
+
+    for (object_type, ids) in map.iter() {
+        let object_type = ObjectType::try_from(*object_type).unwrap();
+        match object_type {
+            ObjectType::ObjectBinaryInput
+            | ObjectType::ObjectBinaryOutput
+            | ObjectType::ObjectBinaryValue => {
+                for chunk in ids.as_slice().chunks(10).into_iter() {
+                    let _values = get_multi_binary(&socket, chunk)?;
+                    println!("{:?}", _values);
+                }
+            }
+            ObjectType::ObjectAnalogInput
+            | ObjectType::ObjectAnalogOutput
+            | ObjectType::ObjectAnalogValue => {
+                for chunk in ids.as_slice().chunks(10).into_iter() {
+                    let _values = get_multi_analog(&socket, chunk)?;
+                    println!("{:?}", _values);
+                }
+            }
+            ObjectType::ObjectSchedule => {
+                for object_id in ids.as_slice() {
+                    let values = get_multi_schedule(&socket, object_id)?;
+                    println!("{:?}", values);
+                }
+            }
+            ObjectType::ObjectTrendlog => {
+                for chunk in ids.as_slice().chunks(10).into_iter() {
+                    let values = get_multi_trend_log(&socket, chunk)?;
+                    println!("{:?}", values);
+                }
+            }
+
+            _ => {}
         }
     }
 
@@ -157,7 +175,7 @@ pub struct TrendLogValue {
 fn get_multi_binary(
     socket: &UdpSocket,
     object_ids: &[ObjectId],
-) -> Result<Vec<BinaryValue>, Error> {
+) -> Result<Vec<BinaryValue>, MainError> {
     let property_ids = [
         PropertyId::PropObjectName,
         PropertyId::PropPresentValue,
@@ -173,49 +191,46 @@ fn get_multi_binary(
     read_property_multiple_to_bytes(rpm, &mut writer);
     socket.send_to(writer.to_bytes(), &IP_ADDRESS)?;
     let mut buf = vec![0; 16 * 1024];
-    let (n, _) = socket.recv_from(&mut buf).unwrap();
+    let (n, _) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf).unwrap();
+    let message = DataLink::decode(&mut reader, buf)?;
+    let ack: ReadPropertyMultipleAck = message.try_into()?;
 
-    if let Some(ack) = message.get_read_property_multiple_ack_into() {
-        let mut items = vec![];
+    let mut items = vec![];
 
-        for obj in ack {
-            let obj = obj.unwrap();
-            let mut x = obj.property_results.into_iter();
-            let name = x.next().unwrap().unwrap().value.to_string();
-            let value = match x.next().unwrap().unwrap().value {
-                PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Binary(
-                    Binary::On,
-                ))) => true,
-                _ => false,
-            };
-            let status_flags = match x.next().unwrap().unwrap().value {
-                PropertyValue::PropValue(ApplicationDataValue::BitString(
-                    BitString::StatusFlags(x),
-                )) => x,
-                _ => unreachable!(),
-            };
+    for obj in &ack {
+        let obj = obj?;
+        let mut x = obj.property_results.into_iter();
+        let name = x.next().unwrap()?.value.to_string();
+        let value = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Binary(
+                Binary::On,
+            ))) => true,
+            _ => false,
+        };
+        let status_flags = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::StatusFlags(
+                x,
+            ))) => x,
+            _ => unreachable!(),
+        };
 
-            items.push(BinaryValue {
-                id: obj.object_id,
-                name,
-                value,
-                status_flags,
-            });
-        }
-
-        return Ok(items);
+        items.push(BinaryValue {
+            id: obj.object_id,
+            name,
+            value,
+            status_flags,
+        });
     }
 
-    Ok(vec![])
+    return Ok(items);
 }
 
 fn get_multi_analog(
     socket: &UdpSocket,
     object_ids: &[ObjectId],
-) -> Result<Vec<AnalogValue>, Error> {
+) -> Result<Vec<AnalogValue>, MainError> {
     let property_ids = [
         PropertyId::PropObjectName,
         PropertyId::PropPresentValue,
@@ -234,54 +249,51 @@ fn get_multi_analog(
     read_property_multiple_to_bytes(rpm, &mut buffer);
     socket.send_to(buffer.to_bytes(), &IP_ADDRESS)?;
     let mut buf = vec![0; 16 * 1024];
-    let (n, _) = socket.recv_from(&mut buf).unwrap();
+    let (n, _) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf).unwrap();
+    let message = DataLink::decode(&mut reader, buf)?;
+    let ack: ReadPropertyMultipleAck = message.try_into()?;
 
-    if let Some(ack) = message.get_read_property_multiple_ack_into() {
-        let mut items = vec![];
+    let mut items = vec![];
 
-        for obj in ack {
-            let obj = obj.unwrap();
-            let mut x = obj.property_results.into_iter();
-            let name = x.next().unwrap().unwrap().value.to_string();
-            let value = match x.next().unwrap().unwrap().value {
-                PropertyValue::PropValue(ApplicationDataValue::Real(val)) => val,
-                _ => unreachable!(),
-            };
-            let units = match x.next().unwrap().unwrap().value {
-                PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Units(
-                    u,
-                ))) => u.clone(),
-                _ => unreachable!(),
-            };
-            let status_flags = match x.next().unwrap().unwrap().value {
-                PropertyValue::PropValue(ApplicationDataValue::BitString(
-                    BitString::StatusFlags(x),
-                )) => x,
-                _ => FlagSet::default(), // ignore property read errors
-            };
+    for obj in &ack {
+        let obj = obj?;
+        let mut x = obj.property_results.into_iter();
+        let name = x.next().unwrap()?.value.to_string();
+        let value = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::Real(val)) => val,
+            _ => unreachable!(),
+        };
+        let units = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Units(u))) => {
+                u.clone()
+            }
+            _ => unreachable!(),
+        };
+        let status_flags = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::StatusFlags(
+                x,
+            ))) => x,
+            _ => FlagSet::default(), // ignore property read errors
+        };
 
-            items.push(AnalogValue {
-                id: obj.object_id,
-                name,
-                value,
-                units,
-                status_flags,
-            })
-        }
-
-        return Ok(items);
+        items.push(AnalogValue {
+            id: obj.object_id,
+            name,
+            value,
+            units,
+            status_flags,
+        })
     }
 
-    Ok(vec![])
+    return Ok(items);
 }
 
 fn get_multi_trend_log(
     socket: &UdpSocket,
     object_ids: &[ObjectId],
-) -> Result<Vec<TrendLogValue>, Error> {
+) -> Result<Vec<TrendLogValue>, MainError> {
     let property_ids = [PropertyId::PropObjectName, PropertyId::PropRecordCount];
 
     let items: Vec<ReadPropertyMultipleObject> = object_ids
@@ -295,40 +307,37 @@ fn get_multi_trend_log(
     read_property_multiple_to_bytes(rpm, &mut buffer);
     socket.send_to(buffer.to_bytes(), &IP_ADDRESS)?;
     let mut buf = vec![0; 16 * 1024];
-    let (n, _) = socket.recv_from(&mut buf).unwrap();
+    let (n, _) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf).unwrap();
+    let message = DataLink::decode(&mut reader, buf)?;
+    let ack: ReadPropertyMultipleAck = message.try_into()?;
 
-    if let Some(ack) = message.get_read_property_multiple_ack_into() {
-        let mut items = vec![];
+    let mut items = vec![];
 
-        for obj in ack {
-            let obj = obj.unwrap();
-            let mut x = obj.property_results.into_iter();
-            let name = x.next().unwrap().unwrap().value.to_string();
-            let record_count = match x.next().unwrap().unwrap().value {
-                PropertyValue::PropValue(ApplicationDataValue::UnsignedInt(val)) => val,
-                _ => unreachable!(),
-            };
+    for obj in &ack {
+        let obj = obj?;
+        let mut x = obj.property_results.into_iter();
+        let name = x.next().unwrap()?.value.to_string();
+        let record_count = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::UnsignedInt(val)) => val,
+            _ => unreachable!(),
+        };
 
-            items.push(TrendLogValue {
-                id: obj.object_id,
-                name,
-                record_count,
-            })
-        }
-
-        return Ok(items);
+        items.push(TrendLogValue {
+            id: obj.object_id,
+            name,
+            record_count,
+        })
     }
 
-    Ok(vec![])
+    return Ok(items);
 }
 
 fn get_multi_schedule(
     socket: &UdpSocket,
     object_id: &ObjectId,
-) -> Result<Vec<ScheduleValue>, Error> {
+) -> Result<Vec<ScheduleValue>, MainError> {
     let property_ids = [PropertyId::PropObjectName, PropertyId::PropWeeklySchedule];
     let objects = [ReadPropertyMultipleObject::new(
         object_id.clone(),
@@ -340,42 +349,37 @@ fn get_multi_schedule(
     read_property_multiple_to_bytes(rpm, &mut writer);
     socket.send_to(writer.to_bytes(), &IP_ADDRESS)?;
     let mut buf = vec![0; 16 * 1024];
-    let (n, _) = socket.recv_from(&mut buf).unwrap();
+    let (n, _) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf).unwrap();
+    let message = DataLink::decode(&mut reader, buf)?;
+    let ack: ReadPropertyMultipleAck = message.try_into()?;
 
-    if let Some(ack) = message.get_read_property_multiple_ack_into() {
-        let mut items = vec![];
+    let mut items = vec![];
 
-        for obj in ack {
-            let obj = obj.unwrap();
-            let mut x = obj.property_results.into_iter();
-            let name = x.next().unwrap().unwrap().value.to_string();
-            let value = match x.next().unwrap().unwrap().value {
-                PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(schedule)) => {
-                    schedule
-                }
-                _ => panic!("expected weekly schedule"),
-            };
+    for obj in &ack {
+        let obj = obj?;
+        let mut x = obj.property_results.into_iter();
+        let name = x.next().unwrap()?.value.to_string();
+        let value = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(schedule)) => schedule,
+            _ => panic!("expected weekly schedule"),
+        };
 
-            items.push(ScheduleValue {
-                id: obj.object_id,
-                name,
-                monday: value.monday.map(|x| x.unwrap()).collect(),
-                tuesday: value.tuesday.map(|x| x.unwrap()).collect(),
-                wednesday: value.wednesday.map(|x| x.unwrap()).collect(),
-                thursday: value.thursday.map(|x| x.unwrap()).collect(),
-                friday: value.friday.map(|x| x.unwrap()).collect(),
-                saturday: value.saturday.map(|x| x.unwrap()).collect(),
-                sunday: value.sunday.map(|x| x.unwrap()).collect(),
-            });
-        }
-
-        return Ok(items);
+        items.push(ScheduleValue {
+            id: obj.object_id,
+            name,
+            monday: value.monday.into_iter().map(|x| x.unwrap()).collect(),
+            tuesday: value.tuesday.into_iter().map(|x| x.unwrap()).collect(),
+            wednesday: value.wednesday.into_iter().map(|x| x.unwrap()).collect(),
+            thursday: value.thursday.into_iter().map(|x| x.unwrap()).collect(),
+            friday: value.friday.into_iter().map(|x| x.unwrap()).collect(),
+            saturday: value.saturday.into_iter().map(|x| x.unwrap()).collect(),
+            sunday: value.sunday.into_iter().map(|x| x.unwrap()).collect(),
+        });
     }
 
-    Ok(vec![])
+    return Ok(items);
 }
 
 fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple, writer: &mut Writer) {

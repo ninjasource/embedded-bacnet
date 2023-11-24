@@ -1,11 +1,5 @@
 use crate::{
-    application_protocol::{
-        application_pdu::ApplicationPdu,
-        confirmed::{ComplexAck, ComplexAckService, ConfirmedRequest},
-        services::{
-            read_property::ReadPropertyAck, read_property_multiple::ReadPropertyMultipleAck,
-        },
-    },
+    application_protocol::{application_pdu::ApplicationPdu, confirmed::ConfirmedRequest},
     common::{
         error::Error,
         io::{Reader, Writer},
@@ -127,35 +121,5 @@ impl<'a> DataLink<'a> {
         };
 
         Ok(Self { function, npdu })
-    }
-
-    pub fn get_ack_into(self) -> Option<ComplexAck<'a>> {
-        match self.npdu {
-            Some(x) => match x.network_message {
-                NetworkMessage::Apdu(ApplicationPdu::ComplexAck(ack)) => Some(ack),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-
-    pub fn get_read_property_ack_into(self) -> Option<ReadPropertyAck<'a>> {
-        match self.get_ack_into() {
-            Some(ack) => match ack.service {
-                ComplexAckService::ReadProperty(ack) => Some(ack),
-                _ => None,
-            },
-            None => None,
-        }
-    }
-
-    pub fn get_read_property_multiple_ack_into(self) -> Option<ReadPropertyMultipleAck<'a>> {
-        match self.get_ack_into() {
-            Some(ack) => match ack.service {
-                ComplexAckService::ReadPropertyMultiple(ack) => Some(ack),
-                _ => None,
-            },
-            None => None,
-        }
     }
 }

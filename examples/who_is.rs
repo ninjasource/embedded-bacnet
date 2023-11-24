@@ -11,6 +11,24 @@ use embedded_bacnet::{
     },
 };
 
+#[derive(Debug)]
+enum MainError {
+    Io(std::io::Error),
+    Bacnet(embedded_bacnet::common::error::Error),
+}
+
+impl From<std::io::Error> for MainError {
+    fn from(value: std::io::Error) -> Self {
+        MainError::Io(value)
+    }
+}
+
+impl From<embedded_bacnet::common::error::Error> for MainError {
+    fn from(value: embedded_bacnet::common::error::Error) -> Self {
+        MainError::Bacnet(value)
+    }
+}
+
 // NOTE: this example works with broadcast UDP packets which may be blocked by your network
 // You can get around this by sending the who_is directly to a known IP aaddress
 fn main() -> Result<(), Error> {
@@ -36,7 +54,7 @@ fn main() -> Result<(), Error> {
 
     let mut buf = vec![0; 1024];
     loop {
-        let (n, peer) = socket.recv_from(&mut buf).unwrap();
+        let (n, peer) = socket.recv_from(&mut buf)?;
         let payload = &buf[..n];
         println!("Received: {:02x?} from {:?}", payload, peer);
         let mut reader = Reader::default();

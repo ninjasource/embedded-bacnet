@@ -166,8 +166,7 @@ impl<'a> ReadRangeAck<'a> {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRangeItems<'a> {
-    pub items: &'a [ReadRangeItem<'a>],
-    reader: Reader,
+    items: &'a [ReadRangeItem<'a>],
     buf: &'a [u8],
 }
 
@@ -228,151 +227,40 @@ impl TryFrom<u8> for ReadRangeValueType {
 }
 
 impl<'a> ReadRangeItems<'a> {
-    const DATE_TIME_TAG: u8 = 0;
-    const VALUE_TAG: u8 = 1;
-    const STATUS_FLAGS_TAG: u8 = 2;
-
     pub fn new_from_buf(buf: &'a [u8]) -> Self {
-        let reader = Reader {
-            index: 0,
-            end: buf.len(),
-        };
-
-        Self {
-            items: &[],
-            reader,
-            buf,
-        }
+        Self { items: &[], buf }
     }
 
     pub fn new(items: &'a [ReadRangeItem<'a>]) -> Self {
-        Self {
-            items,
-            reader: Reader::default(),
-            buf: &[],
-        }
+        Self { items, buf: &[] }
     }
 
     pub fn encode(&self, writer: &mut Writer) {
         for item in self.items {
-            // date and time
-            Tag::new(TagNumber::ContextSpecificOpening(Self::DATE_TIME_TAG), 0).encode(writer);
-            Tag::new(
-                TagNumber::Application(ApplicationTagNumber::Date),
-                Date::LEN,
-            )
-            .encode(writer);
-            item.date.encode(writer);
-            Tag::new(
-                TagNumber::Application(ApplicationTagNumber::Time),
-                Time::LEN,
-            )
-            .encode(writer);
-            item.time.encode(writer);
-            Tag::new(TagNumber::ContextSpecificClosing(Self::DATE_TIME_TAG), 0).encode(writer);
-
-            // value
-            Tag::new(TagNumber::ContextSpecificOpening(Self::VALUE_TAG), 0).encode(writer);
-            match item.value {
-                ReadRangeValue::Real(value) => {
-                    Tag::new(
-                        TagNumber::ContextSpecific(ReadRangeValueType::Real as u8),
-                        4,
-                    )
-                    .encode(writer);
-                    writer.extend_from_slice(&value.to_be_bytes());
-                }
-                _ => todo!("{:?}", item.value),
-            }
-            Tag::new(TagNumber::ContextSpecificClosing(Self::VALUE_TAG), 0).encode(writer);
-
-            // status
-            item.status_flags
-                .encode_context(Self::STATUS_FLAGS_TAG, writer);
+            item.encode(writer)
         }
-    }
-
-    fn next_internal(&mut self) -> Result<ReadRangeItem<'a>, Error> {
-        // date and time
-        Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::ContextSpecificOpening(Self::DATE_TIME_TAG),
-            "ReadRangeItems next_internal",
-        )?;
-        Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::Application(ApplicationTagNumber::Date),
-            "ReadRangeItems next_internal",
-        )?;
-        let date = Date::decode(&mut self.reader, self.buf)?;
-        Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::Application(ApplicationTagNumber::Time),
-            "ReadRangeItems next_internal",
-        )?;
-        let time = Time::decode(&mut self.reader, self.buf)?;
-        Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::ContextSpecificClosing(Self::DATE_TIME_TAG),
-            "ReadRangeItems next_internal",
-        )?;
-
-        // value
-        Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::ContextSpecificOpening(Self::VALUE_TAG),
-            "ReadRangeItems next_internal",
-        )?;
-        let tag = Tag::decode(&mut self.reader, self.buf)?;
-        let value_type: ReadRangeValueType = match tag.number {
-            TagNumber::ContextSpecific(tag_number) => tag_number
-                .try_into()
-                .map_err(|x| Error::InvalidVariant(("ReadRangeValueType", x as u32)))?,
-            x => return Err(Error::TagNotSupported(("ReadRangeItems next value", x))),
-        };
-        let value = match value_type {
-            ReadRangeValueType::Real => {
-                let value = f32::from_be_bytes(self.reader.read_bytes(self.buf)?);
-                ReadRangeValue::Real(value)
-            }
-            x => return Err(Error::Unimplemented(Unimplemented::ReadRangeValueType(x))),
-        };
-        Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::ContextSpecificClosing(Self::VALUE_TAG),
-            "ReadRangeItems next_internal",
-        )?;
-
-        // status flags
-        Tag::decode_expected(
-            &mut self.reader,
-            self.buf,
-            TagNumber::ContextSpecific(Self::STATUS_FLAGS_TAG),
-            "ReadRangeItems next_internal",
-        )?;
-        let status_flags = BitString::decode(
-            &PropertyId::PropStatusFlags,
-            tag.value,
-            &mut self.reader,
-            self.buf,
-        )?;
-
-        Ok(ReadRangeItem {
-            date,
-            time,
-            value,
-            status_flags,
-        })
     }
 }
 
-impl<'a> Iterator for ReadRangeItems<'a> {
+impl<'a> IntoIterator for &'_ ReadRangeItems<'a> {
+    type Item = Result<ReadRangeItem<'a>, Error>;
+
+    type IntoIter = ReadRangeItemsIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ReadRangeItemsIter {
+            buf: self.buf,
+            reader: Reader::new_with_len(self.buf.len()),
+        }
+    }
+}
+
+pub struct ReadRangeItemsIter<'a> {
+    reader: Reader,
+    buf: &'a [u8],
+}
+
+impl<'a> Iterator for ReadRangeItemsIter<'a> {
     type Item = Result<ReadRangeItem<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -380,7 +268,7 @@ impl<'a> Iterator for ReadRangeItems<'a> {
             return None;
         }
 
-        let item = self.next_internal();
+        let item = ReadRangeItem::decode(&mut self.reader, self.buf);
         Some(item)
     }
 }
@@ -392,6 +280,123 @@ pub struct ReadRangeItem<'a> {
     pub time: Time,
     pub value: ReadRangeValue,
     pub status_flags: BitString<'a>,
+}
+
+impl<'a> ReadRangeItem<'a> {
+    const DATE_TIME_TAG: u8 = 0;
+    const VALUE_TAG: u8 = 1;
+    const STATUS_FLAGS_TAG: u8 = 2;
+
+    pub fn encode(&self, writer: &mut Writer) {
+        // date and time
+        Tag::new(TagNumber::ContextSpecificOpening(Self::DATE_TIME_TAG), 0).encode(writer);
+        Tag::new(
+            TagNumber::Application(ApplicationTagNumber::Date),
+            Date::LEN,
+        )
+        .encode(writer);
+        self.date.encode(writer);
+        Tag::new(
+            TagNumber::Application(ApplicationTagNumber::Time),
+            Time::LEN,
+        )
+        .encode(writer);
+        self.time.encode(writer);
+        Tag::new(TagNumber::ContextSpecificClosing(Self::DATE_TIME_TAG), 0).encode(writer);
+
+        // value
+        Tag::new(TagNumber::ContextSpecificOpening(Self::VALUE_TAG), 0).encode(writer);
+        match self.value {
+            ReadRangeValue::Real(value) => {
+                Tag::new(
+                    TagNumber::ContextSpecific(ReadRangeValueType::Real as u8),
+                    4,
+                )
+                .encode(writer);
+                writer.extend_from_slice(&value.to_be_bytes());
+            }
+            _ => todo!("{:?}", self.value),
+        }
+        Tag::new(TagNumber::ContextSpecificClosing(Self::VALUE_TAG), 0).encode(writer);
+
+        // status
+        self.status_flags
+            .encode_context(Self::STATUS_FLAGS_TAG, writer);
+    }
+
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        // date and time
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecificOpening(Self::DATE_TIME_TAG),
+            "ReadRangeItem decode",
+        )?;
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::Application(ApplicationTagNumber::Date),
+            "ReadRangeItem decode",
+        )?;
+        let date = Date::decode(reader, buf)?;
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::Application(ApplicationTagNumber::Time),
+            "ReadRangeItem decode",
+        )?;
+        let time = Time::decode(reader, buf)?;
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecificClosing(Self::DATE_TIME_TAG),
+            "ReadRangeItem decode",
+        )?;
+
+        // value
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecificOpening(Self::VALUE_TAG),
+            "ReadRangeItem decode",
+        )?;
+        let tag = Tag::decode(reader, buf)?;
+        let value_type: ReadRangeValueType = match tag.number {
+            TagNumber::ContextSpecific(tag_number) => tag_number
+                .try_into()
+                .map_err(|x| Error::InvalidVariant(("ReadRangeValueType", x as u32)))?,
+            x => return Err(Error::TagNotSupported(("ReadRangeItems next value", x))),
+        };
+        let value = match value_type {
+            ReadRangeValueType::Real => {
+                let value = f32::from_be_bytes(reader.read_bytes(buf)?);
+                ReadRangeValue::Real(value)
+            }
+            x => return Err(Error::Unimplemented(Unimplemented::ReadRangeValueType(x))),
+        };
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecificClosing(Self::VALUE_TAG),
+            "ReadRangeItem decode",
+        )?;
+
+        // status flags
+        Tag::decode_expected(
+            reader,
+            buf,
+            TagNumber::ContextSpecific(Self::STATUS_FLAGS_TAG),
+            "ReadRangeItem decode",
+        )?;
+        let status_flags = BitString::decode(&PropertyId::PropStatusFlags, tag.value, reader, buf)?;
+
+        Ok(ReadRangeItem {
+            date,
+            time,
+            value,
+            status_flags,
+        })
+    }
 }
 
 impl ReadRange {

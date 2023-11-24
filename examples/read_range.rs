@@ -1,14 +1,14 @@
 use core::ops::Range;
-use std::{io::Error, net::UdpSocket};
+use std::net::UdpSocket;
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ComplexAckService, ConfirmedRequest, ConfirmedRequestService},
+        confirmed::{ComplexAck, ComplexAckService, ConfirmedRequest, ConfirmedRequestService},
         primitives::data_value::ApplicationDataValue,
         services::{
-            read_property::{ReadProperty, ReadPropertyValue},
+            read_property::{ReadProperty, ReadPropertyAck, ReadPropertyValue},
             read_range::{ReadRange, ReadRangeByPosition, ReadRangeRequestType, ReadRangeValue},
         },
     },
@@ -23,9 +23,27 @@ use embedded_bacnet::{
     },
 };
 
+#[derive(Debug)]
+enum MainError {
+    Io(std::io::Error),
+    Bacnet(embedded_bacnet::common::error::Error),
+}
+
+impl From<std::io::Error> for MainError {
+    fn from(value: std::io::Error) -> Self {
+        MainError::Io(value)
+    }
+}
+
+impl From<embedded_bacnet::common::error::Error> for MainError {
+    fn from(value: embedded_bacnet::common::error::Error) -> Self {
+        MainError::Bacnet(value)
+    }
+}
+
 const IP_ADDRESS: &str = "192.168.1.249:47808";
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
     let object_id = ObjectId::new(ObjectType::ObjectTrendlog, 4);
@@ -193,7 +211,7 @@ fn get_items_for_range(
     object_id: ObjectId,
     range: Range<usize>,
     items: &mut LogSet,
-) -> Result<(), Error> {
+) -> Result<(), MainError> {
     // encode packet
     let request_type = ReadRangeRequestType::ByPosition(ReadRangeByPosition {
         index: range.start as u32,
@@ -215,47 +233,46 @@ fn get_items_for_range(
 
     // receive reply
     let mut buf = vec![0; 4096];
-    let (n, _peer) = socket.recv_from(&mut buf).unwrap();
+    let (n, _peer) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf).unwrap();
+    let message = DataLink::decode(&mut reader, buf)?;
+    let ack: ComplexAck = message.try_into()?;
 
-    if let Some(ack) = message.get_ack_into() {
-        match ack.service {
-            ComplexAckService::ReadRange(read_range) => {
-                for item in read_range.item_data {
-                    let item = item.unwrap();
-                    let value = match item.value {
-                        ReadRangeValue::Real(x) => x,
-                        _ => 0.0,
-                    };
-                    let date_time = NaiveDateTime::new(
-                        NaiveDate::from_ymd_opt(
-                            item.date.year as i32,
-                            item.date.month as u32,
-                            item.date.day as u32,
-                        )
+    match ack.service {
+        ComplexAckService::ReadRange(read_range) => {
+            for item in &read_range.item_data {
+                let item = item?;
+                let value = match item.value {
+                    ReadRangeValue::Real(x) => x,
+                    _ => 0.0,
+                };
+                let date_time = NaiveDateTime::new(
+                    NaiveDate::from_ymd_opt(
+                        item.date.year as i32,
+                        item.date.month as u32,
+                        item.date.day as u32,
+                    )
+                    .unwrap(),
+                    NaiveTime::from_hms_opt(item.time.hour as u32, item.time.minute as u32, 0)
                         .unwrap(),
-                        NaiveTime::from_hms_opt(item.time.hour as u32, item.time.minute as u32, 0)
-                            .unwrap(),
-                    );
-                    let log_entry = LogEntry {
-                        timestamp: date_time.timestamp() as i32,
-                        value,
-                    };
-                    items.add_entry(log_entry);
-                }
+                );
+                let log_entry = LogEntry {
+                    timestamp: date_time.timestamp() as i32,
+                    value,
+                };
+                items.add_entry(log_entry);
             }
-            _ => {
-                // do nothing
-            }
+        }
+        _ => {
+            // do nothing
         }
     }
 
     Ok(())
 }
 
-fn get_record_count(socket: &UdpSocket, object_id: ObjectId) -> Result<u32, Error> {
+fn get_record_count(socket: &UdpSocket, object_id: ObjectId) -> Result<u32, MainError> {
     // encode packet
     let rp = ReadProperty::new(object_id, PropertyId::PropRecordCount);
     let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadProperty(rp));
@@ -276,22 +293,19 @@ fn get_record_count(socket: &UdpSocket, object_id: ObjectId) -> Result<u32, Erro
 
     // receive reply
     let mut buf = vec![0; 1024];
-    let (n, peer) = socket.recv_from(&mut buf).unwrap();
+    let (n, peer) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf).unwrap();
+    let message = DataLink::decode(&mut reader, buf)?;
     println!("Decoded:  {:?}\n", message);
+    let message: ReadPropertyAck = message.try_into()?;
 
     // read values
-    if let Some(message) = message.get_read_property_ack_into() {
-        if let ReadPropertyValue::ApplicationDataValue(ApplicationDataValue::UnsignedInt(x)) =
-            message.property_value
-        {
-            Ok(x)
-        } else {
-            Ok(0)
-        }
+    if let ReadPropertyValue::ApplicationDataValue(ApplicationDataValue::UnsignedInt(x)) =
+        message.property_value
+    {
+        Ok(x)
     } else {
         Ok(0)
     }

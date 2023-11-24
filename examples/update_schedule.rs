@@ -1,4 +1,4 @@
-use std::{io::Error, net::UdpSocket};
+use std::net::UdpSocket;
 
 use embedded_bacnet::{
     application_protocol::{
@@ -7,7 +7,8 @@ use embedded_bacnet::{
         primitives::data_value::{ApplicationDataValue, ApplicationDataValueWrite},
         services::{
             read_property_multiple::{
-                PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject,
+                PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleAck,
+                ReadPropertyMultipleObject,
             },
             write_property::WriteProperty,
         },
@@ -24,9 +25,27 @@ use embedded_bacnet::{
     },
 };
 
+#[derive(Debug)]
+enum MainError {
+    Io(std::io::Error),
+    Bacnet(embedded_bacnet::common::error::Error),
+}
+
+impl From<std::io::Error> for MainError {
+    fn from(value: std::io::Error) -> Self {
+        MainError::Io(value)
+    }
+}
+
+impl From<embedded_bacnet::common::error::Error> for MainError {
+    fn from(value: embedded_bacnet::common::error::Error) -> Self {
+        MainError::Bacnet(value)
+    }
+}
+
 const IP_ADDRESS: &str = "192.168.1.249:47808";
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
@@ -52,11 +71,11 @@ fn main() -> Result<(), Error> {
 
     // receive reply
     let mut buf = vec![0; 1024];
-    let (n, peer) = socket.recv_from(&mut buf).unwrap();
+    let (n, peer) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf).unwrap();
+    let message = DataLink::decode(&mut reader, buf)?;
     println!("Decoded: {:?}", message);
 
     let mut monday = vec![];
@@ -67,25 +86,52 @@ fn main() -> Result<(), Error> {
     let mut saturday = vec![];
     let mut sunday = vec![];
 
-    if let Some(message) = message.get_read_property_multiple_ack_into() {
-        for values in message {
-            let values = values.unwrap();
-            for x in values.property_results.into_iter() {
-                match x.unwrap().value {
-                    PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
-                        weekly_schedule,
-                    )) => {
-                        monday = weekly_schedule.monday.map(|x| x.unwrap()).collect();
-                        tuesday = weekly_schedule.tuesday.map(|x| x.unwrap()).collect();
-                        wednesday = weekly_schedule.wednesday.map(|x| x.unwrap()).collect();
-                        thursday = weekly_schedule.thursday.map(|x| x.unwrap()).collect();
-                        friday = weekly_schedule.friday.map(|x| x.unwrap()).collect();
-                        saturday = weekly_schedule.saturday.map(|x| x.unwrap()).collect();
-                        sunday = weekly_schedule.sunday.map(|x| x.unwrap()).collect();
-                    }
-                    _ => {
-                        // do nothing
-                    }
+    let message: ReadPropertyMultipleAck = message.try_into()?;
+
+    for values in &message {
+        let values = values?;
+        for x in values.property_results.into_iter() {
+            let x = x?;
+            match x.value {
+                PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(weekly_schedule)) => {
+                    monday = weekly_schedule
+                        .monday
+                        .into_iter()
+                        .map(|x| x.unwrap())
+                        .collect();
+                    tuesday = weekly_schedule
+                        .tuesday
+                        .into_iter()
+                        .map(|x| x.unwrap())
+                        .collect();
+                    wednesday = weekly_schedule
+                        .wednesday
+                        .into_iter()
+                        .map(|x| x.unwrap())
+                        .collect();
+                    thursday = weekly_schedule
+                        .thursday
+                        .into_iter()
+                        .map(|x| x.unwrap())
+                        .collect();
+                    friday = weekly_schedule
+                        .friday
+                        .into_iter()
+                        .map(|x| x.unwrap())
+                        .collect();
+                    saturday = weekly_schedule
+                        .saturday
+                        .into_iter()
+                        .map(|x| x.unwrap())
+                        .collect();
+                    sunday = weekly_schedule
+                        .sunday
+                        .into_iter()
+                        .map(|x| x.unwrap())
+                        .collect();
+                }
+                _ => {
+                    // do nothing
                 }
             }
         }

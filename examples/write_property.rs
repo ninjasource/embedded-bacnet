@@ -1,4 +1,4 @@
-use std::{io::Error, net::UdpSocket};
+use std::net::UdpSocket;
 
 use embedded_bacnet::{
     application_protocol::{
@@ -19,9 +19,27 @@ use embedded_bacnet::{
     },
 };
 
+#[derive(Debug)]
+enum MainError {
+    Io(std::io::Error),
+    Bacnet(embedded_bacnet::common::error::Error),
+}
+
+impl From<std::io::Error> for MainError {
+    fn from(value: std::io::Error) -> Self {
+        MainError::Io(value)
+    }
+}
+
+impl From<embedded_bacnet::common::error::Error> for MainError {
+    fn from(value: embedded_bacnet::common::error::Error) -> Self {
+        MainError::Bacnet(value)
+    }
+}
+
 const IP_ADDRESS: &str = "192.168.1.249:47808";
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
 
@@ -49,11 +67,11 @@ fn main() -> Result<(), Error> {
 
     // receive reply ack
     let mut buf = vec![0; 1024];
-    let (n, peer) = socket.recv_from(&mut buf).unwrap();
+    let (n, peer) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
     println!("Received: {:02x?} from {:?}", buf, peer);
     let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf);
+    let message = DataLink::decode(&mut reader, buf)?;
     println!("Decoded:  {:?}\n", message);
 
     Ok(())
