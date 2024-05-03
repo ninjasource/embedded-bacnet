@@ -1,5 +1,9 @@
+// cargo run --example who_is
+// cargo run --example who_is -- --addr "192.168.1.249:47808"
+
 use std::{io::Error, net::UdpSocket};
 
+use clap::Parser;
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu, services::who_is::WhoIs, unconfirmed::UnconfirmedRequest,
@@ -12,7 +16,7 @@ use embedded_bacnet::{
 };
 
 #[derive(Debug)]
-enum MainError {
+pub enum MainError {
     Io(std::io::Error),
     Bacnet(embedded_bacnet::common::error::Error),
 }
@@ -29,10 +33,22 @@ impl From<embedded_bacnet::common::error::Error> for MainError {
     }
 }
 
+/// A Bacnet Client example to send a who_is request and wait from an i_am reply.
+/// NOTE: this example works with broadcast UDP packets by default (255.255.255.255) which may be blocked by your network
+/// You can get around this by sending the who_is directly to a known IP address
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// IP address with port e.g. "192.168.1.249:47808"
+    #[arg(short, long, default_value = "255.255.255.255:47808")]
+    addr: String,
+}
+
 // NOTE: this example works with broadcast UDP packets which may be blocked by your network
 // You can get around this by sending the who_is directly to a known IP aaddress
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
+    let args = Args::parse();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
     socket.set_broadcast(true)?;
 
@@ -48,9 +64,8 @@ fn main() -> Result<(), Error> {
     data_link.encode(&mut buffer);
 
     let buf = buffer.to_bytes();
-    let addr = format!("255.255.255.255:{}", 0xBAC0);
-    socket.send_to(buf, &addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, addr);
+    socket.send_to(buf, &args.addr)?;
+    println!("Sent:     {:02x?} to {}\n", buf, &args.addr);
 
     let mut buf = vec![0; 1024];
     loop {

@@ -25,6 +25,7 @@ serde = { version = "1.0", default-features = false, features = [
 [dev-dependencies]
 simple_logger = "4.2.0"
 chrono = { version = "0.4.28" }
+clap = { version = "4.5.4", features = ["derive"] }
 
 [features]
 default = []

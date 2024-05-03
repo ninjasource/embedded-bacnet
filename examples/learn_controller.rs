@@ -1,5 +1,8 @@
+// cargo run --example learn_controller -- --addr "192.168.1.249:47808" --device-id 79079
+
 use std::{collections::HashMap, net::UdpSocket};
 
+use clap::Parser;
 use embedded_bacnet::{
     application_protocol::{
         confirmed::{ConfirmedRequest, ConfirmedRequestService},
@@ -23,11 +26,21 @@ use embedded_bacnet::{
 };
 use flagset::FlagSet;
 
-const IP_ADDRESS: &str = "192.168.1.249:47808";
-const DEVICE_ID: u32 = 79079;
+/// A Bacnet Client example to discover the capabilities of a controller
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// IP address with port e.g. "192.168.1.249:47808"
+    #[arg(short, long)]
+    addr: String,
+
+    /// Device ID of the controller e.g. 79079
+    #[arg(short, long)]
+    device_id: u32,
+}
 
 #[derive(Debug)]
-enum MainError {
+pub enum MainError {
     Io(std::io::Error),
     Bacnet(embedded_bacnet::common::error::Error),
 }
@@ -46,11 +59,12 @@ impl From<embedded_bacnet::common::error::Error> for MainError {
 
 fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
+    let args = Args::parse();
 
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
 
     // encode packet
-    let object_id = ObjectId::new(ObjectType::ObjectDevice, DEVICE_ID);
+    let object_id = ObjectId::new(ObjectType::ObjectDevice, args.device_id);
     let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
     let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadProperty(read_property));
     let data_link = DataLink::new_confirmed_req(req);
@@ -60,8 +74,8 @@ fn main() -> Result<(), MainError> {
 
     // send packet
     let buf = writer.to_bytes();
-    socket.send_to(buf, &IP_ADDRESS)?;
-    println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
+    socket.send_to(buf, &args.addr)?;
+    println!("Sent:     {:02x?} to {}\n", buf, args.addr);
 
     // receive reply
     let mut buf = vec![0; 64 * 1024];
@@ -103,7 +117,7 @@ fn main() -> Result<(), MainError> {
             | ObjectType::ObjectBinaryOutput
             | ObjectType::ObjectBinaryValue => {
                 for chunk in ids.as_slice().chunks(10).into_iter() {
-                    let _values = get_multi_binary(&socket, chunk)?;
+                    let _values = get_multi_binary(&args.addr, &socket, chunk)?;
                     println!("{:?}", _values);
                 }
             }
@@ -111,19 +125,19 @@ fn main() -> Result<(), MainError> {
             | ObjectType::ObjectAnalogOutput
             | ObjectType::ObjectAnalogValue => {
                 for chunk in ids.as_slice().chunks(10).into_iter() {
-                    let _values = get_multi_analog(&socket, chunk)?;
+                    let _values = get_multi_analog(&args.addr, &socket, chunk)?;
                     println!("{:?}", _values);
                 }
             }
             ObjectType::ObjectSchedule => {
                 for object_id in ids.as_slice() {
-                    let values = get_multi_schedule(&socket, object_id)?;
+                    let values = get_multi_schedule(&args.addr, &socket, object_id)?;
                     println!("{:?}", values);
                 }
             }
             ObjectType::ObjectTrendlog => {
                 for chunk in ids.as_slice().chunks(10).into_iter() {
-                    let values = get_multi_trend_log(&socket, chunk)?;
+                    let values = get_multi_trend_log(&args.addr, &socket, chunk)?;
                     println!("{:?}", values);
                 }
             }
@@ -173,6 +187,7 @@ pub struct TrendLogValue {
 }
 
 fn get_multi_binary(
+    addr: &str,
     socket: &UdpSocket,
     object_ids: &[ObjectId],
 ) -> Result<Vec<BinaryValue>, MainError> {
@@ -189,7 +204,7 @@ fn get_multi_binary(
     let mut buf = vec![0; 16 * 1024];
     let mut writer = Writer::new(&mut buf);
     read_property_multiple_to_bytes(rpm, &mut writer);
-    socket.send_to(writer.to_bytes(), &IP_ADDRESS)?;
+    socket.send_to(writer.to_bytes(), addr)?;
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
@@ -228,6 +243,7 @@ fn get_multi_binary(
 }
 
 fn get_multi_analog(
+    addr: &str,
     socket: &UdpSocket,
     object_ids: &[ObjectId],
 ) -> Result<Vec<AnalogValue>, MainError> {
@@ -247,7 +263,7 @@ fn get_multi_analog(
     let mut buf = vec![0; 16 * 1024];
     let mut buffer = Writer::new(&mut buf);
     read_property_multiple_to_bytes(rpm, &mut buffer);
-    socket.send_to(buffer.to_bytes(), &IP_ADDRESS)?;
+    socket.send_to(buffer.to_bytes(), addr)?;
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
@@ -291,6 +307,7 @@ fn get_multi_analog(
 }
 
 fn get_multi_trend_log(
+    addr: &str,
     socket: &UdpSocket,
     object_ids: &[ObjectId],
 ) -> Result<Vec<TrendLogValue>, MainError> {
@@ -305,7 +322,7 @@ fn get_multi_trend_log(
     let mut buf = vec![0; 16 * 1024];
     let mut buffer = Writer::new(&mut buf);
     read_property_multiple_to_bytes(rpm, &mut buffer);
-    socket.send_to(buffer.to_bytes(), &IP_ADDRESS)?;
+    socket.send_to(buffer.to_bytes(), addr)?;
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];
@@ -335,6 +352,7 @@ fn get_multi_trend_log(
 }
 
 fn get_multi_schedule(
+    addr: &str,
     socket: &UdpSocket,
     object_id: &ObjectId,
 ) -> Result<Vec<ScheduleValue>, MainError> {
@@ -347,7 +365,7 @@ fn get_multi_schedule(
     let mut buf = vec![0; 4 * 1024];
     let mut writer = Writer::new(&mut buf);
     read_property_multiple_to_bytes(rpm, &mut writer);
-    socket.send_to(writer.to_bytes(), &IP_ADDRESS)?;
+    socket.send_to(writer.to_bytes(), addr)?;
     let mut buf = vec![0; 16 * 1024];
     let (n, _) = socket.recv_from(&mut buf)?;
     let buf = &buf[..n];

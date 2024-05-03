@@ -1,5 +1,8 @@
+// cargo run --example read_property_list -- --addr "192.168.1.249:47808" --device-id 79079
+
 use std::net::UdpSocket;
 
+use clap::Parser;
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
@@ -17,11 +20,21 @@ use embedded_bacnet::{
     },
 };
 
-const IP_ADDRESS: &str = "192.168.1.249:47808";
-const DEVICE_ID: u32 = 79079;
+/// A Bacnet Client example to read the list of properties for the device
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// IP address with port e.g. "192.168.1.249:47808"
+    #[arg(short, long)]
+    addr: String,
+
+    /// Device ID of the controller e.g. 79079
+    #[arg(short, long)]
+    device_id: u32,
+}
 
 #[derive(Debug)]
-enum MainError {
+pub enum MainError {
     Io(std::io::Error),
     Bacnet(embedded_bacnet::common::error::Error),
 }
@@ -39,10 +52,11 @@ impl From<embedded_bacnet::common::error::Error> for MainError {
 }
 fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
+    let args = Args::parse();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
     // encode packet
-    let object_id = ObjectId::new(ObjectType::ObjectDevice, DEVICE_ID);
+    let object_id = ObjectId::new(ObjectType::ObjectDevice, args.device_id);
     let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
     let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadProperty(read_property));
     let apdu = ApplicationPdu::ConfirmedRequest(req);
@@ -55,8 +69,8 @@ fn main() -> Result<(), MainError> {
 
     // send packet
     let buf = buffer.to_bytes();
-    socket.send_to(buf, IP_ADDRESS)?;
-    println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
+    socket.send_to(buf, &args.addr)?;
+    println!("Sent:     {:02x?} to {}\n", buf, &args.addr);
 
     // receive reply
     let mut buf = vec![0; 1024];

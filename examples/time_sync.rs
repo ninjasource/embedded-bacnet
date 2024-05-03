@@ -1,6 +1,9 @@
+// cargo run --example time_sync -- --addr "192.168.1.249:47808" --device-id 79079
+
 use std::{io::Error, net::UdpSocket};
 
 use chrono::{Datelike, Local, Timelike};
+use clap::Parser;
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
@@ -43,21 +46,32 @@ impl From<embedded_bacnet::common::error::Error> for MainError {
     }
 }
 
-const IP_ADDRESS: &str = "192.168.1.249:47808";
-const DEVICE_ID: u32 = 79079;
+/// A Bacnet Client example set the time on the controller to the system time (on this pc)
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// IP address with port e.g. "192.168.1.249:47808"
+    #[arg(short, long)]
+    addr: String,
+
+    /// Device ID of the controller e.g. 79079
+    #[arg(short, long)]
+    device_id: u32,
+}
 
 fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
+    let args = Args::parse();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
-    set_time(&socket)?;
-    request_date_time(&socket)?;
+    set_time(&args.addr, &socket)?;
+    request_date_time(&args.addr, args.device_id, &socket)?;
     read_date_time(&socket)?;
 
     Ok(())
 }
 
-fn set_time(socket: &UdpSocket) -> Result<(), MainError> {
+fn set_time(addr: &str, socket: &UdpSocket) -> Result<(), MainError> {
     let now = Local::now();
     let wday = now.weekday().num_days_from_sunday() as u8; // sunday = 0
 
@@ -86,15 +100,15 @@ fn set_time(socket: &UdpSocket) -> Result<(), MainError> {
 
     // send packet
     let buf = buffer.to_bytes();
-    socket.send_to(buf, IP_ADDRESS)?;
-    println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
+    socket.send_to(buf, addr)?;
+    println!("Sent:     {:02x?} to {}\n", buf, addr);
     Ok(())
 }
 
-fn request_date_time(socket: &UdpSocket) -> Result<(), Error> {
+fn request_date_time(addr: &str, device_id: u32, socket: &UdpSocket) -> Result<(), Error> {
     println!("Fetching date time");
 
-    let object_id = ObjectId::new(ObjectType::ObjectDevice, DEVICE_ID);
+    let object_id = ObjectId::new(ObjectType::ObjectDevice, device_id);
     let property_ids = [PropertyId::PropLocalDate, PropertyId::PropLocalTime];
     let rpm = ReadPropertyMultipleObject::new(object_id, &property_ids);
     let objects = [rpm];
@@ -112,8 +126,8 @@ fn request_date_time(socket: &UdpSocket) -> Result<(), Error> {
 
     // send packet
     let buf = buffer.to_bytes();
-    socket.send_to(buf, IP_ADDRESS)?;
-    println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
+    socket.send_to(buf, addr)?;
+    println!("Sent:     {:02x?} to {}\n", buf, addr);
     Ok(())
 }
 

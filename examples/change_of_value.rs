@@ -1,5 +1,6 @@
-use std::net::UdpSocket;
+// cargo run --example change_of_value -- --help
 
+use clap::Parser;
 use embedded_bacnet::{
     application_protocol::{
         application_pdu::ApplicationPdu,
@@ -16,9 +17,10 @@ use embedded_bacnet::{
         network_pdu::{MessagePriority, NetworkMessage, NetworkPdu},
     },
 };
+use std::net::UdpSocket;
 
 #[derive(Debug)]
-enum MainError {
+pub enum MainError {
     Io(std::io::Error),
     Bacnet(embedded_bacnet::common::error::Error),
 }
@@ -35,10 +37,18 @@ impl From<embedded_bacnet::common::error::Error> for MainError {
     }
 }
 
-const IP_ADDRESS: &str = "192.168.1.249:47808";
+/// A Bacnet Client example to subscribe to Change-Of-Value events
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// IP address with port e.g. "192.168.1.249:47808"
+    #[arg(short, long)]
+    addr: String,
+}
 
 fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
+    let args = Args::parse();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
 
     // encode packet
@@ -55,8 +65,8 @@ fn main() -> Result<(), MainError> {
 
     // send packet
     let buf = buffer.to_bytes();
-    socket.send_to(buf, IP_ADDRESS)?;
-    println!("Sent:     {:02x?} to {}\n", buf, IP_ADDRESS);
+    socket.send_to(buf, &args.addr)?;
+    println!("Sent:     {:02x?} to {}\n", buf, &args.addr);
 
     // receive reply ack
     let mut buf = vec![0; 1024];
