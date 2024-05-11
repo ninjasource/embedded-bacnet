@@ -1,5 +1,3 @@
-use flagset::flags;
-
 use super::error::Error;
 
 pub const BACNET_MAX_OBJECT: u32 = 0x3FF;
@@ -1152,21 +1150,72 @@ impl TryFrom<u32> for EngineeringUnits {
     }
 }
 
-flags! {
-    pub enum LogBufferResultFlags: u8 {
-        FirstItem = 0b1000_0000,
-        LastItem =  0b0100_0000,
-        MoreItems = 0b0010_0000,
+#[repr(u8)]
+pub enum LogBufferResultFlags {
+    FirstItem = 0b1000_0000,
+    LastItem = 0b0100_0000,
+    MoreItems = 0b0010_0000,
+}
+
+#[repr(u8)]
+pub enum StatusFlags {
+    InAlarm = 0b1000_0000,
+    Fault = 0b0100_0000,
+    Overridden = 0b0010_0000,
+    OutOfService = 0b0001_0000,
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Status {
+    pub inner: u8,
+}
+
+impl Status {
+    pub fn new(inner: u8) -> Self {
+        Self { inner }
+    }
+
+    pub const fn in_alarm(&self) -> bool {
+        self.inner & StatusFlags::InAlarm as u8 == StatusFlags::InAlarm as u8
+    }
+
+    pub const fn fault(&self) -> bool {
+        self.inner & StatusFlags::Fault as u8 == StatusFlags::Fault as u8
+    }
+
+    pub const fn overridden(&self) -> bool {
+        self.inner & StatusFlags::Overridden as u8 == StatusFlags::Overridden as u8
+    }
+
+    pub const fn out_of_service(&self) -> bool {
+        self.inner & StatusFlags::OutOfService as u8 == StatusFlags::OutOfService as u8
     }
 }
 
-// start of bit string enumerations
-flags! {
-    pub enum StatusFlags: u8 {
-        InAlarm = 0b1000_0000,
-        Fault = 0b0100_0000,
-        Overridden = 0b0010_0000,
-        OutOfService = 0b0001_0000,
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct LogBufferResult {
+    pub inner: u8,
+}
+
+impl LogBufferResult {
+    pub fn new(inner: u8) -> Self {
+        Self { inner }
+    }
+
+    pub const fn first_item(&self) -> bool {
+        self.inner & LogBufferResultFlags::FirstItem as u8 == LogBufferResultFlags::FirstItem as u8
+    }
+
+    pub const fn last_item(&self) -> bool {
+        self.inner & LogBufferResultFlags::LastItem as u8 == LogBufferResultFlags::LastItem as u8
+    }
+
+    pub const fn more_items(&self) -> bool {
+        self.inner & LogBufferResultFlags::MoreItems as u8 == LogBufferResultFlags::MoreItems as u8
     }
 }
 

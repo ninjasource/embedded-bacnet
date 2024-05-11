@@ -19,12 +19,11 @@ use embedded_bacnet::{
         io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
-        spec::{Binary, EngineeringUnits, StatusFlags},
+        spec::{Binary, EngineeringUnits, Status},
         time_value::TimeValue,
     },
     network_protocol::data_link::DataLink,
 };
-use flagset::FlagSet;
 
 /// A Bacnet Client example to discover the capabilities of a controller
 #[derive(Parser, Debug)]
@@ -155,7 +154,7 @@ pub struct AnalogValue {
     pub name: String,
     pub value: f32,
     pub units: EngineeringUnits,
-    pub status_flags: FlagSet<StatusFlags>,
+    pub status: Status,
 }
 
 #[derive(Debug, Clone)]
@@ -163,7 +162,7 @@ pub struct BinaryValue {
     pub id: ObjectId,
     pub name: String,
     pub value: bool,
-    pub status_flags: FlagSet<StatusFlags>,
+    pub status: Status,
 }
 
 #[derive(Debug, Clone)]
@@ -224,10 +223,8 @@ fn get_multi_binary(
             ))) => true,
             _ => false,
         };
-        let status_flags = match x.next().unwrap()?.value {
-            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::StatusFlags(
-                x,
-            ))) => x,
+        let status = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::Status(x))) => x,
             _ => unreachable!(),
         };
 
@@ -235,7 +232,7 @@ fn get_multi_binary(
             id: obj.object_id,
             name,
             value,
-            status_flags,
+            status,
         });
     }
 
@@ -287,11 +284,9 @@ fn get_multi_analog(
             }
             _ => unreachable!(),
         };
-        let status_flags = match x.next().unwrap()?.value {
-            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::StatusFlags(
-                x,
-            ))) => x,
-            _ => FlagSet::default(), // ignore property read errors
+        let status = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::Status(x))) => x,
+            _ => unreachable!(),
         };
 
         items.push(AnalogValue {
@@ -299,7 +294,7 @@ fn get_multi_analog(
             name,
             value,
             units,
-            status_flags,
+            status,
         })
     }
 

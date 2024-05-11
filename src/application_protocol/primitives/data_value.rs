@@ -1,7 +1,5 @@
 use core::{fmt::Display, str::from_utf8};
 
-use flagset::{FlagSet, Flags};
-
 use crate::common::{
     daily_schedule::WeeklySchedule,
     error::Error,
@@ -10,8 +8,7 @@ use crate::common::{
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
     spec::{
-        Binary, EngineeringUnits, EventState, LogBufferResultFlags, LoggingType, NotifyType,
-        StatusFlags,
+        Binary, EngineeringUnits, EventState, LogBufferResult, LoggingType, NotifyType, Status,
     },
     tag::{ApplicationTagNumber, Tag, TagNumber},
 };
@@ -175,8 +172,8 @@ impl<'a> Display for ApplicationDataValue<'a> {
 
 #[derive(Debug, Clone)]
 pub enum BitString<'a> {
-    StatusFlags(FlagSet<StatusFlags>),
-    LogBufferResultFlags(FlagSet<LogBufferResultFlags>),
+    Status(Status),
+    LogBufferResult(LogBufferResult),
     Custom(CustomBitStream<'a>),
 }
 
@@ -197,15 +194,15 @@ pub struct CustomBitStream<'a> {
 impl<'a> BitString<'a> {
     pub fn encode_application(&self, writer: &mut Writer) {
         match self {
-            Self::StatusFlags(x) => {
+            Self::Status(x) => {
                 Tag::new(TagNumber::Application(ApplicationTagNumber::BitString), 2).encode(writer);
                 writer.push(0); // no unused bits
-                writer.push(x.bits());
+                writer.push(x.inner);
             }
-            Self::LogBufferResultFlags(x) => {
+            Self::LogBufferResult(x) => {
                 Tag::new(TagNumber::Application(ApplicationTagNumber::BitString), 2).encode(writer);
                 writer.push(0); // no unused bits
-                writer.push(x.bits());
+                writer.push(x.inner);
             }
             Self::Custom(x) => {
                 Tag::new(
@@ -221,15 +218,15 @@ impl<'a> BitString<'a> {
 
     pub fn encode_context(&self, tag_num: u8, writer: &mut Writer) {
         match self {
-            Self::StatusFlags(x) => {
+            Self::Status(x) => {
                 Tag::new(TagNumber::ContextSpecific(tag_num), 2).encode(writer);
                 writer.push(0); // no unused bits
-                writer.push(x.bits());
+                writer.push(x.inner);
             }
-            Self::LogBufferResultFlags(x) => {
+            Self::LogBufferResult(x) => {
                 Tag::new(TagNumber::ContextSpecific(tag_num), 2).encode(writer);
                 writer.push(0); // no unused bits
-                writer.push(x.bits());
+                writer.push(x.inner);
             }
             Self::Custom(x) => {
                 Tag::new(TagNumber::ContextSpecific(tag_num), x.bits.len() as u32 + 1)
@@ -249,25 +246,18 @@ impl<'a> BitString<'a> {
         let unused_bits = reader.read_byte(buf)?;
         match property_id {
             PropertyId::PropStatusFlags => {
-                let status_flags = Self::decode_byte_flag(reader.read_byte(buf)?)?;
-                Ok(Self::StatusFlags(status_flags))
+                let status_flags = Status::new(reader.read_byte(buf)?);
+                Ok(Self::Status(status_flags))
             }
             PropertyId::PropLogBuffer => {
-                let flags = Self::decode_byte_flag(reader.read_byte(buf)?)?;
-                Ok(Self::LogBufferResultFlags(flags))
+                let flags = LogBufferResult::new(reader.read_byte(buf)?);
+                Ok(Self::LogBufferResult(flags))
             }
             _ => {
                 let len = (len - 1) as usize; // we have already read a byte
                 let bits = reader.read_slice(len, buf)?;
                 Ok(Self::Custom(CustomBitStream { unused_bits, bits }))
             }
-        }
-    }
-
-    fn decode_byte_flag<T: Flags>(byte: T::Type) -> Result<FlagSet<T>, Error> {
-        match FlagSet::new(byte) {
-            Ok(x) => Ok(x),
-            Err(_) => Err(Error::InvalidValue("invalid flag bitstream")),
         }
     }
 }
