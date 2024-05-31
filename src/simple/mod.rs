@@ -26,13 +26,13 @@ use crate::{
 pub trait NetworkIo {
     type Error: Debug;
     fn read(&mut self, buf: &mut [u8]) -> impl Future<Output = Result<usize, Self::Error>> + Send;
-    fn write(&mut self, buf: &[u8]) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    fn write(&mut self, buf: &[u8]) -> impl Future<Output = Result<usize, Self::Error>> + Send;
 }
 
 #[derive(Debug)]
 pub struct Bacnet<T>
 where
-    T: NetworkIo,
+    T: NetworkIo + Debug,
 {
     io: T,
     invoke_id: u8,
@@ -58,7 +58,7 @@ pub struct InvokeIdError {
 
 impl<T> Bacnet<T>
 where
-    T: NetworkIo,
+    T: NetworkIo + Debug,
 {
     pub fn new(io: T) -> Self {
         Self { io, invoke_id: 0 }

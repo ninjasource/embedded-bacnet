@@ -24,6 +24,7 @@ serde = { version = "1.0", default-features = false, features = [
 simple_logger = "4.2.0"
 chrono = { version = "0.4.28" }
 clap = { version = "4.5.4", features = ["derive"] }
+tokio = { version = "1.38.0", features = ["rt-multi-thread", "net", "macros"] }
 
 [features]
 default = []
