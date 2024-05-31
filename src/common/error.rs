@@ -15,8 +15,6 @@ pub enum Error {
     Unknown,
     Unimplemented(Unimplemented),
     SegmentationNotSupported,
-    UnexpectedInvokeId,
-    Io,
     ApduTypeNotSupported(ApduType),
     ExpectedTag(ExpectedTag),
     ExpectedOpeningTag(TagNumber),

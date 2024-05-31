@@ -1,5 +1,7 @@
 // cargo run --example read_property_multiple -- --addr "192.168.1.249:47808"
 
+mod common;
+
 use std::net::UdpSocket;
 
 use clap::Parser;
@@ -53,6 +55,8 @@ fn main() -> Result<(), MainError> {
     simple_logger::init().unwrap();
     let args = Args::parse();
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
+
+    let _server = common::run_dummy_server();
 
     // encode packet
     let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);

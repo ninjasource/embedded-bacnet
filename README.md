@@ -13,6 +13,10 @@ You can use this library to send and receive bacnet packets. However, the entire
 
 The library requires no standard library or memory allocator so expect to use iterators and loops to when decoding your network packets.
 
+## Getting started
+
+Most of the examples use the `simple` module (see `Bacnet` struct) to perform basic async request-response bacnet queries which should be the most common use case. It is up to you to supply async read and write capabilities by wrapping your favorite network library. Alternatively, you can use this library as a codec in order to have more fine grained control of the communication.
+
 ## How it works
 
 Bacnet is a protocol that can work on top of many transport protocols. This implementation only works with Bacnet IP which uses UDP packets. Like many protocols this one has layers. 
@@ -58,9 +62,9 @@ Furthermore, `h_rpm_a.c` means `handle_read_property_multiple_acknowledgements` 
 
 Unit tests will come when I have more time. Please use the examples for the time being.
 
-## Undersstanding the internals
+## Understanding the internals
 
-At its heart this library is a bacnet codec (encoder / decoder). Because it does not allocate memory AND we have to deal with varying nubers of things (for example a bacnet packet may have any number
+At its heart this library is a bacnet codec (encoder / decoder). Because it does not allocate memory AND we have to deal with varying numbers of things (for example a bacnet packet may have any number
 of objects in it) the encoding and decoding parts have different representations. 
 For example if you wanted to encode a list of objects you would pass a slice from some container because you know, beforehand, how many objects you want to include in the packet. 
 When decoding lists of things we use an iterator so the user can collect those object into a vector or simply process them on the fly. 
