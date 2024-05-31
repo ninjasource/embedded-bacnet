@@ -1,46 +1,20 @@
-// cargo run --example read_property_multiple -- --addr "192.168.1.249:47808"
-
-use std::net::UdpSocket;
-
-use clap::Parser;
+/// A Bacnet Client example to read specific property values for analog input #1
+// cargo run --example read_property_multiple -- --addr "0.0.0.0:47808"
+use clap::{command, Parser};
+use common::MySocket;
 use embedded_bacnet::{
-    application_protocol::{
-        application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestService},
-        services::read_property_multiple::{
-            ReadPropertyMultiple, ReadPropertyMultipleAck, ReadPropertyMultipleObject,
-        },
+    application_protocol::services::read_property_multiple::{
+        ReadPropertyMultiple, ReadPropertyMultipleObject,
     },
     common::{
-        io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
     },
-    network_protocol::{
-        data_link::{DataLink, DataLinkFunction},
-        network_pdu::{MessagePriority, NetworkMessage, NetworkPdu},
-    },
+    simple::BacnetError,
 };
 
-#[derive(Debug)]
-pub enum MainError {
-    Io(std::io::Error),
-    Bacnet(embedded_bacnet::common::error::Error),
-}
+mod common;
 
-impl From<std::io::Error> for MainError {
-    fn from(value: std::io::Error) -> Self {
-        MainError::Io(value)
-    }
-}
-
-impl From<embedded_bacnet::common::error::Error> for MainError {
-    fn from(value: embedded_bacnet::common::error::Error) -> Self {
-        MainError::Bacnet(value)
-    }
-}
-
-/// A Bacnet Client example to read specific property values for analog input #1
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -49,13 +23,15 @@ struct Args {
     addr: String,
 }
 
-fn main() -> Result<(), MainError> {
+#[tokio::main]
+async fn main() -> Result<(), BacnetError<MySocket>> {
+    // setup
     simple_logger::init().unwrap();
     let args = Args::parse();
-    let addr = &args.addr;
-    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
+    let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
+    let mut buf = vec![0; 4096];
 
-    // encode packet
+    // fetch
     let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);
     let property_ids = [
         PropertyId::PropObjectName,
@@ -64,36 +40,13 @@ fn main() -> Result<(), MainError> {
         PropertyId::PropStatusFlags,
     ];
     let objects = [ReadPropertyMultipleObject::new(object_id, &property_ids)];
-    let service =
-        ConfirmedRequestService::ReadPropertyMultiple(ReadPropertyMultiple::new(&objects));
-    let apdu = ApplicationPdu::ConfirmedRequest(ConfirmedRequest::new(0, service));
-    let message = NetworkMessage::Apdu(apdu);
-    let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
-    let mut buffer = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buffer);
-    data_link.encode(&mut buffer);
+    let request = ReadPropertyMultiple::new(&objects);
+    let result = bacnet.read_property_multiple(&mut buf, request).await?;
 
-    // send packet
-    let buf = buffer.to_bytes();
-    socket.send_to(buf, addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, addr);
-
-    // receive reply
-    let mut buf = vec![0; 1024];
-    let (n, peer) = socket.recv_from(&mut buf)?;
-    let buf = &buf[..n];
-    println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf)?;
-    println!("Decoded:  {:?}\n", message);
-    let message: ReadPropertyMultipleAck = message.try_into()?;
-
-    // read values
-    for values in &message {
-        let values = values?;
-        for x in &values.property_results {
-            println!("{:?}", x);
+    // print
+    for values in &result {
+        for x in &values?.property_results {
+            println!("{:?}", x?);
         }
     }
 

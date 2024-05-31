@@ -49,6 +49,19 @@ where
     InvokeId(InvokeIdError),
 }
 
+impl<T: NetworkIo> From<Error> for BacnetError<T> {
+    fn from(value: Error) -> Self {
+        Self::Codec(value)
+    }
+}
+
+/* // this does not work
+impl<T: NetworkIo> From<T::Error> for BacnetError<T> {
+    fn from(value: T::Error) -> Self {
+        Self::Io(value)
+    }
+} */
+
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct InvokeIdError {

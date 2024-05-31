@@ -4,7 +4,7 @@ use crate::common::{
 };
 
 use super::{
-    confirmed::{BacnetError, ComplexAck, ConfirmedRequest, SimpleAck},
+    confirmed::{ConfirmedBacnetError, ComplexAck, ConfirmedRequest, SimpleAck},
     unconfirmed::UnconfirmedRequest,
 };
 
@@ -16,7 +16,7 @@ pub enum ApplicationPdu<'a> {
     UnconfirmedRequest(UnconfirmedRequest<'a>),
     ComplexAck(ComplexAck<'a>),
     SimpleAck(SimpleAck),
-    Error(BacnetError),
+    Error(ConfirmedBacnetError),
     // add more here (see ApduType)
 }
 
@@ -160,7 +160,7 @@ impl<'a> ApplicationPdu<'a> {
                 Ok(Self::SimpleAck(adpu))
             }
             ApduType::Error => {
-                let apdu = BacnetError::decode(reader, buf)?;
+                let apdu = ConfirmedBacnetError::decode(reader, buf)?;
                 Ok(Self::Error(apdu))
             }
             apdu_type => Err(Error::ApduTypeNotSupported(apdu_type)),

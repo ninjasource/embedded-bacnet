@@ -265,26 +265,29 @@ impl SimpleAck {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct BacnetError {
+pub struct ConfirmedBacnetError {
     pub invoke_id: u8,
     pub service_choice: ConfirmedServiceChoice,
     pub error_class: ErrorClass,
     pub error_code: ErrorCode,
 }
 
-impl BacnetError {
+impl ConfirmedBacnetError {
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         let invoke_id = reader.read_byte(buf)?;
         let service_choice: ConfirmedServiceChoice =
             reader.read_byte(buf)?.try_into().map_err(|e| {
-                Error::InvalidVariant(("BacnetError decode ConfirmedServiceChoice", e as u32))
+                Error::InvalidVariant((
+                    "ConfirmedBacnetError decode ConfirmedServiceChoice",
+                    e as u32,
+                ))
             })?;
 
         let tag = Tag::decode_expected(
             reader,
             buf,
             TagNumber::Application(ApplicationTagNumber::Enumerated),
-            "BacnetError error class",
+            "ConfirmedBacnetError error class",
         )?;
         let value = decode_unsigned(tag.value, reader, buf)? as u32;
         let error_class =
@@ -294,7 +297,7 @@ impl BacnetError {
             reader,
             buf,
             TagNumber::Application(ApplicationTagNumber::Enumerated),
-            "BacnetError error code",
+            "ConfirmedBacnetError error code",
         )?;
         let value = decode_unsigned(tag.value, reader, buf)? as u32;
         let error_code =
