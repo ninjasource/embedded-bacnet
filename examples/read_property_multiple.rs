@@ -26,7 +26,6 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
-    simple_logger::init().unwrap();
     let args = Args::parse();
     let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
     let mut buf = vec![0; 4096];
@@ -43,8 +42,9 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     let request = ReadPropertyMultiple::new(&objects);
     let result = bacnet.read_property_multiple(&mut buf, request).await?;
 
-    // print
+    // inspect results - loop though objects
     for values in &result {
+        // print property values of object
         for x in &values?.property_results {
             println!("{:?}", x?);
         }

@@ -1,4 +1,6 @@
-use core::{fmt::Debug, future::Future};
+use core::fmt::Debug;
+
+use maybe_async::maybe_async;
 
 use crate::{
     application_protocol::{
@@ -23,10 +25,12 @@ use crate::{
     },
 };
 
+#[allow(async_fn_in_trait)]
+#[maybe_async(AFIT)] // AFIT - Async Function In Trait
 pub trait NetworkIo {
     type Error: Debug;
-    fn read(&mut self, buf: &mut [u8]) -> impl Future<Output = Result<usize, Self::Error>> + Send;
-    fn write(&mut self, buf: &[u8]) -> impl Future<Output = Result<usize, Self::Error>> + Send;
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+    async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error>;
 }
 
 #[derive(Debug)]
@@ -54,13 +58,6 @@ impl<T: NetworkIo> From<Error> for BacnetError<T> {
         Self::Codec(value)
     }
 }
-
-/* // this does not work
-impl<T: NetworkIo> From<T::Error> for BacnetError<T> {
-    fn from(value: T::Error) -> Self {
-        Self::Io(value)
-    }
-} */
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -93,6 +90,7 @@ where
         invoke_id
     }
 
+    #[maybe_async()]
     async fn send_and_receive<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -134,6 +132,7 @@ where
         Ok(ack)
     }
 
+    #[maybe_async()]
     async fn unconfirmed_send(
         &mut self,
         buf: &mut [u8],
@@ -156,6 +155,7 @@ where
         Ok(())
     }
 
+    #[maybe_async()]
     pub async fn read_property_multiple<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -171,6 +171,7 @@ where
         }
     }
 
+    #[maybe_async()]
     pub async fn read_property<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -186,6 +187,7 @@ where
         }
     }
 
+    #[maybe_async()]
     pub async fn read_range<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -201,6 +203,7 @@ where
         }
     }
 
+    #[maybe_async()]
     pub async fn write_property<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -211,6 +214,7 @@ where
         Ok(())
     }
 
+    #[maybe_async()]
     pub async fn time_sync(
         &mut self,
         buf: &mut [u8],

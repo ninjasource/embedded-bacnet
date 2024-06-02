@@ -3,6 +3,7 @@
         "Bacnet",
         "Noob",
         "Palahniuk",
+        "println",
         "struct"
     ],
     "rust-analyzer.showUnlinkedFileNotification": false

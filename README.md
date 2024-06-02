@@ -1,8 +1,8 @@
 # Embedded Bacnet
 
-![an obscure reference to a movie](logo.svg)
+<img src="logo.svg" alt="an obscure reference to a movie" width="400"/>
 
-"May I never be complete. May I never be content. May I never be perfect."
+> "May I never be complete. May I never be content. May I never be perfect."
 -- Chuck Palahniuk, Fight Club 
 
 A Rust library to read and write bacnet packets for embedded devices. Bacnet is a protocol used for building automation and control. 
@@ -15,7 +15,45 @@ The library requires no standard library or memory allocator so expect to use it
 
 ## Getting started
 
-Most of the examples use the `simple` module (see `Bacnet` struct) to perform basic async request-response bacnet queries which should be the most common use case. It is up to you to supply async read and write capabilities by wrapping your favorite network library. Alternatively, you can use this library as a codec in order to have more fine grained control of the communication.
+Most of the examples use the `simple` convenience module (see `Bacnet` struct) to perform basic async request-response bacnet queries which should be the most common use case. It is up to you to supply async read and write capabilities by wrapping your favorite network library. Alternatively, you can use this library as a codec in order to have more fine grained control of the communication.
+
+```rust
+#[tokio::main]
+async fn main() -> Result<(), BacnetError<MySocket>> {
+    // setup
+    let args = Args::parse();
+    let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
+    let mut buf = vec![0; 4096];
+
+    // fetch
+    let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);
+    let property_ids = [
+        PropertyId::PropObjectName,
+        PropertyId::PropPresentValue,
+        PropertyId::PropUnits,
+        PropertyId::PropStatusFlags,
+    ];
+    let objects = [ReadPropertyMultipleObject::new(object_id, &property_ids)];
+    let request = ReadPropertyMultiple::new(&objects);
+    let result = bacnet.read_property_multiple(&mut buf, request).await?;
+
+    // inspect results - loop though objects
+    for values in &result {
+        // print property values of object
+        for x in &values?.property_results {
+            println!("{:?}", x?);
+        }
+    }
+
+    Ok(())
+}
+```
+
+## Async vs Blocking
+
+Both async and blocking modes are supported. First of all, you can completely ignore the async vs blocking war if you just use this crate as a raw codec. However, if you use the `simple` convenience module then you will have to choose sides. 
+This crate is a runtime agnostic async first implementation which means that async is enabled and turned on by default. There is support for non-blocking usage by setting the appropriate feature flag `is_sync`. See `read_property_multiple_blocking` example for how to do this. 
+The `maybe-async` crate will then do some naughty things (because cargo features should always be additive) to remove the async stuff but the end result will indeed be native non-blocking.
 
 ## How it works
 
