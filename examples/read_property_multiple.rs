@@ -1,5 +1,5 @@
-/// A Bacnet Client example to read specific property values for analog input #1
 // cargo run --example read_property_multiple -- --addr "0.0.0.0:47808"
+
 use clap::{command, Parser};
 use common::MySocket;
 use embedded_bacnet::{
@@ -15,6 +15,7 @@ use embedded_bacnet::{
 
 mod common;
 
+/// A Bacnet Client example to read specific property values for analog input #1
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {

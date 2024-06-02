@@ -5,7 +5,9 @@ use maybe_async::maybe_async;
 use crate::{
     application_protocol::{
         application_pdu::ApplicationPdu,
-        confirmed::{ComplexAck, ComplexAckService, ConfirmedRequest, ConfirmedRequestService},
+        confirmed::{
+            ComplexAck, ComplexAckService, ConfirmedRequest, ConfirmedRequestService, SimpleAck,
+        },
         services::{
             read_property::{ReadProperty, ReadPropertyAck},
             read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleAck},
@@ -91,49 +93,59 @@ where
     }
 
     #[maybe_async()]
-    async fn send_and_receive<'a>(
+    async fn send_and_receive_complex_ack<'a>(
         &mut self,
         buf: &'a mut [u8],
         service: ConfirmedRequestService<'_>,
     ) -> Result<ComplexAck<'a>, BacnetError<T>> {
-        let invoke_id = self.get_then_inc_invoke_id();
-        let apdu = ApplicationPdu::ConfirmedRequest(ConfirmedRequest::new(invoke_id, service));
-        let message = NetworkMessage::Apdu(apdu);
-        let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
-        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
-
-        {
-            let mut writer = Writer::new(buf);
-            data_link.encode(&mut writer);
-
-            // send packet
-            let buffer = writer.to_bytes();
-            self.io
-                .write(buffer)
-                .await
-                .map_err(|e| BacnetError::Io(e))?;
-        }
+        let invoke_id = self.send_confirmed(buf, service).await?;
 
         // receive reply
         let n = self.io.read(buf).await.map_err(|e| BacnetError::Io(e))?;
         let buf = &buf[..n];
 
+        // use the DataLink codec to decode the bytes
         let mut reader = Reader::default();
         let message = DataLink::decode(&mut reader, buf).map_err(|e| BacnetError::Codec(e))?;
 
+        // TODO: return bacnet error if the server returns one
+        // return message is expected to be a ComplexAck
         let ack: ComplexAck = message.try_into().map_err(|e| BacnetError::Codec(e))?;
-        if ack.invoke_id != invoke_id {
-            return Err(BacnetError::InvokeId(InvokeIdError {
-                expected: invoke_id,
-                actual: ack.invoke_id,
-            }));
-        }
+
+        // return message is expected to have the same invoke_id as the request
+        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
 
         Ok(ack)
     }
 
     #[maybe_async()]
-    async fn unconfirmed_send(
+    async fn send_and_receive_simple_ack<'a>(
+        &mut self,
+        buf: &'a mut [u8],
+        service: ConfirmedRequestService<'_>,
+    ) -> Result<SimpleAck, BacnetError<T>> {
+        let invoke_id = self.send_confirmed(buf, service).await?;
+
+        // receive reply
+        let n = self.io.read(buf).await.map_err(|e| BacnetError::Io(e))?;
+        let buf = &buf[..n];
+
+        // use the DataLink codec to decode the bytes
+        let mut reader = Reader::default();
+        let message = DataLink::decode(&mut reader, buf).map_err(|e| BacnetError::Codec(e))?;
+
+        // TODO: return bacnet error if the server returns one
+        // return message is expected to be a ComplexAck
+        let ack: SimpleAck = message.try_into().map_err(|e| BacnetError::Codec(e))?;
+
+        // return message is expected to have the same invoke_id as the request
+        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
+
+        Ok(ack)
+    }
+
+    #[maybe_async()]
+    async fn send_unconfirmed(
         &mut self,
         buf: &mut [u8],
         service: UnconfirmedRequest<'_>,
@@ -156,13 +168,38 @@ where
     }
 
     #[maybe_async()]
+    async fn send_confirmed(
+        &mut self,
+        buf: &mut [u8],
+        service: ConfirmedRequestService<'_>,
+    ) -> Result<u8, BacnetError<T>> {
+        let invoke_id = self.get_then_inc_invoke_id();
+        let apdu = ApplicationPdu::ConfirmedRequest(ConfirmedRequest::new(invoke_id, service));
+        let message = NetworkMessage::Apdu(apdu);
+        let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
+        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
+
+        let mut writer = Writer::new(buf);
+        data_link.encode(&mut writer);
+
+        // send packet
+        let buffer = writer.to_bytes();
+        self.io
+            .write(buffer)
+            .await
+            .map_err(|e| BacnetError::Io(e))?;
+
+        Ok(invoke_id)
+    }
+
+    #[maybe_async()]
     pub async fn read_property_multiple<'a>(
         &mut self,
         buf: &'a mut [u8],
         request: ReadPropertyMultiple<'_>,
     ) -> Result<ReadPropertyMultipleAck<'a>, BacnetError<T>> {
         let service = ConfirmedRequestService::ReadPropertyMultiple(request);
-        let ack = self.send_and_receive(buf, service).await?;
+        let ack = self.send_and_receive_complex_ack(buf, service).await?;
         match ack.service {
             ComplexAckService::ReadPropertyMultiple(ack) => Ok(ack),
             _ => Err(BacnetError::Codec(Error::ConvertDataLink(
@@ -178,12 +215,20 @@ where
         request: ReadProperty,
     ) -> Result<ReadPropertyAck<'a>, BacnetError<T>> {
         let service = ConfirmedRequestService::ReadProperty(request);
-        let ack = self.send_and_receive(buf, service).await?;
+        let ack = self.send_and_receive_complex_ack(buf, service).await?;
         match ack.service {
             ComplexAckService::ReadProperty(ack) => Ok(ack),
             _ => Err(BacnetError::Codec(Error::ConvertDataLink(
                 "apdu message is not a ComplexAckService ReadPropertyAck",
             ))),
+        }
+    }
+
+    fn check_invoke_id(expected: u8, actual: u8) -> Result<(), BacnetError<T>> {
+        if expected != actual {
+            Err(BacnetError::InvokeId(InvokeIdError { expected, actual }))
+        } else {
+            Ok(())
         }
     }
 
@@ -194,7 +239,7 @@ where
         request: ReadRange,
     ) -> Result<ReadRangeAck<'a>, BacnetError<T>> {
         let service = ConfirmedRequestService::ReadRange(request);
-        let ack = self.send_and_receive(buf, service).await?;
+        let ack = self.send_and_receive_complex_ack(buf, service).await?;
         match ack.service {
             ComplexAckService::ReadRange(ack) => Ok(ack),
             _ => Err(BacnetError::Codec(Error::ConvertDataLink(
@@ -208,10 +253,10 @@ where
         &mut self,
         buf: &'a mut [u8],
         request: WriteProperty<'_>,
-    ) -> Result<(), BacnetError<T>> {
+    ) -> Result<SimpleAck, BacnetError<T>> {
         let service = ConfirmedRequestService::WriteProperty(request);
-        let _ack = self.send_and_receive(buf, service).await?;
-        Ok(())
+        let ack = self.send_and_receive_simple_ack(buf, service).await?;
+        Ok(ack)
     }
 
     #[maybe_async()]
@@ -221,6 +266,6 @@ where
         request: TimeSynchronization,
     ) -> Result<(), BacnetError<T>> {
         let service = UnconfirmedRequest::TimeSynchronization(request);
-        self.unconfirmed_send(buf, service).await
+        self.send_unconfirmed(buf, service).await
     }
 }

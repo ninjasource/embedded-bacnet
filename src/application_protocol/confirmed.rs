@@ -241,6 +241,22 @@ pub struct SimpleAck {
     pub service_choice: ConfirmedServiceChoice,
 }
 
+impl<'a> TryFrom<DataLink<'a>> for SimpleAck {
+    type Error = Error;
+
+    fn try_from(value: DataLink<'a>) -> Result<Self, Self::Error> {
+        match value.npdu {
+            Some(x) => match x.network_message {
+                NetworkMessage::Apdu(ApplicationPdu::SimpleAck(ack)) => Ok(ack),
+                _ => Err(Error::ConvertDataLink(
+                    "npdu message is not an apdu simple ack",
+                )),
+            },
+            _ => Err(Error::ConvertDataLink("no npdu defined in message")),
+        }
+    }
+}
+
 impl SimpleAck {
     pub fn encode(&self, writer: &mut Writer) {
         let control = (ApduType::SimpleAck as u8) << 4;

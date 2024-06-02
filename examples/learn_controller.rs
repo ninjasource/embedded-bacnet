@@ -1,29 +1,29 @@
 // cargo run --example learn_controller -- --addr "192.168.1.249:47808" --device-id 79079
 
-use std::{collections::HashMap, net::UdpSocket};
+use std::collections::HashMap;
 
-use clap::Parser;
+use clap::{command, Parser};
+use common::MySocket;
 use embedded_bacnet::{
     application_protocol::{
-        confirmed::{ConfirmedRequest, ConfirmedRequestService},
         primitives::data_value::{ApplicationDataValue, BitString, Enumerated},
         services::{
-            read_property::{ReadProperty, ReadPropertyAck, ReadPropertyValue},
+            read_property::{ReadProperty, ReadPropertyValue},
             read_property_multiple::{
-                PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleAck,
-                ReadPropertyMultipleObject,
+                PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject,
             },
         },
     },
     common::{
-        io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
         spec::{Binary, EngineeringUnits, Status},
         time_value::TimeValue,
     },
-    network_protocol::data_link::DataLink,
+    simple::{Bacnet, BacnetError},
 };
+
+mod common;
 
 /// A Bacnet Client example to discover the capabilities of a controller
 #[derive(Parser, Debug)]
@@ -38,57 +38,20 @@ struct Args {
     device_id: u32,
 }
 
-#[derive(Debug)]
-pub enum MainError {
-    Io(std::io::Error),
-    Bacnet(embedded_bacnet::common::error::Error),
-}
-
-impl From<std::io::Error> for MainError {
-    fn from(value: std::io::Error) -> Self {
-        MainError::Io(value)
-    }
-}
-
-impl From<embedded_bacnet::common::error::Error> for MainError {
-    fn from(value: embedded_bacnet::common::error::Error) -> Self {
-        MainError::Bacnet(value)
-    }
-}
-
-fn main() -> Result<(), MainError> {
-    simple_logger::init().unwrap();
+#[tokio::main]
+async fn main() -> Result<(), BacnetError<MySocket>> {
+    // setup
     let args = Args::parse();
+    let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
+    let mut buf = vec![0; 4096];
 
-    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
-
-    // encode packet
+    // fetch object list
     let object_id = ObjectId::new(ObjectType::ObjectDevice, args.device_id);
-    let read_property = ReadProperty::new(object_id, PropertyId::PropObjectList);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadProperty(read_property));
-    let data_link = DataLink::new_confirmed_req(req);
-    let mut buf = vec![0; 16 * 1024];
-    let mut writer = Writer::new(&mut buf);
-    data_link.encode(&mut writer);
-
-    // send packet
-    let buf = writer.to_bytes();
-    socket.send_to(buf, &args.addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, args.addr);
-
-    // receive reply
-    let mut buf = vec![0; 64 * 1024];
-    let (n, peer) = socket.recv_from(&mut buf)?;
-    let buf = &buf[..n];
-    println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf)?;
-    println!("Decoded: {:?}", message);
-    let ack: ReadPropertyAck = message.try_into()?;
+    let request = ReadProperty::new(object_id, PropertyId::PropObjectList);
+    let result = bacnet.read_property(&mut buf, request).await?;
 
     let mut map = HashMap::new();
-
-    if let ReadPropertyValue::ObjectIdList(list) = ack.property_value {
+    if let ReadPropertyValue::ObjectIdList(list) = result.property_value {
         // put all objects in their respective bins by object type
         for item in list.into_iter() {
             let item = item?;
@@ -116,7 +79,7 @@ fn main() -> Result<(), MainError> {
             | ObjectType::ObjectBinaryOutput
             | ObjectType::ObjectBinaryValue => {
                 for chunk in ids.as_slice().chunks(10).into_iter() {
-                    let _values = get_multi_binary(&args.addr, &socket, chunk)?;
+                    let _values = get_multi_binary(&mut bacnet, &mut buf, chunk).await?;
                     println!("{:?}", _values);
                 }
             }
@@ -124,19 +87,19 @@ fn main() -> Result<(), MainError> {
             | ObjectType::ObjectAnalogOutput
             | ObjectType::ObjectAnalogValue => {
                 for chunk in ids.as_slice().chunks(10).into_iter() {
-                    let _values = get_multi_analog(&args.addr, &socket, chunk)?;
+                    let _values = get_multi_analog(&mut bacnet, &mut buf, chunk).await?;
                     println!("{:?}", _values);
                 }
             }
             ObjectType::ObjectSchedule => {
                 for object_id in ids.as_slice() {
-                    let values = get_multi_schedule(&args.addr, &socket, object_id)?;
+                    let values = get_multi_schedule(&mut bacnet, &mut buf, object_id).await?;
                     println!("{:?}", values);
                 }
             }
             ObjectType::ObjectTrendlog => {
                 for chunk in ids.as_slice().chunks(10).into_iter() {
-                    let values = get_multi_trend_log(&args.addr, &socket, chunk)?;
+                    let values = get_multi_trend_log(&mut bacnet, &mut buf, chunk).await?;
                     println!("{:?}", values);
                 }
             }
@@ -185,11 +148,11 @@ pub struct TrendLogValue {
     pub record_count: u32,
 }
 
-fn get_multi_binary(
-    addr: &str,
-    socket: &UdpSocket,
+async fn get_multi_binary(
+    bacnet: &mut Bacnet<MySocket>,
+    buf: &mut [u8],
     object_ids: &[ObjectId],
-) -> Result<Vec<BinaryValue>, MainError> {
+) -> Result<Vec<BinaryValue>, BacnetError<MySocket>> {
     let property_ids = [
         PropertyId::PropObjectName,
         PropertyId::PropPresentValue,
@@ -199,21 +162,11 @@ fn get_multi_binary(
         .iter()
         .map(|x| ReadPropertyMultipleObject::new(x.clone(), &property_ids))
         .collect();
-    let rpm = ReadPropertyMultiple::new(&items);
-    let mut buf = vec![0; 16 * 1024];
-    let mut writer = Writer::new(&mut buf);
-    read_property_multiple_to_bytes(rpm, &mut writer);
-    socket.send_to(writer.to_bytes(), addr)?;
-    let mut buf = vec![0; 16 * 1024];
-    let (n, _) = socket.recv_from(&mut buf)?;
-    let buf = &buf[..n];
-    let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf)?;
-    let ack: ReadPropertyMultipleAck = message.try_into()?;
+    let request = ReadPropertyMultiple::new(&items);
+    let result = bacnet.read_property_multiple(buf, request).await?;
 
     let mut items = vec![];
-
-    for obj in &ack {
+    for obj in &result {
         let obj = obj?;
         let mut x = obj.property_results.into_iter();
         let name = x.next().unwrap()?.value.to_string();
@@ -239,11 +192,11 @@ fn get_multi_binary(
     return Ok(items);
 }
 
-fn get_multi_analog(
-    addr: &str,
-    socket: &UdpSocket,
+async fn get_multi_analog(
+    bacnet: &mut Bacnet<MySocket>,
+    buf: &mut [u8],
     object_ids: &[ObjectId],
-) -> Result<Vec<AnalogValue>, MainError> {
+) -> Result<Vec<AnalogValue>, BacnetError<MySocket>> {
     let property_ids = [
         PropertyId::PropObjectName,
         PropertyId::PropPresentValue,
@@ -256,21 +209,11 @@ fn get_multi_analog(
         .map(|x| ReadPropertyMultipleObject::new(x.clone(), &property_ids))
         .collect();
 
-    let rpm = ReadPropertyMultiple::new(&items);
-    let mut buf = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buf);
-    read_property_multiple_to_bytes(rpm, &mut buffer);
-    socket.send_to(buffer.to_bytes(), addr)?;
-    let mut buf = vec![0; 16 * 1024];
-    let (n, _) = socket.recv_from(&mut buf)?;
-    let buf = &buf[..n];
-    let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf)?;
-    let ack: ReadPropertyMultipleAck = message.try_into()?;
+    let request = ReadPropertyMultiple::new(&items);
+    let result = bacnet.read_property_multiple(buf, request).await?;
 
     let mut items = vec![];
-
-    for obj in &ack {
+    for obj in &result {
         let obj = obj?;
         let mut x = obj.property_results.into_iter();
         let name = x.next().unwrap()?.value.to_string();
@@ -301,11 +244,11 @@ fn get_multi_analog(
     return Ok(items);
 }
 
-fn get_multi_trend_log(
-    addr: &str,
-    socket: &UdpSocket,
+async fn get_multi_trend_log(
+    bacnet: &mut Bacnet<MySocket>,
+    buf: &mut [u8],
     object_ids: &[ObjectId],
-) -> Result<Vec<TrendLogValue>, MainError> {
+) -> Result<Vec<TrendLogValue>, BacnetError<MySocket>> {
     let property_ids = [PropertyId::PropObjectName, PropertyId::PropRecordCount];
 
     let items: Vec<ReadPropertyMultipleObject> = object_ids
@@ -313,21 +256,12 @@ fn get_multi_trend_log(
         .map(|x| ReadPropertyMultipleObject::new(x.clone(), &property_ids))
         .collect();
 
-    let rpm = ReadPropertyMultiple::new(&items);
-    let mut buf = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buf);
-    read_property_multiple_to_bytes(rpm, &mut buffer);
-    socket.send_to(buffer.to_bytes(), addr)?;
-    let mut buf = vec![0; 16 * 1024];
-    let (n, _) = socket.recv_from(&mut buf)?;
-    let buf = &buf[..n];
-    let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf)?;
-    let ack: ReadPropertyMultipleAck = message.try_into()?;
+    let request = ReadPropertyMultiple::new(&items);
+    let result = bacnet.read_property_multiple(buf, request).await?;
 
     let mut items = vec![];
 
-    for obj in &ack {
+    for obj in &result {
         let obj = obj?;
         let mut x = obj.property_results.into_iter();
         let name = x.next().unwrap()?.value.to_string();
@@ -346,31 +280,22 @@ fn get_multi_trend_log(
     return Ok(items);
 }
 
-fn get_multi_schedule(
-    addr: &str,
-    socket: &UdpSocket,
+async fn get_multi_schedule(
+    bacnet: &mut Bacnet<MySocket>,
+    buf: &mut [u8],
     object_id: &ObjectId,
-) -> Result<Vec<ScheduleValue>, MainError> {
+) -> Result<Vec<ScheduleValue>, BacnetError<MySocket>> {
     let property_ids = [PropertyId::PropObjectName, PropertyId::PropWeeklySchedule];
     let objects = [ReadPropertyMultipleObject::new(
         object_id.clone(),
         &property_ids,
     )];
-    let rpm = ReadPropertyMultiple::new(&objects);
-    let mut buf = vec![0; 4 * 1024];
-    let mut writer = Writer::new(&mut buf);
-    read_property_multiple_to_bytes(rpm, &mut writer);
-    socket.send_to(writer.to_bytes(), addr)?;
-    let mut buf = vec![0; 16 * 1024];
-    let (n, _) = socket.recv_from(&mut buf)?;
-    let buf = &buf[..n];
-    let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf)?;
-    let ack: ReadPropertyMultipleAck = message.try_into()?;
+    let request = ReadPropertyMultiple::new(&objects);
+    let result = bacnet.read_property_multiple(buf, request).await?;
 
     let mut items = vec![];
 
-    for obj in &ack {
+    for obj in &result {
         let obj = obj?;
         let mut x = obj.property_results.into_iter();
         let name = x.next().unwrap()?.value.to_string();
@@ -393,10 +318,4 @@ fn get_multi_schedule(
     }
 
     return Ok(items);
-}
-
-fn read_property_multiple_to_bytes(rpm: ReadPropertyMultiple, writer: &mut Writer) {
-    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadPropertyMultiple(rpm));
-    let data_link = DataLink::new_confirmed_req(req);
-    data_link.encode(writer);
 }

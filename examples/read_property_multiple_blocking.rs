@@ -1,6 +1,4 @@
-/// A Bacnet Client blocking (non-async) example to read specific property values for analog input #1
 // cargo run --example read_property_multiple_blocking --features="is_sync" -- --addr "0.0.0.0:47808"
-use std::{io, net::UdpSocket};
 
 use clap::{command, Parser};
 use embedded_bacnet::{
@@ -13,7 +11,9 @@ use embedded_bacnet::{
     },
     simple::{Bacnet, BacnetError, NetworkIo},
 };
+use std::{io, net::UdpSocket};
 
+/// A Bacnet Client blocking (non-async) example to read specific property values for analog input #1
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -40,6 +40,7 @@ impl MySocket {
     }
 }
 
+// NOTE: the `is_sync` feature flag MUST be set for this to work
 impl NetworkIo for MySocket {
     type Error = io::Error;
 

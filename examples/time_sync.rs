@@ -1,50 +1,24 @@
 // cargo run --example time_sync -- --addr "192.168.1.249:47808" --device-id 79079
 
-use std::{io::Error, net::UdpSocket};
-
 use chrono::{Datelike, Local, Timelike};
-use clap::Parser;
+use clap::{command, Parser};
+use common::MySocket;
 use embedded_bacnet::{
     application_protocol::{
-        application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestService},
         primitives::data_value::{Date, Time},
         services::{
-            read_property_multiple::{
-                ReadPropertyMultiple, ReadPropertyMultipleAck, ReadPropertyMultipleObject,
-            },
+            read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleObject},
             time_synchronization::TimeSynchronization,
         },
-        unconfirmed::UnconfirmedRequest,
     },
     common::{
-        io::{Reader, Writer},
         object_id::{ObjectId, ObjectType},
         property_id::PropertyId,
     },
-    network_protocol::{
-        data_link::{DataLink, DataLinkFunction},
-        network_pdu::{MessagePriority, NetworkMessage, NetworkPdu},
-    },
+    simple::{Bacnet, BacnetError},
 };
 
-#[derive(Debug)]
-pub enum MainError {
-    Io(std::io::Error),
-    Bacnet(embedded_bacnet::common::error::Error),
-}
-
-impl From<std::io::Error> for MainError {
-    fn from(value: std::io::Error) -> Self {
-        MainError::Io(value)
-    }
-}
-
-impl From<embedded_bacnet::common::error::Error> for MainError {
-    fn from(value: embedded_bacnet::common::error::Error) -> Self {
-        MainError::Bacnet(value)
-    }
-}
+mod common;
 
 /// A Bacnet Client example set the time on the controller to the system time (on this pc)
 #[derive(Parser, Debug)]
@@ -59,19 +33,23 @@ struct Args {
     device_id: u32,
 }
 
-fn main() -> Result<(), MainError> {
-    simple_logger::init().unwrap();
+#[tokio::main]
+async fn main() -> Result<(), BacnetError<MySocket>> {
+    // setup
     let args = Args::parse();
-    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
+    let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
+    let mut buf = vec![0; 4096];
 
-    set_time(&args.addr, &socket)?;
-    request_date_time(&args.addr, args.device_id, &socket)?;
-    read_date_time(&socket)?;
+    set_time_to_now(&mut bacnet, &mut buf).await?;
+    request_date_time(args.device_id, &mut bacnet, &mut buf).await?;
 
     Ok(())
 }
 
-fn set_time(addr: &str, socket: &UdpSocket) -> Result<(), MainError> {
+async fn set_time_to_now(
+    bacnet: &mut Bacnet<MySocket>,
+    buf: &mut [u8],
+) -> Result<(), BacnetError<MySocket>> {
     let now = Local::now();
     let wday = now.weekday().num_days_from_sunday() as u8; // sunday = 0
 
@@ -88,62 +66,28 @@ fn set_time(addr: &str, socket: &UdpSocket) -> Result<(), MainError> {
         second: 0,
         hundredths: 0,
     };
-    let time_sync = TimeSynchronization { date, time };
-    let apdu =
-        ApplicationPdu::UnconfirmedRequest(UnconfirmedRequest::TimeSynchronization(time_sync));
-    let message = NetworkMessage::Apdu(apdu);
-    let npdu = NetworkPdu::new(None, None, false, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
-    let mut buffer = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buffer);
-    data_link.encode(&mut buffer);
-
-    // send packet
-    let buf = buffer.to_bytes();
-    socket.send_to(buf, addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, addr);
+    let request = TimeSynchronization { date, time };
+    bacnet.time_sync(buf, request).await?;
+    println!("Controller date time set to {:?}", now);
     Ok(())
 }
 
-fn request_date_time(addr: &str, device_id: u32, socket: &UdpSocket) -> Result<(), Error> {
-    println!("Fetching date time");
+async fn request_date_time(
+    device_id: u32,
+    bacnet: &mut Bacnet<MySocket>,
+    buf: &mut [u8],
+) -> Result<(), BacnetError<MySocket>> {
+    println!("Fetching date time from controller:");
 
     let object_id = ObjectId::new(ObjectType::ObjectDevice, device_id);
     let property_ids = [PropertyId::PropLocalDate, PropertyId::PropLocalTime];
     let rpm = ReadPropertyMultipleObject::new(object_id, &property_ids);
     let objects = [rpm];
-    let rpm = ReadPropertyMultiple::new(&objects);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestService::ReadPropertyMultiple(rpm));
-    let apdu = ApplicationPdu::ConfirmedRequest(req);
-    let src = None;
-    let dst = None;
-    let message = NetworkMessage::Apdu(apdu);
-    let npdu = NetworkPdu::new(src, dst, true, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
-    let mut buffer = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buffer);
-    data_link.encode(&mut buffer);
-
-    // send packet
-    let buf = buffer.to_bytes();
-    socket.send_to(buf, addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, addr);
-    Ok(())
-}
-
-pub fn read_date_time(socket: &UdpSocket) -> Result<(), MainError> {
-    // receive reply
-    let mut buf = vec![0; 1024];
-    let (n, peer) = socket.recv_from(&mut buf)?;
-    let buf = &buf[..n];
-    println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf)?;
-    println!("Decoded:  {:?}\n", message);
-    let message: ReadPropertyMultipleAck = message.try_into()?;
+    let request = ReadPropertyMultiple::new(&objects);
+    let result = bacnet.read_property_multiple(buf, request).await?;
 
     // read values
-    for values in &message {
+    for values in &result {
         let values = values?;
         for x in &values.property_results {
             println!("{:?}", x);

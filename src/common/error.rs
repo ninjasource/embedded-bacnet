@@ -12,7 +12,6 @@ pub enum Error {
     Length((&'static str, u32)),
     InvalidValue(&'static str),
     InvalidVariant((&'static str, u32)),
-    Unknown,
     Unimplemented(Unimplemented),
     SegmentationNotSupported,
     ApduTypeNotSupported(ApduType),
