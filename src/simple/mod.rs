@@ -112,17 +112,16 @@ where
         let mut reader = Reader::default();
         let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
 
-        match message.npdu {
-            Some(npdu) => match npdu.network_message {
-                NetworkMessage::Apdu(ApplicationPdu::UnconfirmedRequest(
-                    UnconfirmedRequest::IAm(iam),
-                )) => return Ok(Some(iam)),
-                _ => {}
-            },
-            _ => {}
+        if let Some(npdu) = message.npdu {
+            if let NetworkMessage::Apdu(ApplicationPdu::UnconfirmedRequest(
+                UnconfirmedRequest::IAm(iam),
+            )) = npdu.network_message
+            {
+                return Ok(Some(iam));
+            }
         };
 
-        return Ok(None);
+        Ok(None)
     }
 
     #[maybe_async()]
@@ -175,25 +174,18 @@ where
     ) -> Result<Option<CovNotification<'a>>, BacnetError<T>> {
         let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
         let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, &mut buf[..n]);
+        let message = DataLink::decode(&mut reader, &buf[..n])?;
 
-        let notification = match message {
-            Ok(message) => match message.npdu {
-                Some(x) => match x.network_message {
-                    NetworkMessage::Apdu(apdu) => match apdu {
-                        ApplicationPdu::UnconfirmedRequest(
-                            UnconfirmedRequest::CovNotification(x),
-                        ) => Some(x),
-                        _ => None,
-                    },
-                    _ => None,
-                },
-                _ => None,
-            },
-            _ => None,
+        if let Some(npdu) = message.npdu {
+            if let NetworkMessage::Apdu(ApplicationPdu::UnconfirmedRequest(
+                UnconfirmedRequest::CovNotification(x),
+            )) = npdu.network_message
+            {
+                return Ok(Some(x));
+            }
         };
 
-        Ok(notification)
+        Ok(None)
     }
 
     #[maybe_async()]
