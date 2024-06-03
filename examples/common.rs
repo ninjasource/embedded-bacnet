@@ -34,8 +34,8 @@ impl NetworkIo for MySocket {
 pub async fn get_bacnet_socket(addr: &str) -> Result<Bacnet<MySocket>, BacnetError<MySocket>> {
     let socket = UdpSocket::bind("0.0.0.0:8080")
         .await
-        .map_err(|e| BacnetError::Io(e))?;
-    socket.connect(addr).await.map_err(|e| BacnetError::Io(e))?;
+        .map_err(BacnetError::Io)?;
+    socket.connect(addr).await.map_err(BacnetError::Io)?;
     let socket = MySocket::new(socket);
     Ok(Bacnet::new(socket))
 }

@@ -1,43 +1,16 @@
-// cargo run --example change_of_value -- --help
+// cargo run --example change_of_value -- --addr "192.168.1.249:47808"
 
-use clap::Parser;
+use clap::{command, Parser};
+use common::MySocket;
 use embedded_bacnet::{
-    application_protocol::{
-        application_pdu::ApplicationPdu,
-        confirmed::{ConfirmedRequest, ConfirmedRequestService},
-        services::change_of_value::SubscribeCov,
-        unconfirmed::UnconfirmedRequest,
-    },
-    common::{
-        io::{Reader, Writer},
-        object_id::{ObjectId, ObjectType},
-    },
-    network_protocol::{
-        data_link::{DataLink, DataLinkFunction},
-        network_pdu::{MessagePriority, NetworkMessage, NetworkPdu},
-    },
+    application_protocol::services::change_of_value::SubscribeCov,
+    common::object_id::{ObjectId, ObjectType},
+    simple::BacnetError,
 };
-use std::net::UdpSocket;
 
-#[derive(Debug)]
-pub enum MainError {
-    Io(std::io::Error),
-    Bacnet(embedded_bacnet::common::error::Error),
-}
+mod common;
 
-impl From<std::io::Error> for MainError {
-    fn from(value: std::io::Error) -> Self {
-        MainError::Io(value)
-    }
-}
-
-impl From<embedded_bacnet::common::error::Error> for MainError {
-    fn from(value: embedded_bacnet::common::error::Error) -> Self {
-        MainError::Bacnet(value)
-    }
-}
-
-/// A Bacnet Client example to subscribe to Change-Of-Value events
+/// A Bacnet Client example to read a property from analog input #1
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -46,63 +19,24 @@ struct Args {
     addr: String,
 }
 
-fn main() -> Result<(), MainError> {
-    simple_logger::init().unwrap();
+#[tokio::main]
+async fn main() -> Result<(), BacnetError<MySocket>> {
+    // setup
     let args = Args::parse();
-    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
+    let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
+    let mut buf = vec![0; 4096];
 
-    // encode packet
+    // subscribe
     let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 4);
-    let cov = SubscribeCov::new(1, object_id, false, 5);
-    let req = ConfirmedRequest::new(0, ConfirmedRequestService::SubscribeCov(cov));
-    let apdu = ApplicationPdu::ConfirmedRequest(req);
-    let message = NetworkMessage::Apdu(apdu);
-    let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
-    let mut buffer = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buffer);
-    data_link.encode(&mut buffer);
+    let request = SubscribeCov::new(1, object_id, false, 5);
+    bacnet.subscribe_change_of_value(&mut buf, request).await?;
 
-    // send packet
-    let buf = buffer.to_bytes();
-    socket.send_to(buf, &args.addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, &args.addr);
+    // fetch next
+    let result = bacnet.read_change_of_value(&mut buf).await?;
 
-    // receive reply ack
-    let mut buf = vec![0; 1024];
-    let (n, peer) = socket.recv_from(&mut buf)?;
-    let buf = &buf[..n];
-    println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf);
-    println!("Decoded:  {:?}\n", message);
-
-    // receive cov notification
-    let mut buf = vec![0; 1024];
-    let (n, peer) = socket.recv_from(&mut buf)?;
-    let buf = &buf[..n];
-    println!("Received: {:02x?} from {:?}", buf, peer);
-    let mut reader = Reader::default();
-    let message = DataLink::decode(&mut reader, buf);
-    println!("Decoded:  {:?}\n", message);
-
-    let notification = match message {
-        Ok(message) => match message.npdu {
-            Some(x) => match x.network_message {
-                NetworkMessage::Apdu(apdu) => match apdu {
-                    ApplicationPdu::UnconfirmedRequest(UnconfirmedRequest::CovNotification(x)) => {
-                        Some(x)
-                    }
-                    _ => None,
-                },
-                _ => None,
-            },
-            _ => None,
-        },
-        _ => None,
-    };
-
-    if let Some(notification) = notification {
+    // print
+    if let Some(notification) = result {
+        println!("{:?}", notification);
         for property in &notification.values {
             println!("Value: {:?}", property?)
         }

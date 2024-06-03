@@ -9,10 +9,13 @@ use crate::{
             ComplexAck, ComplexAckService, ConfirmedRequest, ConfirmedRequestService, SimpleAck,
         },
         services::{
+            change_of_value::{CovNotification, SubscribeCov},
+            i_am::IAm,
             read_property::{ReadProperty, ReadPropertyAck},
             read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleAck},
             read_range::{ReadRange, ReadRangeAck},
             time_synchronization::TimeSynchronization,
+            who_is::WhoIs,
             write_property::WriteProperty,
         },
         unconfirmed::UnconfirmedRequest,
@@ -23,7 +26,7 @@ use crate::{
     },
     network_protocol::{
         data_link::{DataLink, DataLinkFunction},
-        network_pdu::{MessagePriority, NetworkMessage, NetworkPdu},
+        network_pdu::{DestinationAddress, MessagePriority, NetworkMessage, NetworkPdu},
     },
 };
 
@@ -76,120 +79,50 @@ where
         Self { io, invoke_id: 0 }
     }
 
+    /// Returns the socket back to the caller and consumes self
     pub fn take(self) -> T {
         self.io
     }
 
-    fn get_then_inc_invoke_id(&mut self) -> u8 {
-        let invoke_id = self.invoke_id;
-
-        if self.invoke_id == u8::MAX {
-            self.invoke_id = 0;
-        } else {
-            self.invoke_id += 1;
-        }
-
-        invoke_id
-    }
-
     #[maybe_async()]
-    async fn send_and_receive_complex_ack<'a>(
-        &mut self,
-        buf: &'a mut [u8],
-        service: ConfirmedRequestService<'_>,
-    ) -> Result<ComplexAck<'a>, BacnetError<T>> {
-        let invoke_id = self.send_confirmed(buf, service).await?;
-
-        // receive reply
-        let n = self.io.read(buf).await.map_err(|e| BacnetError::Io(e))?;
-        let buf = &buf[..n];
-
-        // use the DataLink codec to decode the bytes
-        let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, buf).map_err(|e| BacnetError::Codec(e))?;
-
-        // TODO: return bacnet error if the server returns one
-        // return message is expected to be a ComplexAck
-        let ack: ComplexAck = message.try_into().map_err(|e| BacnetError::Codec(e))?;
-
-        // return message is expected to have the same invoke_id as the request
-        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
-
-        Ok(ack)
-    }
-
-    #[maybe_async()]
-    async fn send_and_receive_simple_ack<'a>(
-        &mut self,
-        buf: &'a mut [u8],
-        service: ConfirmedRequestService<'_>,
-    ) -> Result<SimpleAck, BacnetError<T>> {
-        let invoke_id = self.send_confirmed(buf, service).await?;
-
-        // receive reply
-        let n = self.io.read(buf).await.map_err(|e| BacnetError::Io(e))?;
-        let buf = &buf[..n];
-
-        // use the DataLink codec to decode the bytes
-        let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, buf).map_err(|e| BacnetError::Codec(e))?;
-
-        // TODO: return bacnet error if the server returns one
-        // return message is expected to be a ComplexAck
-        let ack: SimpleAck = message.try_into().map_err(|e| BacnetError::Codec(e))?;
-
-        // return message is expected to have the same invoke_id as the request
-        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
-
-        Ok(ack)
-    }
-
-    #[maybe_async()]
-    async fn send_unconfirmed(
+    pub async fn who_is(
         &mut self,
         buf: &mut [u8],
-        service: UnconfirmedRequest<'_>,
-    ) -> Result<(), BacnetError<T>> {
-        let apdu = ApplicationPdu::UnconfirmedRequest(service);
+        request: WhoIs,
+    ) -> Result<Option<IAm>, BacnetError<T>> {
+        let apdu = ApplicationPdu::UnconfirmedRequest(UnconfirmedRequest::WhoIs(request.clone()));
+        let dst = Some(DestinationAddress::new(0xffff, None));
         let message = NetworkMessage::Apdu(apdu);
-        let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
-        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
+        let npdu = NetworkPdu::new(None, dst, false, MessagePriority::Normal, message);
+        let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu, Some(npdu));
 
         let mut writer = Writer::new(buf);
         data_link.encode(&mut writer);
 
-        // send packet
+        // send packet until we get a reply
         let buffer = writer.to_bytes();
-        self.io
-            .write(buffer)
-            .await
-            .map_err(|e| BacnetError::Io(e))?;
-        Ok(())
-    }
 
-    #[maybe_async()]
-    async fn send_confirmed(
-        &mut self,
-        buf: &mut [u8],
-        service: ConfirmedRequestService<'_>,
-    ) -> Result<u8, BacnetError<T>> {
-        let invoke_id = self.get_then_inc_invoke_id();
-        let apdu = ApplicationPdu::ConfirmedRequest(ConfirmedRequest::new(invoke_id, service));
-        let message = NetworkMessage::Apdu(apdu);
-        let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
-        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
+        self.io.write(buffer).await.map_err(BacnetError::Io)?;
 
-        let mut writer = Writer::new(buf);
-        data_link.encode(&mut writer);
+        // receive reply
+        let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
+        let buf = &buf[..n];
 
-        // send packet
-        let buffer = writer.to_bytes();
-        self.io
-            .write(buffer)
-            .await
-            .map_err(|e| BacnetError::Io(e))?;
+        // use the DataLink codec to decode the bytes
+        let mut reader = Reader::default();
+        let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
 
-        Ok(invoke_id)
+        match message.npdu {
+            Some(npdu) => match npdu.network_message {
+                NetworkMessage::Apdu(ApplicationPdu::UnconfirmedRequest(
+                    UnconfirmedRequest::IAm(iam),
+                )) => return Ok(Some(iam)),
+                _ => {}
+            },
+            _ => {}
+        };
+
+        return Ok(None);
     }
 
     #[maybe_async()]
@@ -224,12 +157,43 @@ where
         }
     }
 
-    fn check_invoke_id(expected: u8, actual: u8) -> Result<(), BacnetError<T>> {
-        if expected != actual {
-            Err(BacnetError::InvokeId(InvokeIdError { expected, actual }))
-        } else {
-            Ok(())
-        }
+    #[maybe_async()]
+    pub async fn subscribe_change_of_value(
+        &mut self,
+        buf: &mut [u8],
+        request: SubscribeCov,
+    ) -> Result<(), BacnetError<T>> {
+        let service = ConfirmedRequestService::SubscribeCov(request);
+        let _ack = self.send_and_receive_simple_ack(buf, service).await?;
+        Ok(())
+    }
+
+    #[maybe_async()]
+    pub async fn read_change_of_value<'a>(
+        &mut self,
+        buf: &'a mut [u8],
+    ) -> Result<Option<CovNotification<'a>>, BacnetError<T>> {
+        let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
+        let mut reader = Reader::default();
+        let message = DataLink::decode(&mut reader, &mut buf[..n]);
+
+        let notification = match message {
+            Ok(message) => match message.npdu {
+                Some(x) => match x.network_message {
+                    NetworkMessage::Apdu(apdu) => match apdu {
+                        ApplicationPdu::UnconfirmedRequest(
+                            UnconfirmedRequest::CovNotification(x),
+                        ) => Some(x),
+                        _ => None,
+                    },
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        };
+
+        Ok(notification)
     }
 
     #[maybe_async()]
@@ -253,10 +217,10 @@ where
         &mut self,
         buf: &'a mut [u8],
         request: WriteProperty<'_>,
-    ) -> Result<SimpleAck, BacnetError<T>> {
+    ) -> Result<(), BacnetError<T>> {
         let service = ConfirmedRequestService::WriteProperty(request);
-        let ack = self.send_and_receive_simple_ack(buf, service).await?;
-        Ok(ack)
+        let _ack = self.send_and_receive_simple_ack(buf, service).await?;
+        Ok(())
     }
 
     #[maybe_async()]
@@ -267,5 +231,119 @@ where
     ) -> Result<(), BacnetError<T>> {
         let service = UnconfirmedRequest::TimeSynchronization(request);
         self.send_unconfirmed(buf, service).await
+    }
+
+    #[maybe_async()]
+    async fn send_and_receive_complex_ack<'a>(
+        &mut self,
+        buf: &'a mut [u8],
+        service: ConfirmedRequestService<'_>,
+    ) -> Result<ComplexAck<'a>, BacnetError<T>> {
+        let invoke_id = self.send_confirmed(buf, service).await?;
+
+        // receive reply
+        let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
+        let buf = &buf[..n];
+
+        // use the DataLink codec to decode the bytes
+        let mut reader = Reader::default();
+        let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+
+        // TODO: return bacnet error if the server returns one
+        // return message is expected to be a ComplexAck
+        let ack: ComplexAck = message.try_into().map_err(BacnetError::Codec)?;
+
+        // return message is expected to have the same invoke_id as the request
+        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
+
+        Ok(ack)
+    }
+
+    #[maybe_async()]
+    async fn send_and_receive_simple_ack<'a>(
+        &mut self,
+        buf: &'a mut [u8],
+        service: ConfirmedRequestService<'_>,
+    ) -> Result<SimpleAck, BacnetError<T>> {
+        let invoke_id = self.send_confirmed(buf, service).await?;
+
+        // receive reply
+        let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
+        let buf = &buf[..n];
+
+        // use the DataLink codec to decode the bytes
+        let mut reader = Reader::default();
+        let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+
+        // TODO: return bacnet error if the server returns one
+        // return message is expected to be a ComplexAck
+        let ack: SimpleAck = message.try_into().map_err(BacnetError::Codec)?;
+
+        // return message is expected to have the same invoke_id as the request
+        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
+
+        Ok(ack)
+    }
+
+    #[maybe_async()]
+    async fn send_unconfirmed(
+        &mut self,
+        buf: &mut [u8],
+        service: UnconfirmedRequest<'_>,
+    ) -> Result<(), BacnetError<T>> {
+        let apdu = ApplicationPdu::UnconfirmedRequest(service);
+        let message = NetworkMessage::Apdu(apdu);
+        let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
+        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
+
+        let mut writer = Writer::new(buf);
+        data_link.encode(&mut writer);
+
+        // send packet
+        let buffer = writer.to_bytes();
+        self.io.write(buffer).await.map_err(BacnetError::Io)?;
+        Ok(())
+    }
+
+    #[maybe_async()]
+    async fn send_confirmed(
+        &mut self,
+        buf: &mut [u8],
+        service: ConfirmedRequestService<'_>,
+    ) -> Result<u8, BacnetError<T>> {
+        let invoke_id = self.get_then_inc_invoke_id();
+        let apdu = ApplicationPdu::ConfirmedRequest(ConfirmedRequest::new(invoke_id, service));
+        let message = NetworkMessage::Apdu(apdu);
+        let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
+        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
+
+        let mut writer = Writer::new(buf);
+        data_link.encode(&mut writer);
+
+        // send packet
+        let buffer = writer.to_bytes();
+        self.io.write(buffer).await.map_err(BacnetError::Io)?;
+
+        Ok(invoke_id)
+    }
+
+    fn check_invoke_id(expected: u8, actual: u8) -> Result<(), BacnetError<T>> {
+        if expected != actual {
+            Err(BacnetError::InvokeId(InvokeIdError { expected, actual }))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn get_then_inc_invoke_id(&mut self) -> u8 {
+        let invoke_id = self.invoke_id;
+
+        if self.invoke_id == u8::MAX {
+            self.invoke_id = 0;
+        } else {
+            self.invoke_id += 1;
+        }
+
+        invoke_id
     }
 }

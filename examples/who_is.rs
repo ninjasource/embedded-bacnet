@@ -1,79 +1,32 @@
-// cargo run --example who_is
 // cargo run --example who_is -- --addr "192.168.1.249:47808"
 
-use std::{io::Error, net::UdpSocket};
+use clap::{command, Parser};
+use common::MySocket;
+use embedded_bacnet::{application_protocol::services::who_is::WhoIs, simple::BacnetError};
 
-use clap::Parser;
-use embedded_bacnet::{
-    application_protocol::{
-        application_pdu::ApplicationPdu, services::who_is::WhoIs, unconfirmed::UnconfirmedRequest,
-    },
-    common::io::{Reader, Writer},
-    network_protocol::{
-        data_link::{DataLink, DataLinkFunction},
-        network_pdu::{DestinationAddress, MessagePriority, NetworkMessage, NetworkPdu},
-    },
-};
+mod common;
 
-#[derive(Debug)]
-pub enum MainError {
-    Io(std::io::Error),
-    Bacnet(embedded_bacnet::common::error::Error),
-}
-
-impl From<std::io::Error> for MainError {
-    fn from(value: std::io::Error) -> Self {
-        MainError::Io(value)
-    }
-}
-
-impl From<embedded_bacnet::common::error::Error> for MainError {
-    fn from(value: embedded_bacnet::common::error::Error) -> Self {
-        MainError::Bacnet(value)
-    }
-}
-
-/// A Bacnet Client example to send a who_is request and wait from an i_am reply.
-/// NOTE: this example works with broadcast UDP packets by default (255.255.255.255) which may be blocked by your network
-/// You can get around this by sending the who_is directly to a known IP address
+/// A Bacnet Client example to send a who_is to a specific controller
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
     /// IP address with port e.g. "192.168.1.249:47808"
-    #[arg(short, long, default_value = "255.255.255.255:47808")]
+    #[arg(short, long)]
     addr: String,
 }
 
-// NOTE: this example works with broadcast UDP packets which may be blocked by your network
-// You can get around this by sending the who_is directly to a known IP aaddress
-fn main() -> Result<(), Error> {
-    simple_logger::init().unwrap();
+#[tokio::main]
+async fn main() -> Result<(), BacnetError<MySocket>> {
+    // setup
     let args = Args::parse();
-    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
-    socket.set_broadcast(true)?;
+    let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
+    let mut buf = vec![0; 4096];
 
-    let who_is = WhoIs {};
-    let apdu = ApplicationPdu::UnconfirmedRequest(UnconfirmedRequest::WhoIs(who_is));
-    let dst = Some(DestinationAddress::new(0xffff, None));
-    let message = NetworkMessage::Apdu(apdu);
-    let npdu = NetworkPdu::new(None, dst, false, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu, Some(npdu));
+    // fetch
+    let request = WhoIs {};
+    let result = bacnet.who_is(&mut buf, request).await?;
 
-    let mut buffer = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buffer);
-    data_link.encode(&mut buffer);
-
-    let buf = buffer.to_bytes();
-    socket.send_to(buf, &args.addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, &args.addr);
-
-    let mut buf = vec![0; 1024];
-    loop {
-        let (n, peer) = socket.recv_from(&mut buf)?;
-        let payload = &buf[..n];
-        println!("Received: {:02x?} from {:?}", payload, peer);
-        let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, payload);
-        println!("Decoded:  {:?}\n", message);
-    }
+    // print
+    println!("{:?}", result);
+    Ok(())
 }
