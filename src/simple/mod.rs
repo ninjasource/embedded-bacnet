@@ -233,22 +233,23 @@ where
     ) -> Result<ComplexAck<'a>, BacnetError<T>> {
         let invoke_id = self.send_confirmed(buf, service).await?;
 
-        // receive reply
-        let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
-        let buf = &buf[..n];
+        loop {
+            // receive reply
+            let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
+            let buf = &buf[..n];
 
-        // use the DataLink codec to decode the bytes
-        let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+            // use the DataLink codec to decode the bytes
+            let mut reader = Reader::default();
+            let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
 
-        // TODO: return bacnet error if the server returns one
-        // return message is expected to be a ComplexAck
-        let ack: ComplexAck = message.try_into().map_err(BacnetError::Codec)?;
+            // TODO: return bacnet error if the server returns one
+            // return message is expected to be a ComplexAck
+            let ack: ComplexAck = message.try_into().map_err(BacnetError::Codec)?;
 
-        // return message is expected to have the same invoke_id as the request
-        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
-
-        Ok(ack)
+            if invoke_id == ack.invoke_id {
+                return Ok(ack)
+            }
+        }
     }
 
     #[maybe_async()]
@@ -259,22 +260,25 @@ where
     ) -> Result<SimpleAck, BacnetError<T>> {
         let invoke_id = self.send_confirmed(buf, service).await?;
 
-        // receive reply
-        let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
-        let buf = &buf[..n];
+        loop {
+            // receive reply
+            let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
+            let buf = &buf[..n];
 
-        // use the DataLink codec to decode the bytes
-        let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+            // use the DataLink codec to decode the bytes
+            let mut reader = Reader::default();
+            let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+        
 
-        // TODO: return bacnet error if the server returns one
-        // return message is expected to be a ComplexAck
-        let ack: SimpleAck = message.try_into().map_err(BacnetError::Codec)?;
+            // TODO: return bacnet error if the server returns one
+            // return message is expected to be a ComplexAck
+            let ack: SimpleAck = message.try_into().map_err(BacnetError::Codec)?;
 
-        // return message is expected to have the same invoke_id as the request
-        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
-
-        Ok(ack)
+            // return message is expected to have the same invoke_id as the request
+            if invoke_id == ack.invoke_id {
+                return Ok(ack)
+            }
+        }
     }
 
     #[maybe_async()]
