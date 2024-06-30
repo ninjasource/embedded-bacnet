@@ -90,26 +90,7 @@ impl<'a> ConfirmedRequest<'a> {
         let choice: ConfirmedServiceChoice = reader.read_byte(buf)?.try_into().map_err(|e| {
             Error::InvalidVariant(("ConfirmedRequest decode ConfirmedServiceChoice", e as u32))
         })?;
-
-        let service = match choice {
-            ConfirmedServiceChoice::ReadProperty => {
-                let service = ReadProperty::decode(reader, buf)?;
-                ConfirmedRequestService::ReadProperty(service)
-            }
-            ConfirmedServiceChoice::ReadPropMultiple => {
-                let service = ReadPropertyMultiple::decode(reader, buf);
-                ConfirmedRequestService::ReadPropertyMultiple(service)
-            }
-            ConfirmedServiceChoice::ReadRange => {
-                let service = ReadRange::decode(reader, buf)?;
-                ConfirmedRequestService::ReadRange(service)
-            }
-            ConfirmedServiceChoice::WriteProperty => {
-                let service = WriteProperty::decode(reader, buf)?;
-                ConfirmedRequestService::WriteProperty(service)
-            }
-            _ => todo!("Choice not supported: {:?}", choice),
-        };
+        let service = ConfirmedRequestService::decode(choice, reader, buf)?;
 
         Ok(Self {
             max_segments,
@@ -369,26 +350,7 @@ impl<'a> ComplexAck<'a> {
         let choice: ConfirmedServiceChoice = reader.read_byte(buf)?.try_into().map_err(|e| {
             Error::InvalidVariant(("ComplexAck decode ConfirmedServiceChoice", e as u32))
         })?;
-
-        let service = match choice {
-            ConfirmedServiceChoice::ReadProperty => {
-                let apdu = ReadPropertyAck::decode(reader, buf)?;
-                ComplexAckService::ReadProperty(apdu)
-            }
-            ConfirmedServiceChoice::ReadPropMultiple => {
-                let buf = &buf[reader.index..reader.end];
-                ComplexAckService::ReadPropertyMultiple(ReadPropertyMultipleAck::new_from_buf(buf))
-            }
-            ConfirmedServiceChoice::ReadRange => {
-                let apdu = ReadRangeAck::decode(reader, buf)?;
-                ComplexAckService::ReadRange(apdu)
-            }
-            s => {
-                return Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
-                    s,
-                )))
-            }
-        };
+        let service = ComplexAckService::decode(choice, reader, buf)?;
 
         Ok(Self { invoke_id, service })
     }
@@ -403,6 +365,34 @@ pub enum ComplexAckService<'a> {
     // add more here
 }
 
+impl<'a> ComplexAckService<'a> {
+    pub fn decode(
+        choice: ConfirmedServiceChoice,
+        reader: &mut Reader,
+        buf: &'a [u8],
+    ) -> Result<Self, Error> {
+        match choice {
+            ConfirmedServiceChoice::ReadProperty => {
+                let service = ReadPropertyAck::decode(reader, buf)?;
+                Ok(ComplexAckService::ReadProperty(service))
+            }
+            ConfirmedServiceChoice::ReadPropMultiple => {
+                let service = ReadPropertyMultipleAck::new_from_buf(buf);
+                Ok(ComplexAckService::ReadPropertyMultiple(service))
+            }
+            ConfirmedServiceChoice::ReadRange => {
+                let service = ReadRangeAck::decode(reader, buf)?;
+                Ok(ComplexAckService::ReadRange(service))
+            }
+            s => {
+                return Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
+                    s,
+                )))
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConfirmedRequestService<'a> {
@@ -412,4 +402,36 @@ pub enum ConfirmedRequestService<'a> {
     WriteProperty(WriteProperty<'a>),
     ReadRange(ReadRange),
     // add more here (see ConfirmedServiceChoice enum)
+}
+
+impl<'a> ConfirmedRequestService<'a> {
+    pub fn decode(
+        choice: ConfirmedServiceChoice,
+        reader: &mut Reader,
+        buf: &'a [u8],
+    ) -> Result<Self, Error> {
+        match choice {
+            ConfirmedServiceChoice::ReadProperty => {
+                let service = ReadProperty::decode(reader, buf)?;
+                Ok(ConfirmedRequestService::ReadProperty(service))
+            }
+            ConfirmedServiceChoice::ReadPropMultiple => {
+                let service = ReadPropertyMultiple::decode(reader, buf);
+                Ok(ConfirmedRequestService::ReadPropertyMultiple(service))
+            }
+            ConfirmedServiceChoice::ReadRange => {
+                let service = ReadRange::decode(reader, buf)?;
+                Ok(ConfirmedRequestService::ReadRange(service))
+            }
+            ConfirmedServiceChoice::WriteProperty => {
+                let service = WriteProperty::decode(reader, buf)?;
+                Ok(ConfirmedRequestService::WriteProperty(service))
+            }
+            s => {
+                return Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
+                    s,
+                )))
+            }
+        }
+    }
 }
