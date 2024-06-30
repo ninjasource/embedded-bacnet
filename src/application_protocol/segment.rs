@@ -59,34 +59,31 @@ pub enum CombinedSegments<'a> {
 
 // combine and decode a number of segments into it's service.
 pub fn decode<'a>(buf: &'a mut [u8], segments: &[Segment]) -> Result<CombinedSegments<'a>, Error> {
-    if segments.len() == 0 {
+    if segments.is_empty() {
         return Err(Error::InvalidValue("no segments to decode"));
     }
 
     // TODO: combine all these iterations into one.
     let first_segment = &segments[0];
-    if segments
+    if !segments
         .iter()
         .all(|segment| segment.apdu_type == first_segment.apdu_type)
-        == false
     {
         return Err(Error::InvalidValue(
             "not all segments have matching apdu type",
         ));
     }
-    if segments
+    if !segments
         .iter()
         .all(|segment| segment.service_choice == first_segment.service_choice)
-        == false
     {
         return Err(Error::InvalidValue(
             "not all segments have matching apdu service choice",
         ));
     }
-    if segments
+    if !segments
         .iter()
         .all(|segment| segment.invoke_id == first_segment.invoke_id)
-        == false
     {
         return Err(Error::InvalidValue(
             "not all segments have matching invoke id",

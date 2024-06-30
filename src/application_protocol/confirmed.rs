@@ -385,7 +385,7 @@ impl<'a> ComplexAckService<'a> {
                 Ok(ComplexAckService::ReadRange(service))
             }
             s => {
-                return Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
+                Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
                     s,
                 )))
             }
@@ -428,7 +428,7 @@ impl<'a> ConfirmedRequestService<'a> {
                 Ok(ConfirmedRequestService::WriteProperty(service))
             }
             s => {
-                return Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
+                Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
                     s,
                 )))
             }
