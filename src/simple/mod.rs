@@ -31,6 +31,7 @@ use crate::{
 };
 
 #[allow(async_fn_in_trait)]
+#[cfg(not(feature = "defmt"))]
 #[maybe_async(AFIT)] // AFIT - Async Function In Trait
 pub trait NetworkIo {
     type Error: Debug;
@@ -42,6 +43,26 @@ pub trait NetworkIo {
 pub struct Bacnet<T>
 where
     T: NetworkIo + Debug,
+{
+    io: T,
+    invoke_id: u8,
+}
+
+#[allow(async_fn_in_trait)]
+#[cfg(feature = "defmt")]
+#[maybe_async(AFIT)] // AFIT - Async Function In Trait
+pub trait NetworkIo {
+    type Error: Debug + defmt::Format;
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+    async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error>;
+}
+
+#[cfg(feature = "defmt")]
+#[cfg(not(feature = "defmt"))]
+#[derive(Debug, defmt::Format)]
+pub struct Bacnet<T>
+where
+    T: NetworkIo + Debug + defmt::Format,
 {
     io: T,
     invoke_id: u8,

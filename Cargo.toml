@@ -1,7 +1,7 @@
 [package]
 name = "embedded-bacnet"
 authors = ["David Haig"]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/ninjasource/embedded-bacnet.git"
@@ -16,7 +16,7 @@ defmt = { version = "0.3.5", optional = true }
 serde = { version = "1.0", default-features = false, features = [
     "derive",
 ], optional = true }
-maybe-async = { version = "0.2.10" }
+maybe-async = { version = "0.2.10", default-features = false }
 
 # TODO: add this when it reaches 1.0
 # derive_more = { version = "^1.0.0-beta.6", default-features = false, features = [ "try_from"] }

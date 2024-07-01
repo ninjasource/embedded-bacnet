@@ -35,10 +35,10 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
     let args = Args::parse();
     let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
-    let mut buf = vec![0; 4096];
+    let mut buf = vec![0; 1500];
 
     // fetch record count
-    let object_id = ObjectId::new(ObjectType::ObjectTrendlog, 4);
+    let object_id = ObjectId::new(ObjectType::ObjectTrendlog, 1);
     let record_count = get_record_count(&mut bacnet, &mut buf, object_id.clone()).await?;
     println!("Record count {record_count}");
 

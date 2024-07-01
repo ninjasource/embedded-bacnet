@@ -50,7 +50,7 @@ struct Args {
 fn main() -> Result<(), Error> {
     simple_logger::init().unwrap();
     let args = Args::parse();
-    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC0))?;
+    let socket = UdpSocket::bind(format!("0.0.0.0:{}", 0xBAC1))?;
     socket.set_broadcast(true)?;
 
     let who_is = WhoIs {};
@@ -60,18 +60,19 @@ fn main() -> Result<(), Error> {
     let npdu = NetworkPdu::new(None, dst, false, MessagePriority::Normal, message);
     let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu, Some(npdu));
 
-    let mut buffer = vec![0; 16 * 1024];
-    let mut buffer = Writer::new(&mut buffer);
-    data_link.encode(&mut buffer);
+    let mut buffer = vec![0; 1500];
 
-    let buf = buffer.to_bytes();
-    socket.send_to(buf, &args.addr)?;
-    println!("Sent:     {:02x?} to {}\n", buf, &args.addr);
+    {
+        let mut buffer = Writer::new(&mut buffer);
+        data_link.encode(&mut buffer);
+        let buf = buffer.to_bytes();
+        socket.send_to(buf, &args.addr)?;
+        println!("Sent:     {:02x?} to {}\n", buf, &args.addr);
+    }
 
-    let mut buf = vec![0; 1024];
     loop {
-        let (n, peer) = socket.recv_from(&mut buf)?;
-        let payload = &buf[..n];
+        let (n, peer) = socket.recv_from(&mut buffer)?;
+        let payload = &buffer[..n];
         println!("Received: {:02x?} from {:?}", payload, peer);
         let mut reader = Reader::default();
         let message = DataLink::decode(&mut reader, payload);

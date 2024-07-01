@@ -31,7 +31,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
     let args = Args::parse();
     let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
-    let mut buf = vec![0; 4096];
+    let mut buf = vec![0; 1500];
 
     // write
     let request = WriteProperty::new(
@@ -41,8 +41,8 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
         None,
         ApplicationDataValueWrite::Enumerated(Enumerated::Binary(Binary::On)),
     );
-    let ack = bacnet.write_property(&mut buf, request).await?;
-    println!("Write ack: {:?}", ack);
+    bacnet.write_property(&mut buf, request).await?;
+    println!("Write successful");
 
     Ok(())
 }

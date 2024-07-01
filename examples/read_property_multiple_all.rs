@@ -15,7 +15,7 @@ use embedded_bacnet::{
 
 mod common;
 
-/// A Bacnet Client example to read all the property values for analog input #4
+/// A Bacnet Client example to read all the property values for analog input #1
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -30,11 +30,11 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     simple_logger::init().unwrap();
     let args = Args::parse();
     let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
-    let mut buf = vec![0; 4096];
+    let mut buf = vec![0; 1500];
 
     // fetch all property values for an analog input 4
     let objects = [ReadPropertyMultipleObject::new(
-        ObjectId::new(ObjectType::ObjectAnalogInput, 4),
+        ObjectId::new(ObjectType::ObjectAnalogInput, 1),
         &[PropertyId::PropAll],
     )];
     let request = ReadPropertyMultiple::new(&objects);

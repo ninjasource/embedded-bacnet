@@ -58,7 +58,7 @@ fn main() -> Result<(), BacnetError<MySocket>> {
     simple_logger::init().unwrap();
     let args = Args::parse();
     let mut bacnet = get_bacnet_socket(&args.addr)?;
-    let mut buf = vec![0; 4096];
+    let mut buf = vec![0; 1500];
 
     // fetch
     let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);

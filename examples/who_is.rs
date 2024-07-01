@@ -20,7 +20,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
     let args = Args::parse();
     let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
-    let mut buf = vec![0; 4096];
+    let mut buf = vec![0; 1500];
 
     // fetch
     let request = WhoIs {};
