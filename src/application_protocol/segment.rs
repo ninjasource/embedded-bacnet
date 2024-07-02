@@ -1,3 +1,5 @@
+use core::usize;
+
 use crate::common::{error::Error, io::{Reader, Writer}};
 
 use super::application_pdu::{ApduType, PduFlags};
@@ -56,11 +58,18 @@ impl<'a> Segment<'a> {
 
     // a special case encoder for when this segment is being accumulated
     // into an unsegmented APDU.
-    pub fn encode_for_accumulation(&self, writer: &mut Writer) {
-        if self.invoke_id == 0 {
-            writer.push(self.apdu_type.clone() as u8);
+    pub fn encode_for_accumulation(&self, writer: &mut Writer) -> usize {
+        let mut written = 0;
+        if self.sequence_number == 0 {
+            writer.push((self.apdu_type.clone() as u8) << 4);
+            writer.push(self.invoke_id);
+            writer.push(self.service_choice);
+            written += 3;
         }
         writer.extend_from_slice(self.data);
+        written += self.data.len();
+        
+        written
     }
 }
 
