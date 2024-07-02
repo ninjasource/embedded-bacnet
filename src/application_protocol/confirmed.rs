@@ -55,7 +55,6 @@ impl<'a> ConfirmedRequest<'a> {
         writer.push(self.invoke_id);
 
         // NOTE: Segment pdu not supported / implemented
-
         match &self.service {
             ConfirmedRequestService::ReadProperty(service) => {
                 writer.push(ConfirmedServiceChoice::ReadProperty as u8);
@@ -433,5 +432,52 @@ impl<'a> ConfirmedRequestService<'a> {
                 )))
             }
         }
+    }
+}
+
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct SegmentAck {
+    pub invoke_id: u8,
+    pub sequence_num: u8,
+    pub proposed_window_size: u8,
+}
+
+impl<'a> TryFrom<DataLink<'a>> for SegmentAck {
+    type Error = Error;
+
+    fn try_from(value: DataLink<'a>) -> Result<Self, Self::Error> {
+        match value.npdu {
+            Some(x) => match x.network_message {
+                NetworkMessage::Apdu(ApplicationPdu::SegmentAck(ack)) => Ok(ack),
+                _ => Err(Error::ConvertDataLink(
+                    "npdu message is not an apdu simple ack",
+                )),
+            },
+            _ => Err(Error::ConvertDataLink("no npdu defined in message")),
+        }
+    }
+}
+
+impl SegmentAck {
+    pub fn encode(&self, writer: &mut Writer) {
+        let control = (ApduType::SegmentAck as u8) << 4;
+        writer.push(control);
+        writer.push(self.invoke_id);
+        writer.push(self.sequence_num);
+        writer.push(self.proposed_window_size);
+    }
+
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let invoke_id = reader.read_byte(buf)?;
+        let sequence_num = reader.read_byte(buf)?;
+        let proposed_window_size = reader.read_byte(buf)?;
+
+        Ok(Self {
+            invoke_id,
+            sequence_num,
+            proposed_window_size,
+        })
     }
 }

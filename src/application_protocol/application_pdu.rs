@@ -4,7 +4,7 @@ use crate::common::{
 };
 
 use super::{
-    confirmed::{ComplexAck, ConfirmedBacnetError, ConfirmedRequest, SimpleAck},
+    confirmed::{ComplexAck, ConfirmedBacnetError, ConfirmedRequest, SegmentAck, SimpleAck},
     segment::Segment,
     unconfirmed::UnconfirmedRequest,
 };
@@ -19,6 +19,7 @@ pub enum ApplicationPdu<'a> {
     SimpleAck(SimpleAck),
     Error(ConfirmedBacnetError),
     Segment(Segment<'a>),
+    SegmentAck(SegmentAck),
     // add more here (see ApduType)
 }
 
@@ -127,8 +128,9 @@ impl<'a> ApplicationPdu<'a> {
             Self::UnconfirmedRequest(req) => req.encode(writer),
             Self::ComplexAck(req) => req.encode(writer),
             Self::SimpleAck(ack) => ack.encode(writer),
+            Self::SegmentAck(ack) => ack.encode(writer),
+            Self::Segment(segment) => segment.encode(writer),
             Self::Error(_) => todo!(),
-            Self::Segment(_) => todo!(),
         };
     }
 
@@ -162,6 +164,10 @@ impl<'a> ApplicationPdu<'a> {
             ApduType::SimpleAck => {
                 let adpu = SimpleAck::decode(reader, buf)?;
                 Ok(Self::SimpleAck(adpu))
+            }
+            ApduType::SegmentAck => {
+                let adpu = SegmentAck::decode(reader, buf)?;
+                Ok(Self::SegmentAck(adpu))
             }
             ApduType::Error => {
                 let apdu = ConfirmedBacnetError::decode(reader, buf)?;
