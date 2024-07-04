@@ -383,11 +383,9 @@ impl<'a> ComplexAckService<'a> {
                 let service = ReadRangeAck::decode(reader, buf)?;
                 Ok(ComplexAckService::ReadRange(service))
             }
-            s => {
-                Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
-                    s,
-                )))
-            }
+            s => Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
+                s,
+            ))),
         }
     }
 }
@@ -426,15 +424,12 @@ impl<'a> ConfirmedRequestService<'a> {
                 let service = WriteProperty::decode(reader, buf)?;
                 Ok(ConfirmedRequestService::WriteProperty(service))
             }
-            s => {
-                Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
-                    s,
-                )))
-            }
+            s => Err(Error::Unimplemented(Unimplemented::ConfirmedServiceChoice(
+                s,
+            ))),
         }
     }
 }
-
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

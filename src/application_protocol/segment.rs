@@ -1,6 +1,9 @@
 use core::usize;
 
-use crate::common::{error::Error, io::{Reader, Writer}};
+use crate::common::{
+    error::Error,
+    io::{Reader, Writer},
+};
 
 use super::application_pdu::{ApduType, PduFlags};
 
@@ -46,7 +49,7 @@ impl<'a> Segment<'a> {
     pub fn encode(&self, writer: &mut Writer) {
         let mut control = ((self.apdu_type.clone() as u8) << 4) | PduFlags::SegmentedMessage as u8;
         if self.more_follows {
-            control = control | PduFlags::MoreFollows as u8;
+            control |= PduFlags::MoreFollows as u8;
         }
         writer.push(control);
         writer.push(self.invoke_id);
@@ -68,37 +71,41 @@ impl<'a> Segment<'a> {
         }
         writer.extend_from_slice(self.data);
         written += self.data.len();
-        
+
         written
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{application_protocol::application_pdu::ApduType, common::io::{Reader, Writer}};
+    use crate::{
+        application_protocol::application_pdu::ApduType,
+        common::io::{Reader, Writer},
+    };
 
     use super::Segment;
- 
+
     #[test]
     fn reversable() {
         // decoding
-        let input: [u8; 7] = [60,1,0,1,1,2,3];
+        let input: [u8; 7] = [60, 1, 0, 1, 1, 2, 3];
         let mut reader = Reader::new_with_len(input.len() - 1);
-        let decoded = Segment::decode(true, ApduType::ComplexAck, &mut reader, &input[1..]).unwrap();
-       
+        let decoded =
+            Segment::decode(true, ApduType::ComplexAck, &mut reader, &input[1..]).unwrap();
+
         // encoding
         let mut output: [u8; 7] = [0; 7];
         let mut writer = Writer::new(&mut output);
         decoded.encode(&mut writer);
         assert_eq!(input, output);
     }
-    
+
     #[test]
     fn decoding() {
         // decoding
-        let input: [u8; 6] = [1,12,1,1,2,3];
+        let input: [u8; 6] = [1, 12, 1, 1, 2, 3];
         let mut reader = Reader::new_with_len(input.len());
-        let decoded = Segment::decode(false, ApduType::ComplexAck, &mut reader, &input).unwrap(); 
+        let decoded = Segment::decode(false, ApduType::ComplexAck, &mut reader, &input).unwrap();
         assert_eq!(decoded.more_follows, false);
         assert_eq!(decoded.sequence_number, 12);
         assert_eq!(decoded.window_size, 1);
