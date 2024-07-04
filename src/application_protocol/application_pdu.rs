@@ -4,7 +4,8 @@ use crate::common::{
 };
 
 use super::{
-    confirmed::{ConfirmedBacnetError, ComplexAck, ConfirmedRequest, SimpleAck},
+    confirmed::{ComplexAck, ConfirmedBacnetError, ConfirmedRequest, SegmentAck, SimpleAck},
+    segment::Segment,
     unconfirmed::UnconfirmedRequest,
 };
 
@@ -17,10 +18,12 @@ pub enum ApplicationPdu<'a> {
     ComplexAck(ComplexAck<'a>),
     SimpleAck(SimpleAck),
     Error(ConfirmedBacnetError),
+    Segment(Segment<'a>),
+    SegmentAck(SegmentAck),
     // add more here (see ApduType)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
@@ -125,6 +128,8 @@ impl<'a> ApplicationPdu<'a> {
             Self::UnconfirmedRequest(req) => req.encode(writer),
             Self::ComplexAck(req) => req.encode(writer),
             Self::SimpleAck(ack) => ack.encode(writer),
+            Self::SegmentAck(ack) => ack.encode(writer),
+            Self::Segment(segment) => segment.encode(writer),
             Self::Error(_) => todo!(),
         };
     }
@@ -134,12 +139,13 @@ impl<'a> ApplicationPdu<'a> {
         let pdu_type: ApduType = (byte0 >> 4).try_into()?;
         let pdu_flags = byte0 & 0x0F;
         let segmented_message = (pdu_flags & PduFlags::SegmentedMessage as u8) > 0;
-        let _more_follows = (pdu_flags & PduFlags::MoreFollows as u8) > 0;
+        let more_follows = (pdu_flags & PduFlags::MoreFollows as u8) > 0;
         let _segmented_response_accepted =
             (pdu_flags & PduFlags::SegmentedResponseAccepted as u8) > 0;
 
         if segmented_message {
-            return Err(Error::SegmentationNotSupported);
+            let segment = Segment::decode(more_follows, pdu_type, reader, buf)?;
+            return Ok(Self::Segment(segment));
         }
 
         match pdu_type {
@@ -158,6 +164,10 @@ impl<'a> ApplicationPdu<'a> {
             ApduType::SimpleAck => {
                 let adpu = SimpleAck::decode(reader, buf)?;
                 Ok(Self::SimpleAck(adpu))
+            }
+            ApduType::SegmentAck => {
+                let adpu = SegmentAck::decode(reader, buf)?;
+                Ok(Self::SegmentAck(adpu))
             }
             ApduType::Error => {
                 let apdu = ConfirmedBacnetError::decode(reader, buf)?;
