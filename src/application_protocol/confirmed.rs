@@ -376,6 +376,7 @@ impl<'a> ComplexAckService<'a> {
                 Ok(ComplexAckService::ReadProperty(service))
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
+                let buf = &buf[reader.index..reader.end];
                 let service = ReadPropertyMultipleAck::new_from_buf(buf);
                 Ok(ComplexAckService::ReadPropertyMultiple(service))
             }
