@@ -24,3 +24,6 @@ pub mod application_protocol;
 pub mod common;
 
 pub mod simple;
+
+#[cfg(feature = "alloc")]
+extern crate alloc;

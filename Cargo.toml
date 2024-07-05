@@ -28,11 +28,17 @@ clap = { version = "4.5.4", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["rt-multi-thread", "net", "macros"] }
 
 [features]
+#default = ["alloc"]
 default = []
 defmt = ["dep:defmt"]
 serde = ["dep:serde"]
 is_sync = ["maybe-async/is_sync"]
+alloc = []
 
 [[example]]
 name = "read_property_multiple_blocking"
 required-features = ["is_sync"]
+
+[[example]]
+name = "update_schedule"
+required-features = ["alloc"]

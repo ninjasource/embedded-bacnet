@@ -1,5 +1,8 @@
 use core::fmt::Debug;
 
+#[cfg(feature = "alloc")]
+use {alloc::vec::Vec, core::marker::PhantomData};
+
 use super::{
     error::Error,
     helper::{encode_closing_tag, encode_opening_tag, get_tagged_body},
@@ -8,6 +11,7 @@ use super::{
 };
 
 // note that Debug is implemented manually here because of the reader in time value iter
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WeeklySchedule<'a> {
@@ -20,6 +24,83 @@ pub struct WeeklySchedule<'a> {
     pub sunday: TimeValueList<'a>,
 }
 
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct WeeklySchedule<'a> {
+    pub monday: Vec<TimeValue>,
+    pub tuesday: Vec<TimeValue>,
+    pub wednesday: Vec<TimeValue>,
+    pub thursday: Vec<TimeValue>,
+    pub friday: Vec<TimeValue>,
+    pub saturday: Vec<TimeValue>,
+    pub sunday: Vec<TimeValue>,
+    _phantom: &'a PhantomData<()>,
+}
+
+#[cfg(feature = "alloc")]
+impl<'a> WeeklySchedule<'a> {
+    pub fn new(
+        monday: Vec<TimeValue>,
+        tuesday: Vec<TimeValue>,
+        wednesday: Vec<TimeValue>,
+        thursday: Vec<TimeValue>,
+        friday: Vec<TimeValue>,
+        saturday: Vec<TimeValue>,
+        sunday: Vec<TimeValue>,
+    ) -> Self {
+        static PHANTOM: PhantomData<()> = PhantomData {};
+        Self {
+            monday,
+            tuesday,
+            wednesday,
+            thursday,
+            friday,
+            saturday,
+            sunday,
+            _phantom: &PHANTOM,
+        }
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        encode_day(writer, self.monday.iter());
+        encode_day(writer, self.tuesday.iter());
+        encode_day(writer, self.wednesday.iter());
+        encode_day(writer, self.thursday.iter());
+        encode_day(writer, self.friday.iter());
+        encode_day(writer, self.saturday.iter());
+        encode_day(writer, self.sunday.iter());
+    }
+
+    // due to the fact that WeeklySchedule contains an arbitrary number of TimeValue pairs we need to return an iterator
+    // because we cannot use an allocator
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let monday = Self::decode_day(reader, buf)?;
+        let tuesday = Self::decode_day(reader, buf)?;
+        let wednesday = Self::decode_day(reader, buf)?;
+        let thursday = Self::decode_day(reader, buf)?;
+        let friday = Self::decode_day(reader, buf)?;
+        let saturday = Self::decode_day(reader, buf)?;
+        let sunday = Self::decode_day(reader, buf)?;
+
+        Ok(Self::new(
+            monday, tuesday, wednesday, thursday, friday, saturday, sunday,
+        ))
+    }
+
+    fn decode_day(reader: &mut Reader, buf: &'a [u8]) -> Result<Vec<TimeValue>, Error> {
+        let (body_buf, _tag_num) = get_tagged_body(reader, buf)?;
+        let mut inner_reader = Reader::new_with_len(body_buf.len());
+        let mut time_values = Vec::new();
+        while !inner_reader.eof() {
+            let time_value = TimeValue::decode(&mut inner_reader, &body_buf)?;
+            time_values.push(time_value);
+        }
+        Ok(time_values)
+    }
+}
+
+#[cfg(not(feature = "alloc"))]
 impl<'a> WeeklySchedule<'a> {
     pub fn new(
         monday: &'a [TimeValue],
@@ -82,6 +163,14 @@ pub struct TimeValueList<'a> {
     buf: &'a [u8],
 }
 
+fn encode_day<'b>(writer: &mut Writer, time_values: impl Iterator<Item = &'b TimeValue>) {
+    encode_opening_tag(writer, 0);
+    for time_value in time_values {
+        time_value.encode(writer)
+    }
+    encode_closing_tag(writer, 0);
+}
+
 impl<'a> TimeValueList<'a> {
     pub fn new(time_values: &'a [TimeValue]) -> Self {
         Self {
@@ -98,11 +187,7 @@ impl<'a> TimeValueList<'a> {
     }
 
     pub fn encode(&self, writer: &mut Writer) {
-        encode_opening_tag(writer, 0);
-        for time_value in self.time_values {
-            time_value.encode(writer)
-        }
-        encode_closing_tag(writer, 0);
+        encode_day(writer, self.time_values.iter());
     }
 
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
