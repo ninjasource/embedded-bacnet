@@ -107,3 +107,11 @@ of objects in it) the encoding and decoding parts have different representations
 For example if you wanted to encode a list of objects you would pass a slice from some container because you know, beforehand, how many objects you want to include in the packet. 
 When decoding lists of things we use an iterator so the user can collect those object into a vector or simply process them on the fly. 
 Internally this is represented as a reader that decodes objects on the fly from a byte buffer.
+
+## License
+
+Apache License, Version 2.0 (LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0)
+
+## Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be licensed as above, without any additional terms or conditions.
