@@ -1,4 +1,4 @@
-use super::{
+use crate::common::{
     error::{Error, ExpectedTag},
     io::{Reader, Writer},
 };

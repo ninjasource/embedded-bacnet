@@ -1,3 +1,10 @@
+/// This module is meant to be a very basic way to interact with a BACnet IP network in a simple request / response manner
+/// It automatically links up requests with responses using an invoke_id which only really works when you send one request at a time.
+/// If you intend to fire off many simultaneous requests then you should keep track of invoke_ids and handle congestion and packet ordering yourself.
+/// Your NetworkIo implementation is responsible for timeout detection for reads and writes.
+/// This is an async-first module but you can run it in a native blocking way if you like.
+///   The `maybe_async` crate is used to avoid code duplication and completely stips away async code when the `is_sync` feature flag is set.
+/// If you are having trouble with the borrow checker try enabling the `alloc` feature to make BACnet objects fully owned
 use core::fmt::Debug;
 
 use maybe_async::maybe_async;
@@ -30,15 +37,6 @@ use crate::{
     },
 };
 
-#[allow(async_fn_in_trait)]
-#[cfg(not(feature = "defmt"))]
-#[maybe_async(AFIT)] // AFIT - Async Function In Trait
-pub trait NetworkIo {
-    type Error: Debug;
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
-    async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error>;
-}
-
 #[derive(Debug)]
 pub struct Bacnet<T>
 where
@@ -57,15 +55,14 @@ pub trait NetworkIo {
     async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error>;
 }
 
-#[cfg(feature = "defmt")]
 #[cfg(not(feature = "defmt"))]
-#[derive(Debug, defmt::Format)]
-pub struct Bacnet<T>
-where
-    T: NetworkIo + Debug + defmt::Format,
-{
-    io: T,
-    invoke_id: u8,
+#[allow(async_fn_in_trait)]
+#[maybe_async(AFIT)] // AFIT - Async Function In Trait
+pub trait NetworkIo {
+    type Error: Debug;
+
+    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+    async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error>;
 }
 
 #[derive(Debug)]
@@ -146,6 +143,7 @@ where
     }
 
     #[maybe_async()]
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub async fn read_property_multiple<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -162,6 +160,7 @@ where
     }
 
     #[maybe_async()]
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub async fn read_property<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -189,6 +188,7 @@ where
     }
 
     #[maybe_async()]
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub async fn read_change_of_value<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -210,6 +210,7 @@ where
     }
 
     #[maybe_async()]
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub async fn read_range<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -228,7 +229,7 @@ where
     #[maybe_async()]
     pub async fn write_property<'a>(
         &mut self,
-        buf: &'a mut [u8],
+        buf: &mut [u8],
         request: WriteProperty<'_>,
     ) -> Result<(), BacnetError<T>> {
         let service = ConfirmedRequestService::WriteProperty(request);
@@ -247,6 +248,7 @@ where
     }
 
     #[maybe_async()]
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     async fn send_and_receive_complex_ack<'a>(
         &mut self,
         buf: &'a mut [u8],
@@ -275,7 +277,7 @@ where
     #[maybe_async()]
     async fn send_and_receive_simple_ack<'a>(
         &mut self,
-        buf: &'a mut [u8],
+        buf: &mut [u8],
         service: ConfirmedRequestService<'_>,
     ) -> Result<SimpleAck, BacnetError<T>> {
         let invoke_id = self.send_confirmed(buf, service).await?;

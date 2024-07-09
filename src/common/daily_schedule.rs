@@ -1,14 +1,14 @@
 use core::fmt::Debug;
 
-#[cfg(feature = "alloc")]
-use {alloc::vec::Vec, core::marker::PhantomData};
-
-use super::{
+use crate::common::{
     error::Error,
     helper::{encode_closing_tag, encode_opening_tag, get_tagged_body},
     io::{Reader, Writer},
     time_value::TimeValue,
 };
+
+#[cfg(feature = "alloc")]
+use {crate::common::spooky::Phantom, alloc::vec::Vec};
 
 // note that Debug is implemented manually here because of the reader in time value iter
 #[cfg(not(feature = "alloc"))]
@@ -35,7 +35,7 @@ pub struct WeeklySchedule<'a> {
     pub friday: Vec<TimeValue>,
     pub saturday: Vec<TimeValue>,
     pub sunday: Vec<TimeValue>,
-    _phantom: &'a PhantomData<()>,
+    _phantom: &'a Phantom,
 }
 
 #[cfg(feature = "alloc")]
@@ -49,7 +49,8 @@ impl<'a> WeeklySchedule<'a> {
         saturday: Vec<TimeValue>,
         sunday: Vec<TimeValue>,
     ) -> Self {
-        static PHANTOM: PhantomData<()> = PhantomData {};
+        use crate::common::spooky::PHANTOM;
+
         Self {
             monday,
             tuesday,
@@ -74,7 +75,7 @@ impl<'a> WeeklySchedule<'a> {
 
     // due to the fact that WeeklySchedule contains an arbitrary number of TimeValue pairs we need to return an iterator
     // because we cannot use an allocator
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         let monday = Self::decode_day(reader, buf)?;
         let tuesday = Self::decode_day(reader, buf)?;
         let wednesday = Self::decode_day(reader, buf)?;
@@ -88,12 +89,12 @@ impl<'a> WeeklySchedule<'a> {
         ))
     }
 
-    fn decode_day(reader: &mut Reader, buf: &'a [u8]) -> Result<Vec<TimeValue>, Error> {
+    fn decode_day(reader: &mut Reader, buf: &[u8]) -> Result<Vec<TimeValue>, Error> {
         let (body_buf, _tag_num) = get_tagged_body(reader, buf)?;
         let mut inner_reader = Reader::new_with_len(body_buf.len());
         let mut time_values = Vec::new();
         while !inner_reader.eof() {
-            let time_value = TimeValue::decode(&mut inner_reader, &body_buf)?;
+            let time_value = TimeValue::decode(&mut inner_reader, body_buf)?;
             time_values.push(time_value);
         }
         Ok(time_values)

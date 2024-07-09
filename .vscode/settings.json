@@ -6,19 +6,4 @@
         "println",
         "struct"
     ],
-    "rust-analyzer.showUnlinkedFileNotification": false
-    // uncomment this to have rust-analyzer work with mcu related code
-    /*
-    "rust-analyzer.cargo.features": [
-        "alloc"
-    ],
-    "rust-analyzer.check.features": [
-        "alloc"
-    ],
-    "rust-analyzer.check.noDefaultFeatures": true,
-    "rust-analyzer.imports.preferNoStd": true,
-    "rust-analyzer.cargo.noDefaultFeatures": true,
-    // don't comment below this line
-    "rust-analyzer.check.allTargets": false,
-    "rust-analyzer.showUnlinkedFileNotification": false,*/
 }

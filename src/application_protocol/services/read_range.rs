@@ -19,6 +19,9 @@ use crate::{
     },
 };
 
+#[cfg(feature = "alloc")]
+use {alloc::vec::Vec, bacnet_macros::remove_lifetimes_from_fn_args};
+
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRange {
@@ -95,6 +98,7 @@ impl<'a> ReadRangeAck<'a> {
         encode_closing_tag(writer, Self::ITEM_DATA_TAG);
     }
 
+    #[cfg_attr(feature = "alloc", remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         // object_id
         let tag = Tag::decode_expected(
@@ -150,7 +154,7 @@ impl<'a> ReadRangeAck<'a> {
                 "ReadRangeAck decode item_data",
             )?
         };
-        let item_data = ReadRangeItems::new_from_buf(buf);
+        let item_data = ReadRangeItems::decode(buf)?;
 
         Ok(Self {
             object_id,
@@ -163,11 +167,19 @@ impl<'a> ReadRangeAck<'a> {
     }
 }
 
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadRangeItems<'a> {
     items: &'a [ReadRangeItem<'a>],
     buf: &'a [u8],
+}
+
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct ReadRangeItems<'a> {
+    pub items: Vec<ReadRangeItem<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -227,21 +239,47 @@ impl TryFrom<u8> for ReadRangeValueType {
 }
 
 impl<'a> ReadRangeItems<'a> {
+    #[cfg(not(feature = "alloc"))]
     pub fn new_from_buf(buf: &'a [u8]) -> Self {
         Self { items: &[], buf }
     }
 
+    #[cfg(not(feature = "alloc"))]
     pub fn new(items: &'a [ReadRangeItem<'a>]) -> Self {
         Self { items, buf: &[] }
     }
 
+    #[cfg(feature = "alloc")]
+    pub fn new(items: Vec<ReadRangeItem<'a>>) -> Self {
+        Self { items }
+    }
+
     pub fn encode(&self, writer: &mut Writer) {
-        for item in self.items {
+        for item in self.items.iter() {
             item.encode(writer)
         }
     }
+
+    #[cfg(not(feature = "alloc"))]
+    pub fn decode(buf: &'a [u8]) -> Result<Self, Error> {
+        Ok(Self::new_from_buf(buf))
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn decode(buf: &[u8]) -> Result<Self, Error> {
+        let mut reader = Reader::new_with_len(buf.len());
+        let mut items = Vec::new();
+
+        while !reader.eof() {
+            let item = ReadRangeItem::decode(&mut reader, buf)?;
+            items.push(item);
+        }
+
+        Ok(Self::new(items))
+    }
 }
 
+#[cfg(not(feature = "alloc"))]
 impl<'a> IntoIterator for &'_ ReadRangeItems<'a> {
     type Item = Result<ReadRangeItem<'a>, Error>;
 
@@ -324,6 +362,7 @@ impl<'a> ReadRangeItem<'a> {
             .encode_context(Self::STATUS_FLAGS_TAG, writer);
     }
 
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         // date and time
         Tag::decode_expected(

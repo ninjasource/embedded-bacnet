@@ -1,9 +1,10 @@
-use crate::application_protocol::{
-    application_pdu::ApduType, confirmed::ConfirmedServiceChoice,
-    services::read_range::ReadRangeValueType, unconfirmed::UnconfirmedServiceChoice,
+use crate::{
+    application_protocol::{
+        application_pdu::ApduType, confirmed::ConfirmedServiceChoice,
+        services::read_range::ReadRangeValueType, unconfirmed::UnconfirmedServiceChoice,
+    },
+    common::tag::{ApplicationTagNumber, Tag, TagNumber},
 };
-
-use super::tag::{ApplicationTagNumber, Tag, TagNumber};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

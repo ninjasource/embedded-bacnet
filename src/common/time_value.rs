@@ -1,11 +1,12 @@
-use crate::application_protocol::primitives::data_value::{Enumerated, Time};
-
-use super::{
-    error::{Error, Unimplemented},
-    helper::decode_unsigned,
-    io::{Reader, Writer},
-    spec::Binary,
-    tag::{ApplicationTagNumber, Tag, TagNumber},
+use crate::{
+    application_protocol::primitives::data_value::{Enumerated, Time},
+    common::{
+        error::{Error, Unimplemented},
+        helper::decode_unsigned,
+        io::{Reader, Writer},
+        spec::Binary,
+        tag::{ApplicationTagNumber, Tag, TagNumber},
+    },
 };
 
 // A simplified version of the ApplicationDataValue struct to avoid a recursive structure

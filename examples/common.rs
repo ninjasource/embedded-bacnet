@@ -1,4 +1,4 @@
-#[allow(dead_code)]
+#![allow(dead_code)]
 fn main() {
     // dummy main because this "example" is used for common code for all examples
 }

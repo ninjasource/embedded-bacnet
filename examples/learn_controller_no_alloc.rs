@@ -1,10 +1,11 @@
-// cargo run --example learn_controller -- --addr "192.168.1.249:47808" --device-id 79079
+// cargo run --example learn_controller_no_alloc --no-default-features -- --addr "192.168.1.249:47808" --device-id 79079
 
 #![allow(unused_imports)]
+
 use std::collections::HashMap;
 
-use crate::common::{get_bacnet_socket, MySocket};
 use clap::{command, Parser};
+use common::MySocket;
 use embedded_bacnet::{
     application_protocol::{
         primitives::data_value::{ApplicationDataValue, BitString, Enumerated},
@@ -26,7 +27,7 @@ use embedded_bacnet::{
 
 mod common;
 
-#[cfg(not(feature = "alloc"))]
+#[cfg(feature = "alloc")]
 fn main() {}
 
 /// A Bacnet Client example to discover the capabilities of a controller
@@ -42,12 +43,12 @@ struct Args {
     device_id: u32,
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(not(feature = "alloc"))]
 #[tokio::main]
 async fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
     let args = Args::parse();
-    let mut bacnet = get_bacnet_socket(&args.addr).await?;
+    let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
     let mut buf = vec![0; 1500];
 
     // fetch object list
@@ -58,7 +59,8 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     let mut map = HashMap::new();
     if let ReadPropertyValue::ObjectIdList(list) = result.property_value {
         // put all objects in their respective bins by object type
-        for item in list.object_ids {
+        for item in list.into_iter() {
+            let item = item?;
             match item.object_type {
                 ObjectType::ObjectBinaryOutput
                 | ObjectType::ObjectBinaryInput
@@ -152,38 +154,37 @@ pub struct TrendLogValue {
     pub record_count: u32,
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(not(feature = "alloc"))]
 async fn get_multi_binary(
     bacnet: &mut Bacnet<MySocket>,
     buf: &mut [u8],
     object_ids: &[ObjectId],
 ) -> Result<Vec<BinaryValue>, BacnetError<MySocket>> {
-    let property_ids = vec![
+    let property_ids = [
         PropertyId::PropObjectName,
         PropertyId::PropPresentValue,
         PropertyId::PropStatusFlags,
     ];
     let items: Vec<ReadPropertyMultipleObject> = object_ids
         .iter()
-        .map(|x| ReadPropertyMultipleObject::new(x.clone(), property_ids.clone()))
+        .map(|x| ReadPropertyMultipleObject::new(x.clone(), &property_ids))
         .collect();
-    let request = ReadPropertyMultiple::new(items);
+    let request = ReadPropertyMultiple::new(&items);
     let result = bacnet.read_property_multiple(buf, request).await?;
 
     let mut items = vec![];
-    for obj in &result.objects_with_results {
-        let x = &obj.property_results;
-        let name = x[0].value.to_string();
-        let value = match &x[1].value {
+    for obj in &result {
+        let obj = obj?;
+        let mut x = obj.property_results.into_iter();
+        let name = x.next().unwrap()?.value.to_string();
+        let value = match x.next().unwrap()?.value {
             PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Binary(
                 Binary::On,
             ))) => true,
             _ => false,
         };
-        let status = match &x[2].value {
-            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::Status(x))) => {
-                x.clone()
-            }
+        let status = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::Status(x))) => x,
             _ => unreachable!(),
         };
 
@@ -198,13 +199,13 @@ async fn get_multi_binary(
     return Ok(items);
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(not(feature = "alloc"))]
 async fn get_multi_analog(
     bacnet: &mut Bacnet<MySocket>,
     buf: &mut [u8],
     object_ids: &[ObjectId],
 ) -> Result<Vec<AnalogValue>, BacnetError<MySocket>> {
-    let property_ids = vec![
+    let property_ids = [
         PropertyId::PropObjectName,
         PropertyId::PropPresentValue,
         PropertyId::PropUnits,
@@ -213,30 +214,29 @@ async fn get_multi_analog(
 
     let items: Vec<ReadPropertyMultipleObject> = object_ids
         .iter()
-        .map(|x| ReadPropertyMultipleObject::new(x.clone(), property_ids.clone()))
+        .map(|x| ReadPropertyMultipleObject::new(x.clone(), &property_ids))
         .collect();
 
-    let request = ReadPropertyMultiple::new(items);
+    let request = ReadPropertyMultiple::new(&items);
     let result = bacnet.read_property_multiple(buf, request).await?;
 
     let mut items = vec![];
-    for obj in &result.objects_with_results {
-        let x = &obj.property_results;
-        let name = x[0].value.to_string();
-        let value = match x[1].value {
+    for obj in &result {
+        let obj = obj?;
+        let mut x = obj.property_results.into_iter();
+        let name = x.next().unwrap()?.value.to_string();
+        let value = match x.next().unwrap()?.value {
             PropertyValue::PropValue(ApplicationDataValue::Real(val)) => val,
             _ => unreachable!(),
         };
-        let units = match &x[2].value {
+        let units = match x.next().unwrap()?.value {
             PropertyValue::PropValue(ApplicationDataValue::Enumerated(Enumerated::Units(u))) => {
                 u.clone()
             }
             _ => unreachable!(),
         };
-        let status = match &x[3].value {
-            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::Status(x))) => {
-                x.clone()
-            }
+        let status = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::BitString(BitString::Status(x))) => x,
             _ => unreachable!(),
         };
 
@@ -252,29 +252,30 @@ async fn get_multi_analog(
     return Ok(items);
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(not(feature = "alloc"))]
 async fn get_multi_trend_log(
     bacnet: &mut Bacnet<MySocket>,
     buf: &mut [u8],
     object_ids: &[ObjectId],
 ) -> Result<Vec<TrendLogValue>, BacnetError<MySocket>> {
-    let property_ids = vec![PropertyId::PropObjectName, PropertyId::PropRecordCount];
+    let property_ids = [PropertyId::PropObjectName, PropertyId::PropRecordCount];
 
     let items: Vec<ReadPropertyMultipleObject> = object_ids
         .iter()
-        .map(|x| ReadPropertyMultipleObject::new(x.clone(), property_ids.clone()))
+        .map(|x| ReadPropertyMultipleObject::new(x.clone(), &property_ids))
         .collect();
 
-    let request = ReadPropertyMultiple::new(items);
+    let request = ReadPropertyMultiple::new(&items);
     let result = bacnet.read_property_multiple(buf, request).await?;
 
     let mut items = vec![];
 
-    for obj in &result.objects_with_results {
-        let x = &obj.property_results;
-        let name = x[0].value.to_string();
-        let record_count = match &x[1].value {
-            PropertyValue::PropValue(ApplicationDataValue::UnsignedInt(val)) => *val,
+    for obj in &result {
+        let obj = obj?;
+        let mut x = obj.property_results.into_iter();
+        let name = x.next().unwrap()?.value.to_string();
+        let record_count = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::UnsignedInt(val)) => val,
             _ => unreachable!(),
         };
 
@@ -288,42 +289,41 @@ async fn get_multi_trend_log(
     return Ok(items);
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(not(feature = "alloc"))]
 async fn get_multi_schedule(
     bacnet: &mut Bacnet<MySocket>,
     buf: &mut [u8],
     object_id: &ObjectId,
 ) -> Result<Vec<ScheduleValue>, BacnetError<MySocket>> {
-    let property_ids = vec![PropertyId::PropObjectName, PropertyId::PropWeeklySchedule];
-    let objects = vec![ReadPropertyMultipleObject::new(
+    let property_ids = [PropertyId::PropObjectName, PropertyId::PropWeeklySchedule];
+    let objects = [ReadPropertyMultipleObject::new(
         object_id.clone(),
-        property_ids,
+        &property_ids,
     )];
-    let request = ReadPropertyMultiple::new(objects);
+    let request = ReadPropertyMultiple::new(&objects);
     let result = bacnet.read_property_multiple(buf, request).await?;
 
     let mut items = vec![];
 
-    for obj in &result.objects_with_results {
-        let x = &obj.property_results;
-        let name = x[0].value.to_string();
-        let value = match &x[1].value {
-            PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(schedule)) => {
-                schedule.clone()
-            }
+    for obj in &result {
+        let obj = obj?;
+        let mut x = obj.property_results.into_iter();
+        let name = x.next().unwrap()?.value.to_string();
+        let value = match x.next().unwrap()?.value {
+            PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(schedule)) => schedule,
             _ => panic!("expected weekly schedule"),
         };
 
         items.push(ScheduleValue {
             id: obj.object_id,
             name,
-            monday: value.monday,
-            tuesday: value.tuesday,
-            wednesday: value.wednesday,
-            thursday: value.thursday,
-            friday: value.friday,
-            saturday: value.saturday,
-            sunday: value.sunday,
+            monday: value.monday.into_iter().map(|x| x.unwrap()).collect(),
+            tuesday: value.tuesday.into_iter().map(|x| x.unwrap()).collect(),
+            wednesday: value.wednesday.into_iter().map(|x| x.unwrap()).collect(),
+            thursday: value.thursday.into_iter().map(|x| x.unwrap()).collect(),
+            friday: value.friday.into_iter().map(|x| x.unwrap()).collect(),
+            saturday: value.saturday.into_iter().map(|x| x.unwrap()).collect(),
+            sunday: value.sunday.into_iter().map(|x| x.unwrap()).collect(),
         });
     }
 

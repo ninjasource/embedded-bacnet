@@ -1,4 +1,14 @@
 use crate::{
+    application_protocol::{
+        application_pdu::{ApduType, ApplicationPdu, MaxAdpu, MaxSegments, PduFlags},
+        services::{
+            change_of_value::SubscribeCov,
+            read_property::{ReadProperty, ReadPropertyAck},
+            read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleAck},
+            read_range::{ReadRange, ReadRangeAck},
+            write_property::WriteProperty,
+        },
+    },
     common::{
         error::{Error, Unimplemented},
         helper::decode_unsigned,
@@ -7,17 +17,6 @@ use crate::{
         tag::{ApplicationTagNumber, Tag, TagNumber},
     },
     network_protocol::{data_link::DataLink, network_pdu::NetworkMessage},
-};
-
-use super::{
-    application_pdu::{ApduType, ApplicationPdu, MaxAdpu, MaxSegments, PduFlags},
-    services::{
-        change_of_value::SubscribeCov,
-        read_property::{ReadProperty, ReadPropertyAck},
-        read_property_multiple::{ReadPropertyMultiple, ReadPropertyMultipleAck},
-        read_range::{ReadRange, ReadRangeAck},
-        write_property::WriteProperty,
-    },
 };
 
 #[derive(Debug, Clone)]
@@ -80,6 +79,7 @@ impl<'a> ConfirmedRequest<'a> {
     }
 
     // the control byte has already been read
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let byte0 = reader.read_byte(buf)?;
         let max_segments: MaxSegments = (byte0 & 0xF0).into();
@@ -344,6 +344,7 @@ impl<'a> ComplexAck<'a> {
         }
     }
 
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let invoke_id = reader.read_byte(buf)?;
         let choice: ConfirmedServiceChoice = reader.read_byte(buf)?.try_into().map_err(|e| {
@@ -365,6 +366,7 @@ pub enum ComplexAckService<'a> {
 }
 
 impl<'a> ComplexAckService<'a> {
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(
         choice: ConfirmedServiceChoice,
         reader: &mut Reader,
@@ -376,8 +378,7 @@ impl<'a> ComplexAckService<'a> {
                 Ok(ComplexAckService::ReadProperty(service))
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
-                let buf = &buf[reader.index..reader.end];
-                let service = ReadPropertyMultipleAck::new_from_buf(buf);
+                let service = ReadPropertyMultipleAck::decode(reader, buf)?;
                 Ok(ComplexAckService::ReadPropertyMultiple(service))
             }
             ConfirmedServiceChoice::ReadRange => {
@@ -403,6 +404,7 @@ pub enum ConfirmedRequestService<'a> {
 }
 
 impl<'a> ConfirmedRequestService<'a> {
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(
         choice: ConfirmedServiceChoice,
         reader: &mut Reader,
@@ -414,7 +416,7 @@ impl<'a> ConfirmedRequestService<'a> {
                 Ok(ConfirmedRequestService::ReadProperty(service))
             }
             ConfirmedServiceChoice::ReadPropMultiple => {
-                let service = ReadPropertyMultiple::decode(reader, buf);
+                let service = ReadPropertyMultiple::decode(reader, buf)?;
                 Ok(ConfirmedRequestService::ReadPropertyMultiple(service))
             }
             ConfirmedServiceChoice::ReadRange => {

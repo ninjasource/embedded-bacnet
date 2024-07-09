@@ -1,4 +1,4 @@
-use super::error::Error;
+use crate::common::error::Error;
 
 pub const BACNET_MAX_OBJECT: u32 = 0x3FF;
 pub const BACNET_INSTANCE_BITS: u32 = 22;

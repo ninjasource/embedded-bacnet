@@ -13,6 +13,12 @@ use crate::common::{
     tag::{ApplicationTagNumber, Tag, TagNumber},
 };
 
+#[cfg(feature = "alloc")]
+use {
+    crate::common::spooky::Phantom,
+    alloc::{string::String, vec::Vec},
+};
+
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationDataValue<'a> {
@@ -151,11 +157,22 @@ impl Time {
     }
 }
 
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CharacterString<'a> {
     pub inner: &'a str,
+}
+
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct CharacterString<'a> {
+    pub inner: String,
+    #[cfg_attr(feature = "serde", serde(skip_serializing))]
+    _phantom: &'a Phantom,
 }
 
 impl<'a> Display for ApplicationDataValue<'a> {
@@ -184,11 +201,39 @@ impl<'a> defmt::Format for BitString<'a> {
     }
 }
 
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct CustomBitStream<'a> {
     pub unused_bits: u8,
     pub bits: &'a [u8],
+}
+
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct CustomBitStream<'a> {
+    pub unused_bits: u8,
+    pub bits: Vec<u8>,
+    _phantom: &'a Phantom,
+}
+
+impl<'a> CustomBitStream<'a> {
+    #[cfg(not(feature = "alloc"))]
+    pub fn new(unused_bits: u8, bits: &'a [u8]) -> Self {
+        Self { unused_bits, bits }
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn new(unused_bits: u8, bits: &'_ [u8]) -> Self {
+        use crate::common::spooky::PHANTOM;
+
+        Self {
+            unused_bits,
+            bits: bits.into(),
+            _phantom: &PHANTOM,
+        }
+    }
 }
 
 impl<'a> BitString<'a> {
@@ -211,7 +256,7 @@ impl<'a> BitString<'a> {
                 )
                 .encode(writer);
                 writer.push(0); // no unused bits
-                writer.extend_from_slice(x.bits);
+                writer.extend_from_slice(&x.bits);
             }
         }
     }
@@ -232,11 +277,12 @@ impl<'a> BitString<'a> {
                 Tag::new(TagNumber::ContextSpecific(tag_num), x.bits.len() as u32 + 1)
                     .encode(writer);
                 writer.push(0); // no unused bits
-                writer.extend_from_slice(x.bits);
+                writer.extend_from_slice(&x.bits);
             }
         }
     }
 
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(
         property_id: &PropertyId,
         len: u32,
@@ -256,13 +302,29 @@ impl<'a> BitString<'a> {
             _ => {
                 let len = (len - 1) as usize; // we have already read a byte
                 let bits = reader.read_slice(len, buf)?;
-                Ok(Self::Custom(CustomBitStream { unused_bits, bits }))
+                Ok(Self::Custom(CustomBitStream::new(unused_bits, bits)))
             }
         }
     }
 }
 
 impl<'a> CharacterString<'a> {
+    #[cfg(not(feature = "alloc"))]
+    pub fn new(inner: &'a str) -> Self {
+        Self { inner }
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn new(inner: &str) -> Self {
+        use crate::common::spooky::PHANTOM;
+
+        Self {
+            inner: inner.into(),
+            _phantom: &PHANTOM,
+        }
+    }
+
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(len: u32, reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let character_set = reader.read_byte(buf)?;
         if character_set != 0 {
@@ -273,11 +335,12 @@ impl<'a> CharacterString<'a> {
             Error::InvalidValue("CharacterString bytes are not a valid utf8 string")
         })?;
 
-        Ok(CharacterString { inner })
+        Ok(CharacterString::new(inner))
     }
 }
 
 impl<'a> ApplicationDataValueWrite<'a> {
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(
         object_id: &ObjectId,
         property_id: &PropertyId,
@@ -407,6 +470,7 @@ impl<'a> ApplicationDataValue<'a> {
         };
     }
 
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(
         tag: &Tag,
         object_id: &ObjectId,

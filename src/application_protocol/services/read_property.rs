@@ -19,6 +19,11 @@ use crate::{
     network_protocol::data_link::DataLink,
 };
 
+#[cfg(feature = "alloc")]
+use {
+    crate::common::spooky::Phantom, alloc::vec::Vec, bacnet_macros::remove_lifetimes_from_fn_args,
+};
+
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ReadPropertyValue<'a> {
@@ -26,11 +31,20 @@ pub enum ReadPropertyValue<'a> {
     ApplicationDataValue(ApplicationDataValue<'a>),
 }
 
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectIdList<'a> {
     object_ids: &'a [ObjectId],
     buf: &'a [u8],
+}
+
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct ObjectIdList<'a> {
+    pub object_ids: Vec<ObjectId>,
+    _phantom: &'a Phantom,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +55,7 @@ pub struct ObjectIdIter<'a> {
 }
 
 impl<'a> ObjectIdList<'a> {
+    #[cfg(not(feature = "alloc"))]
     pub fn new(object_ids: &'a [ObjectId]) -> Self {
         Self {
             object_ids,
@@ -48,6 +63,7 @@ impl<'a> ObjectIdList<'a> {
         }
     }
 
+    #[cfg(not(feature = "alloc"))]
     pub fn new_from_buf(buf: &'a [u8]) -> Self {
         Self {
             object_ids: &[],
@@ -55,8 +71,18 @@ impl<'a> ObjectIdList<'a> {
         }
     }
 
+    #[cfg(feature = "alloc")]
+    pub fn new(object_ids: Vec<ObjectId>) -> Self {
+        use crate::common::spooky::PHANTOM;
+
+        Self {
+            object_ids,
+            _phantom: &PHANTOM,
+        }
+    }
+
     pub fn encode(&self, writer: &mut Writer) {
-        for object_id in self.object_ids {
+        for object_id in self.object_ids.iter() {
             Tag::new(
                 TagNumber::Application(ApplicationTagNumber::ObjectId),
                 ObjectId::LEN,
@@ -64,6 +90,18 @@ impl<'a> ObjectIdList<'a> {
             .encode(writer);
             object_id.encode(writer);
         }
+    }
+
+    #[cfg(not(feature = "alloc"))]
+    pub fn decode(_reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        Ok(Self::new_from_buf(buf))
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn decode(_reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let decoder = ObjectIdIter::new(buf);
+        let object_ids: Result<Vec<ObjectId>, Error> = decoder.into_iter().collect();
+        Ok(Self::new(object_ids?))
     }
 }
 
@@ -87,6 +125,7 @@ impl<'a> ObjectIdIter<'a> {
     }
 }
 
+#[cfg(not(feature = "alloc"))]
 impl<'a> IntoIterator for &'_ ObjectIdList<'a> {
     type Item = Result<ObjectId, Error>;
     type IntoIter = ObjectIdIter<'a>;
@@ -147,6 +186,7 @@ impl<'a> ReadPropertyAck<'a> {
         encode_closing_tag(writer, 3);
     }
 
+    #[cfg_attr(feature = "alloc", remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let object_id =
             decode_context_object_id(reader, buf, 0, "ReadPropertyAck decode object_id")?;
@@ -154,15 +194,12 @@ impl<'a> ReadPropertyAck<'a> {
             decode_context_property_id(reader, buf, 1, "ReadPropertyAck decode property_id")?;
 
         let buf = get_tagged_body_for_tag(reader, buf, 3, "ReadPropertyAck decode data values")?;
-        let mut reader = Reader {
-            index: 0,
-            end: buf.len(),
-        };
+        let mut reader = Reader::new_with_len(buf.len());
 
         match property_id {
             PropertyId::PropObjectList => {
-                let property_value =
-                    ReadPropertyValue::ObjectIdList(ObjectIdList::new_from_buf(buf));
+                let object_ids = ObjectIdList::decode(&mut reader, buf)?;
+                let property_value = ReadPropertyValue::ObjectIdList(object_ids);
 
                 Ok(Self {
                     object_id,

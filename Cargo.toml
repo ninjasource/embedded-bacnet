@@ -9,6 +9,7 @@ description = "A bacnet library for embedded systems (no_std)"
 keywords = ["bacnet", "embedded", "no_std"]
 categories = ["embedded", "no-std", "network-programming"]
 readme = "README.md"
+resolver = "2"
 
 [dependencies]
 log = { version = "0.4.19", default-features = false }
@@ -17,6 +18,7 @@ serde = { version = "1.0", default-features = false, features = [
     "derive",
 ], optional = true }
 maybe-async = { version = "0.2.10", default-features = false }
+bacnet-macros = { path = "./bacnet-macros" }
 
 # TODO: add this when it reaches 1.0
 # derive_more = { version = "^1.0.0-beta.6", default-features = false, features = [ "try_from"] }
@@ -28,17 +30,13 @@ clap = { version = "4.5.4", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["rt-multi-thread", "net", "macros"] }
 
 [features]
-#default = ["alloc"]
-default = []
+default = ["alloc"]
+#default = []
 defmt = ["dep:defmt"]
 serde = ["dep:serde"]
 is_sync = ["maybe-async/is_sync"]
-alloc = []
+alloc = ["serde?/alloc", "defmt?/alloc"]
 
 [[example]]
 name = "read_property_multiple_blocking"
-required-features = ["is_sync"]
-
-[[example]]
-name = "update_schedule"
-required-features = ["alloc"]
+required-features = ["alloc", "is_sync"]

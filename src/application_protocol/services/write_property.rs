@@ -49,6 +49,7 @@ impl<'a> WriteProperty<'a> {
         }
     }
 
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let object_id = decode_context_object_id(
             reader,

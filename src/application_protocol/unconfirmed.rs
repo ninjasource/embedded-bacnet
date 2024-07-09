@@ -1,13 +1,14 @@
-use crate::common::{
-    error::{Error, Unimplemented},
-    io::{Reader, Writer},
-};
-
-use super::{
-    application_pdu::ApduType,
-    services::{
-        change_of_value::CovNotification, i_am::IAm, time_synchronization::TimeSynchronization,
-        who_is::WhoIs,
+use crate::{
+    application_protocol::{
+        application_pdu::ApduType,
+        services::{
+            change_of_value::CovNotification, i_am::IAm, time_synchronization::TimeSynchronization,
+            who_is::WhoIs,
+        },
+    },
+    common::{
+        error::{Error, Unimplemented},
+        io::{Reader, Writer},
     },
 };
 
@@ -31,6 +32,8 @@ impl<'a> UnconfirmedRequest<'a> {
             Self::TimeSynchronization(payload) => payload.encode(writer),
         }
     }
+
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let choice: UnconfirmedServiceChoice = reader
             .read_byte(buf)?

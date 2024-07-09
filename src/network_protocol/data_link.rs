@@ -4,9 +4,8 @@ use crate::{
         error::Error,
         io::{Reader, Writer},
     },
+    network_protocol::network_pdu::{MessagePriority, NetworkMessage, NetworkPdu},
 };
-
-use super::network_pdu::{MessagePriority, NetworkMessage, NetworkPdu};
 
 // Bacnet Virtual Link Control
 #[derive(Debug, Clone)]
@@ -92,6 +91,7 @@ impl<'a> DataLink<'a> {
         writer.buf[2..4].copy_from_slice(&src);
     }
 
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let bvll_type = reader.read_byte(buf)?;
         if bvll_type != BVLL_TYPE_BACNET_IP {

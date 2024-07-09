@@ -22,6 +22,13 @@ use crate::{
     network_protocol::data_link::DataLink,
 };
 
+#[cfg(feature = "alloc")]
+use {
+    crate::common::spooky::Phantom,
+    alloc::{string::String, vec::Vec},
+};
+
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultipleAck<'a> {
@@ -29,6 +36,14 @@ pub struct ReadPropertyMultipleAck<'a> {
     buf: &'a [u8],
 }
 
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct ReadPropertyMultipleAck<'a> {
+    pub objects_with_results: Vec<ObjectWithResults<'a>>,
+}
+
+#[cfg(not(feature = "alloc"))]
 impl<'a> IntoIterator for &'_ ReadPropertyMultipleAck<'a> {
     type Item = Result<ObjectWithResults<'a>, Error>;
 
@@ -56,6 +71,7 @@ impl<'a> TryFrom<DataLink<'a>> for ReadPropertyMultipleAck<'a> {
     }
 }
 
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ObjectWithResults<'a> {
@@ -63,7 +79,24 @@ pub struct ObjectWithResults<'a> {
     pub property_results: PropertyResultList<'a>,
 }
 
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct ObjectWithResults<'a> {
+    pub object_id: ObjectId,
+    pub property_results: Vec<PropertyResult<'a>>,
+}
+
 impl<'a> ObjectWithResults<'a> {
+    #[cfg(feature = "alloc")]
+    pub fn new(object_id: ObjectId, property_results: Vec<PropertyResult<'a>>) -> Self {
+        Self {
+            object_id,
+            property_results,
+        }
+    }
+
+    #[cfg(not(feature = "alloc"))]
     pub fn encode(&self, writer: &mut Writer) {
         encode_context_object_id(writer, 0, &self.object_id);
         encode_opening_tag(writer, 1);
@@ -71,6 +104,17 @@ impl<'a> ObjectWithResults<'a> {
         encode_closing_tag(writer, 1);
     }
 
+    #[cfg(feature = "alloc")]
+    pub fn encode(&self, writer: &mut Writer) {
+        encode_context_object_id(writer, 0, &self.object_id);
+        encode_opening_tag(writer, 1);
+        for item in self.property_results.iter() {
+            item.encode(writer);
+        }
+        encode_closing_tag(writer, 1);
+    }
+
+    #[cfg(not(feature = "alloc"))]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let object_id =
             decode_context_object_id(reader, buf, 0, "ObjectWithResults decode object_id")?;
@@ -87,6 +131,23 @@ impl<'a> ObjectWithResults<'a> {
             object_id,
             property_results,
         })
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let object_id =
+            decode_context_object_id(reader, buf, 0, "ObjectWithResults decode object_id")?;
+        let inner_buf =
+            get_tagged_body_for_tag(reader, buf, 1, "ObjectWithResults decode list of results")?;
+        let mut inner_reader = Reader::new_with_len(inner_buf.len());
+
+        let mut property_results = Vec::new();
+        while !inner_reader.eof() {
+            let property_result = PropertyResult::decode(&mut inner_reader, inner_buf, &object_id)?;
+            property_results.push(property_result);
+        }
+
+        Ok(Self::new(object_id, property_results))
     }
 }
 
@@ -191,12 +252,24 @@ pub struct PropertyResult<'a> {
 
 impl<'a> PropertyResult<'a> {
     const PROPERTY_ID_TAG: u8 = 2;
+    const PROPERTY_VALUE_TAG: u8 = 4;
+    const PROPERTY_VALUE_ERROR_TAG: u8 = 5;
 
     pub fn encode(&self, writer: &mut Writer) {
         encode_context_unsigned(writer, Self::PROPERTY_ID_TAG, self.id as u32);
-        self.value.encode(writer);
+        match &self.value {
+            PropertyValue::PropValue(val) => {
+                encode_opening_tag(writer, Self::PROPERTY_VALUE_TAG);
+                val.encode(writer);
+                encode_closing_tag(writer, Self::PROPERTY_VALUE_TAG);
+            }
+            PropertyValue::PropError(_) => todo!(),
+            PropertyValue::PropObjectName(_) => todo!(),
+            PropertyValue::PropDescription(_) => todo!(),
+        }
     }
 
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8], object_id: &ObjectId) -> Result<Self, Error> {
         let property_id = decode_context_property_id(
             reader,
@@ -205,15 +278,69 @@ impl<'a> PropertyResult<'a> {
             "PropertyResultList next property_id",
         )?;
 
-        let value = PropertyValue::decode(reader, buf, object_id, &property_id)?;
+        let (inner_buf, tag_number) = get_tagged_body(reader, buf)?;
+        let mut inner_reader = Reader {
+            index: 0,
+            end: inner_buf.len(),
+        };
+
+        let property_value = Self::decode_property_value(
+            &mut inner_reader,
+            inner_buf,
+            tag_number,
+            &property_id,
+            object_id,
+        )?;
 
         Ok(PropertyResult {
             id: property_id,
-            value,
+            value: property_value,
         })
+    }
+
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
+    fn decode_property_value(
+        reader: &mut Reader,
+        buf: &'a [u8],
+        tag_number: u8,
+        property_id: &PropertyId,
+        object_id: &ObjectId,
+    ) -> Result<PropertyValue<'a>, Error> {
+        if tag_number == Self::PROPERTY_VALUE_TAG {
+            match property_id {
+                PropertyId::PropEventTimeStamps => {
+                    // ignore for now
+                    Ok(PropertyValue::PropValue(ApplicationDataValue::Boolean(
+                        false,
+                    )))
+                }
+                PropertyId::PropWeeklySchedule => {
+                    let weekly_schedule = WeeklySchedule::decode(reader, buf)?;
+                    Ok(PropertyValue::PropValue(
+                        ApplicationDataValue::WeeklySchedule(weekly_schedule),
+                    ))
+                }
+                property_id => {
+                    let tag = Tag::decode(reader, buf)?;
+                    let value =
+                        ApplicationDataValue::decode(&tag, object_id, property_id, reader, buf)?;
+                    Ok(PropertyValue::PropValue(value))
+                }
+            }
+        } else if tag_number == Self::PROPERTY_VALUE_ERROR_TAG {
+            // property read error
+            let error = read_error(reader, buf)?;
+            Ok(PropertyValue::PropError(error))
+        } else {
+            Err(Error::TagNotSupported((
+                "PropertyResultList next",
+                TagNumber::ContextSpecificOpening(tag_number),
+            )))
+        }
     }
 }
 
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PropertyValue<'a> {
@@ -224,76 +351,15 @@ pub enum PropertyValue<'a> {
     PropObjectName(&'a str),
 }
 
-impl<'a> PropertyValue<'a> {
-    const PROPERTY_VALUE_TAG: u8 = 4;
-    const PROPERTY_ERROR_TAG: u8 = 5;
-
-    pub fn encode(&self, writer: &mut Writer) {
-        match self {
-            Self::PropValue(val) => {
-                encode_opening_tag(writer, Self::PROPERTY_VALUE_TAG);
-                val.encode(writer);
-                encode_closing_tag(writer, Self::PROPERTY_VALUE_TAG);
-            }
-            Self::PropError(_) => todo!(),
-            Self::PropObjectName(_) => todo!(),
-            Self::PropDescription(_) => todo!(),
-        }
-    }
-
-    pub fn decode(
-        reader: &mut Reader,
-        buf: &'a [u8],
-        object_id: &ObjectId,
-        property_id: &PropertyId,
-    ) -> Result<Self, Error> {
-        let (buf, tag_number) = get_tagged_body(reader, buf)?;
-        let mut reader = Reader {
-            index: 0,
-            end: buf.len(),
-        };
-
-        let property_value = match tag_number {
-            Self::PROPERTY_VALUE_TAG => {
-                match &property_id {
-                    PropertyId::PropEventTimeStamps => {
-                        // ignore for now
-                        PropertyValue::PropValue(ApplicationDataValue::Boolean(false))
-                    }
-                    PropertyId::PropWeeklySchedule => {
-                        let weekly_schedule = WeeklySchedule::decode(&mut reader, buf)?;
-                        PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(
-                            weekly_schedule,
-                        ))
-                    }
-                    property_id => {
-                        let tag = Tag::decode(&mut reader, buf)?;
-                        let value = ApplicationDataValue::decode(
-                            &tag,
-                            object_id,
-                            property_id,
-                            &mut reader,
-                            buf,
-                        )?;
-                        PropertyValue::PropValue(value)
-                    }
-                }
-            }
-            Self::PROPERTY_ERROR_TAG => {
-                // property read error
-                let error = read_error(&mut reader, buf)?;
-                PropertyValue::PropError(error)
-            }
-            x => {
-                return Err(Error::TagNotSupported((
-                    "PropertyResultList next",
-                    TagNumber::ContextSpecificOpening(x),
-                )));
-            }
-        };
-
-        Ok(property_value)
-    }
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum PropertyValue<'a> {
+    PropValue(ApplicationDataValue<'a>),
+    PropError(PropertyAccessError),
+    // TODO: figure out if we need these
+    PropDescription(String),
+    PropObjectName(String),
 }
 
 #[derive(Debug, Clone)]
@@ -313,6 +379,7 @@ impl<'a> Display for PropertyValue<'a> {
 }
 
 impl<'a> ReadPropertyMultipleAck<'a> {
+    #[cfg(not(feature = "alloc"))]
     pub fn new(objects_with_results: &'a [ObjectWithResults<'a>]) -> Self {
         Self {
             objects_with_results,
@@ -320,6 +387,7 @@ impl<'a> ReadPropertyMultipleAck<'a> {
         }
     }
 
+    #[cfg(not(feature = "alloc"))]
     pub fn new_from_buf(buf: &'a [u8]) -> Self {
         Self {
             buf,
@@ -327,11 +395,39 @@ impl<'a> ReadPropertyMultipleAck<'a> {
         }
     }
 
+    #[cfg(feature = "alloc")]
+    pub fn new(objects_with_results: Vec<ObjectWithResults<'a>>) -> Self {
+        Self {
+            objects_with_results,
+        }
+    }
+
     pub fn encode(&self, writer: &mut Writer) {
         writer.push(ConfirmedServiceChoice::ReadPropMultiple as u8);
-        for item in self.objects_with_results {
+        for item in self.objects_with_results.iter() {
             item.encode(writer);
         }
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let mut objects_with_results = Vec::new();
+
+        while !reader.eof() {
+            let object_with_results = ObjectWithResults::decode(reader, buf)?;
+            objects_with_results.push(object_with_results);
+        }
+
+        Ok(Self::new(objects_with_results))
+    }
+
+    #[cfg(not(feature = "alloc"))]
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let buf = &buf[reader.index..reader.end];
+        Ok(Self {
+            buf,
+            objects_with_results: &[],
+        })
     }
 }
 
@@ -353,12 +449,21 @@ impl<'a> Iterator for ObjectWithResultsIter<'a> {
     }
 }
 
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultiple<'a> {
     _array_index: u32, // use BACNET_ARRAY_ALL for all
     objects: &'a [ReadPropertyMultipleObject<'a>],
     buf: &'a [u8],
+}
+
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct ReadPropertyMultiple<'a> {
+    _array_index: u32, // use BACNET_ARRAY_ALL for all
+    pub objects: Vec<ReadPropertyMultipleObject<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -370,7 +475,6 @@ pub struct PropertyIdList<'a> {
 
 impl<'a> IntoIterator for &'_ PropertyIdList<'a> {
     type Item = Result<PropertyId, Error>;
-
     type IntoIter = PropertyIdIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -431,6 +535,7 @@ impl<'a> PropertyIdList<'a> {
     }
 }
 
+#[cfg(not(feature = "alloc"))]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReadPropertyMultipleObject<'a> {
@@ -438,7 +543,17 @@ pub struct ReadPropertyMultipleObject<'a> {
     pub property_ids: PropertyIdList<'a>,
 }
 
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct ReadPropertyMultipleObject<'a> {
+    pub object_id: ObjectId, // e.g ObjectDevice:20088
+    pub property_ids: Vec<PropertyId>,
+    pub _phantom: &'a Phantom,
+}
+
 impl<'a> ReadPropertyMultipleObject<'a> {
+    #[cfg(not(feature = "alloc"))]
     pub fn new(object_id: ObjectId, property_ids: &'a [PropertyId]) -> Self {
         let property_ids = PropertyIdList::new(property_ids);
         Self {
@@ -447,6 +562,38 @@ impl<'a> ReadPropertyMultipleObject<'a> {
         }
     }
 
+    #[cfg(feature = "alloc")]
+    pub fn new(object_id: ObjectId, property_ids: Vec<PropertyId>) -> Self {
+        use crate::common::spooky::PHANTOM;
+
+        Self {
+            object_id,
+            property_ids,
+            _phantom: &PHANTOM,
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn encode(&self, writer: &mut Writer) {
+        // object_id
+        encode_context_object_id(writer, 0, &self.object_id);
+
+        encode_opening_tag(writer, 1);
+
+        for property_id in self.property_ids.iter() {
+            // property_id
+            encode_context_enumerated(writer, 0, property_id);
+
+            // array_index
+            //if self.array_index != BACNET_ARRAY_ALL {
+            //    encode_context_unsigned(writer, 1, self.array_index);
+            //}
+        }
+
+        encode_closing_tag(writer, 1);
+    }
+
+    #[cfg(not(feature = "alloc"))]
     pub fn encode(&self, writer: &mut Writer) {
         // object_id
         encode_context_object_id(writer, 0, &self.object_id);
@@ -466,6 +613,7 @@ impl<'a> ReadPropertyMultipleObject<'a> {
         encode_closing_tag(writer, 1);
     }
 
+    #[cfg(not(feature = "alloc"))]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let object_id =
             decode_context_object_id(reader, buf, 0, "ReadPropertyMultiple next object_id")?;
@@ -482,9 +630,33 @@ impl<'a> ReadPropertyMultipleObject<'a> {
             property_ids,
         })
     }
+
+    #[cfg(feature = "alloc")]
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let object_id =
+            decode_context_object_id(reader, buf, 0, "ReadPropertyMultiple next object_id")?;
+
+        let body_buf =
+            get_tagged_body_for_tag(reader, buf, 1, "ReadPropertyMultiple next list of results")?;
+        let mut property_ids = Vec::new();
+        let mut inner_reader = Reader::new_with_len(buf.len());
+
+        while !inner_reader.eof() {
+            let property_id = decode_context_property_id(
+                &mut inner_reader,
+                body_buf,
+                0,
+                "ReadPropertyMultipleObject decode property_id",
+            )?;
+            property_ids.push(property_id);
+        }
+
+        Ok(ReadPropertyMultipleObject::new(object_id, property_ids))
+    }
 }
 
 impl<'a> ReadPropertyMultiple<'a> {
+    #[cfg(not(feature = "alloc"))]
     pub fn new(objects: &'a [ReadPropertyMultipleObject]) -> Self {
         Self {
             objects,
@@ -493,6 +665,7 @@ impl<'a> ReadPropertyMultiple<'a> {
         }
     }
 
+    #[cfg(not(feature = "alloc"))]
     pub fn new_from_buf(buf: &'a [u8]) -> Self {
         Self {
             objects: &[],
@@ -501,22 +674,47 @@ impl<'a> ReadPropertyMultiple<'a> {
         }
     }
 
+    #[cfg(feature = "alloc")]
+    pub fn new(objects: Vec<ReadPropertyMultipleObject<'a>>) -> Self {
+        Self {
+            objects,
+            _array_index: BACNET_ARRAY_ALL,
+        }
+    }
+
     pub fn encode(&self, writer: &mut Writer) {
-        for object in self.objects {
+        for object in self.objects.iter() {
             object.encode(writer)
         }
     }
 
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Self {
+    #[cfg(not(feature = "alloc"))]
+    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let buf = &buf[reader.index..reader.end];
-        Self {
+        Ok(Self {
             buf,
             _array_index: BACNET_ARRAY_ALL,
             objects: &[],
+        })
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let inner_buf = &buf[reader.index..reader.end];
+        let mut inner_reader = Reader::new_with_len(inner_buf.len());
+        let mut objects = Vec::new();
+
+        while !inner_reader.eof() {
+            let object_with_property_ids =
+                ReadPropertyMultipleObject::decode(&mut inner_reader, inner_buf)?;
+            objects.push(object_with_property_ids);
         }
+
+        Ok(Self::new(objects))
     }
 }
 
+#[cfg(not(feature = "alloc"))]
 impl<'a> IntoIterator for &'_ ReadPropertyMultiple<'a> {
     type Item = Result<ReadPropertyMultipleObject<'a>, Error>;
 

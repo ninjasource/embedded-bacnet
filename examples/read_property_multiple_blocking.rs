@@ -1,4 +1,4 @@
-// cargo run --example read_property_multiple_blocking --features="is_sync" -- --addr "0.0.0.0:47808"
+// cargo run --example read_property_multiple_blocking --features="is_sync,alloc" -- --addr "192.168.1.249:47808"
 
 use clap::{command, Parser};
 use embedded_bacnet::{
@@ -53,6 +53,8 @@ impl NetworkIo for MySocket {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg(feature = "is_sync")]
 fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
     simple_logger::init().unwrap();
@@ -61,23 +63,20 @@ fn main() -> Result<(), BacnetError<MySocket>> {
     let mut buf = vec![0; 1500];
 
     // fetch
-    let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);
-    let property_ids = [
-        PropertyId::PropObjectName,
-        PropertyId::PropPresentValue,
-        PropertyId::PropUnits,
-        PropertyId::PropStatusFlags,
-    ];
-    let objects = [ReadPropertyMultipleObject::new(object_id, &property_ids)];
-    let request = ReadPropertyMultiple::new(&objects);
+    // fetch and print
+    let objects = vec![ReadPropertyMultipleObject::new(
+        ObjectId::new(ObjectType::ObjectAnalogInput, 1),
+        vec![
+            PropertyId::PropObjectName,
+            PropertyId::PropPresentValue,
+            PropertyId::PropUnits,
+            PropertyId::PropStatusFlags,
+        ],
+    )];
+    let request = ReadPropertyMultiple::new(objects);
     let result = bacnet.read_property_multiple(&mut buf, request)?;
 
     // print
-    for values in &result {
-        for x in &values?.property_results {
-            println!("{:?}", x?);
-        }
-    }
-
+    println!("{:?}", result);
     Ok(())
 }

@@ -204,6 +204,7 @@ impl<'a> NetworkPdu<'a> {
         is_network_layer_message | has_destination | has_source | expecting_reply | message_priority
     }
 
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         // ignore version
         let _version = reader.read_byte(buf)?;

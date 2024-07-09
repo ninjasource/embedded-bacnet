@@ -1,0 +1,12 @@
+[package]
+name = "bacnet-macros"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+[dependencies]
+syn = { version = "2", features = ["full", "fold"] }
+quote = { version = "1" }
+
+[lib]
+proc-macro = true

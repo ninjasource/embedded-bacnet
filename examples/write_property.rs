@@ -1,4 +1,5 @@
 // cargo run --example write_property -- --addr "192.168.1.249:47808"
+// cargo run --example write_property --no-default-features -- --addr "192.168.1.249:47808"
 
 use clap::{command, Parser};
 use common::MySocket;
@@ -42,7 +43,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
         ApplicationDataValueWrite::Enumerated(Enumerated::Binary(Binary::On)),
     );
     bacnet.write_property(&mut buf, request).await?;
-    println!("Write successful");
+    println!("Write ON to BinaryValue no. 3 successful");
 
     Ok(())
 }

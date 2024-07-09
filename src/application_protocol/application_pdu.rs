@@ -1,12 +1,13 @@
-use crate::common::{
-    error::{self, Error},
-    io::{Reader, Writer},
-};
-
-use super::{
-    confirmed::{ComplexAck, ConfirmedBacnetError, ConfirmedRequest, SegmentAck, SimpleAck},
-    segment::Segment,
-    unconfirmed::UnconfirmedRequest,
+use crate::{
+    application_protocol::{
+        confirmed::{ComplexAck, ConfirmedBacnetError, ConfirmedRequest, SegmentAck, SimpleAck},
+        segment::Segment,
+        unconfirmed::UnconfirmedRequest,
+    },
+    common::{
+        error::{self, Error},
+        io::{Reader, Writer},
+    },
 };
 
 // Application Layer Protocol Data Unit
@@ -134,6 +135,7 @@ impl<'a> ApplicationPdu<'a> {
         };
     }
 
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         let byte0 = reader.read_byte(buf)?;
         let pdu_type: ApduType = (byte0 >> 4).try_into()?;

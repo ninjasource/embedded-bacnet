@@ -1,7 +1,9 @@
 // cargo run --example update_schedule -- --addr "192.168.1.249:47808"
 
+#![allow(unused_imports)]
+
 use clap::{command, Parser};
-use common::{get_bacnet_socket, MySocket};
+use common::MySocket;
 use embedded_bacnet::{
     application_protocol::{
         primitives::data_value::{ApplicationDataValue, ApplicationDataValueWrite},
@@ -31,6 +33,10 @@ struct Args {
     addr: String,
 }
 
+#[cfg(not(feature = "alloc"))]
+fn main() {}
+
+#[cfg(feature = "alloc")]
 #[tokio::main]
 async fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
@@ -38,12 +44,12 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
     let mut buf = vec![0; 1500];
 
+    // get schedule
     let mut weekly_schedule = decode_weekly_schedule(&mut bacnet, &mut buf).await?;
     println!("Monday: {:?}", weekly_schedule.monday);
 
     // change the schedule
     weekly_schedule.monday[0].time.hour = 9;
-
     println!("{:?}", weekly_schedule);
 
     let request = WriteProperty::new(
@@ -60,22 +66,21 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     Ok(())
 }
 
-async fn decode_weekly_schedule(
+#[cfg(feature = "alloc")]
+async fn decode_weekly_schedule<'a>(
     bacnet: &mut Bacnet<MySocket>,
     buf: &mut [u8],
-) -> Result<WeeklySchedule<'static>, BacnetError<MySocket>> {
+) -> Result<WeeklySchedule<'a>, BacnetError<MySocket>> {
     // fetch
-    let object_id = ObjectId::new(ObjectType::ObjectSchedule, 1);
-    let property_ids = [PropertyId::PropObjectName, PropertyId::PropWeeklySchedule];
-    let rpm = ReadPropertyMultipleObject::new(object_id, &property_ids);
-    let objects = [rpm];
-    let request = ReadPropertyMultiple::new(&objects);
+    let rpm = ReadPropertyMultipleObject::new(
+        ObjectId::new(ObjectType::ObjectSchedule, 1),
+        vec![PropertyId::PropObjectName, PropertyId::PropWeeklySchedule],
+    );
+    let request = ReadPropertyMultiple::new(vec![rpm]);
     let result = bacnet.read_property_multiple(buf, request).await?;
 
-    for values in &result {
-        let values = values?;
-        for x in values.property_results.into_iter() {
-            let x = x?;
+    for values in result.objects_with_results {
+        for x in values.property_results {
             match x.value {
                 PropertyValue::PropValue(ApplicationDataValue::WeeklySchedule(weekly_schedule)) => {
                     return Ok(weekly_schedule)
@@ -87,5 +92,5 @@ async fn decode_weekly_schedule(
         }
     }
 
-    panic!("not found")
+    panic!("schedule not found")
 }

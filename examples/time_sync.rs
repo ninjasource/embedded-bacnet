@@ -1,5 +1,6 @@
 // cargo run --example time_sync -- --addr "192.168.1.249:47808" --device-id 79079
 
+#![allow(unused_imports)]
 use chrono::{Datelike, Local, Timelike};
 use clap::{command, Parser};
 use common::MySocket;
@@ -33,6 +34,10 @@ struct Args {
     device_id: u32,
 }
 
+#[cfg(not(feature = "alloc"))]
+fn main() {}
+
+#[cfg(feature = "alloc")]
 #[tokio::main]
 async fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
@@ -46,6 +51,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     Ok(())
 }
 
+#[cfg(feature = "alloc")]
 async fn set_time_to_now(
     bacnet: &mut Bacnet<MySocket>,
     buf: &mut [u8],
@@ -72,6 +78,7 @@ async fn set_time_to_now(
     Ok(())
 }
 
+#[cfg(feature = "alloc")]
 async fn request_date_time(
     device_id: u32,
     bacnet: &mut Bacnet<MySocket>,
@@ -79,17 +86,16 @@ async fn request_date_time(
 ) -> Result<(), BacnetError<MySocket>> {
     println!("Fetching date time from controller:");
 
-    let object_id = ObjectId::new(ObjectType::ObjectDevice, device_id);
-    let property_ids = [PropertyId::PropLocalDate, PropertyId::PropLocalTime];
-    let rpm = ReadPropertyMultipleObject::new(object_id, &property_ids);
-    let objects = [rpm];
-    let request = ReadPropertyMultiple::new(&objects);
+    let rpm = ReadPropertyMultipleObject::new(
+        ObjectId::new(ObjectType::ObjectDevice, device_id),
+        vec![PropertyId::PropLocalDate, PropertyId::PropLocalTime],
+    );
+    let request = ReadPropertyMultiple::new(vec![rpm]);
     let result = bacnet.read_property_multiple(buf, request).await?;
 
     // read values
-    for values in &result {
-        let values = values?;
-        for x in &values.property_results {
+    for values in result.objects_with_results {
+        for x in values.property_results {
             println!("{:?}", x);
         }
     }

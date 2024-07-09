@@ -1,4 +1,4 @@
-use super::error::Error;
+use crate::common::error::Error;
 
 pub struct Writer<'a> {
     pub buf: &'a mut [u8],
