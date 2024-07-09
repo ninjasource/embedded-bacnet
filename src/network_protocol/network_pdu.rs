@@ -268,9 +268,22 @@ impl<'a> NetworkPdu<'a> {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Addr {
-    pub ipv4: [u8; 4],
+pub struct Ipv4Addr {
+    pub addr: [u8; 4],
     pub port: u16,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum Addr {
+    Ipv4(Ipv4Addr),
+    Mac(u8),
+}
+
+impl Addr {
+    pub fn new_ipv4(addr: [u8; 4], port: u16) -> Self {
+        Self::Ipv4(Ipv4Addr { addr, port })
+    }
 }
 
 const IPV4_ADDR_LEN: u8 = 6;
@@ -305,9 +318,18 @@ impl NetworkAddress {
         writer.extend_from_slice(&self.net.to_be_bytes());
         match self.addr.as_ref() {
             Some(addr) => {
-                writer.push(IPV4_ADDR_LEN);
-                writer.extend_from_slice(&addr.ipv4);
-                writer.extend_from_slice(&addr.port.to_be_bytes());
+                match addr {
+                    Addr::Mac(mac) => {
+                        let encoded = &mac.to_be_bytes();
+                        writer.push(encoded.len() as u8);
+                        writer.extend_from_slice(encoded);
+                    },
+                    Addr::Ipv4(addr) => {
+                        writer.push(IPV4_ADDR_LEN);
+                        writer.extend_from_slice(&addr.addr);
+                        writer.extend_from_slice(&addr.port.to_be_bytes());
+                    }
+                }
             }
             None => writer.push(0),
         }
@@ -323,7 +345,7 @@ impl NetworkAddress {
 
                 Ok(Self {
                     net,
-                    addr: Some(Addr { ipv4, port }),
+                    addr: Some(Addr::Ipv4(Ipv4Addr { port, addr: ipv4 })),
                 })
             }
             0 => Ok(Self { net, addr: None }),
