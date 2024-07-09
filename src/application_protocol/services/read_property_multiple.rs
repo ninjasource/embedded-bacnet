@@ -639,7 +639,7 @@ impl<'a> ReadPropertyMultipleObject<'a> {
         let body_buf =
             get_tagged_body_for_tag(reader, buf, 1, "ReadPropertyMultiple next list of results")?;
         let mut property_ids = Vec::new();
-        let mut inner_reader = Reader::new_with_len(buf.len());
+        let mut inner_reader = Reader::new_with_len(body_buf.len());
 
         while !inner_reader.eof() {
             let property_id = decode_context_property_id(
