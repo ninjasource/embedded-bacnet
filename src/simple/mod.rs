@@ -103,12 +103,8 @@ where
     }
 
     #[maybe_async()]
-    pub async fn who_is(
-        &mut self,
-        buf: &mut [u8],
-        request: WhoIs,
-    ) -> Result<Option<IAm>, BacnetError<T>> {
-        let apdu = ApplicationPdu::UnconfirmedRequest(UnconfirmedRequest::WhoIs(request.clone()));
+    pub async fn who_is(&mut self, buf: &mut [u8]) -> Result<Option<IAm>, BacnetError<T>> {
+        let apdu = ApplicationPdu::UnconfirmedRequest(UnconfirmedRequest::WhoIs(WhoIs {}));
         let dst = Some(DestinationAddress::new(0xffff, None));
         let message = NetworkMessage::Apdu(apdu);
         let npdu = NetworkPdu::new(None, dst, false, MessagePriority::Normal, message);

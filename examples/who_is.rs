@@ -2,7 +2,7 @@
 
 use clap::{command, Parser};
 use common::MySocket;
-use embedded_bacnet::{application_protocol::services::who_is::WhoIs, simple::BacnetError};
+use embedded_bacnet::simple::BacnetError;
 
 mod common;
 
@@ -23,8 +23,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     let mut buf = vec![0; 1500];
 
     // fetch
-    let request = WhoIs {};
-    let result = bacnet.who_is(&mut buf, request).await?;
+    let result = bacnet.who_is(&mut buf).await?;
 
     // print
     println!("{:?}", result);
