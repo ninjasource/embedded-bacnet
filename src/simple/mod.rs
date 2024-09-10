@@ -42,7 +42,7 @@ pub struct Bacnet<T>
 where
     T: NetworkIo + Debug,
 {
-    io: T,
+    pub io: T,
     invoke_id: u8,
 }
 
@@ -98,7 +98,7 @@ where
     }
 
     /// Returns the socket back to the caller and consumes self
-    pub fn take(self) -> T {
+    pub fn into_inner(self) -> T {
         self.io
     }
 
