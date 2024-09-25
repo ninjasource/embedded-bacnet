@@ -29,9 +29,12 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
+
+    use log::info;
     simple_logger::init().unwrap();
+    info!("Running");
     let args = Args::parse();
-    let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
+    let bacnet = common::get_bacnet_socket(&args.addr).await?;
     let mut buf = vec![0; 1500];
 
     // fetch all property values for an analog input 4

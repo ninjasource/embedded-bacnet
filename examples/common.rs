@@ -22,11 +22,11 @@ impl MySocket {
 impl NetworkIo for MySocket {
     type Error = io::Error;
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         self.socket.recv(buf).await
     }
 
-    async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+    async fn write(&self, buf: &[u8]) -> Result<usize, Self::Error> {
         self.socket.send(buf).await
     }
 }

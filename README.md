@@ -11,40 +11,33 @@ The most comprehensive implementation and documentation I have found to be here:
 
 You can use this library to send and receive bacnet packets. However, the entire spec has not been implemented, only the bits I found most important. Use the link above if you want a comprehensive implementation. 
 
-The library requires no standard library or memory allocator so expect to use iterators and loops to when decoding your network packets.
+The library requires no standard library or memory allocator (if using `default-features = false`) so expect to use iterators and loops to when decoding your network packets.
 
 ## Getting started
 
-Most of the examples use the `simple` convenience module (see `Bacnet` struct) to perform basic async request-response bacnet queries which should be the most common use case. It is up to you to supply async read and write capabilities by wrapping your favorite network library. Alternatively, you can use this library as a codec in order to have more fine grained control of the communication.
+Most of the examples use the `simple` convenience module (see `Bacnet` struct) to perform basic async request-response bacnet queries which should be the most common use case. It is up to you to supply async (or blocking) read and write capabilities by wrapping your favorite network library. Alternatively, you can use this library as a codec in order to have more fine grained control of the communication.
 
 ```rust
 #[tokio::main]
 async fn main() -> Result<(), BacnetError<MySocket>> {
     // setup
     let args = Args::parse();
-    let mut bacnet = common::get_bacnet_socket(&args.addr).await?;
-    let mut buf = vec![0; 4096];
+    let bacnet = common::get_bacnet_socket(&args.addr).await?;
+    let mut buf = vec![0; 1500];
 
-    // fetch
-    let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);
-    let property_ids = [
-        PropertyId::PropObjectName,
-        PropertyId::PropPresentValue,
-        PropertyId::PropUnits,
-        PropertyId::PropStatusFlags,
-    ];
-    let objects = [ReadPropertyMultipleObject::new(object_id, &property_ids)];
-    let request = ReadPropertyMultiple::new(&objects);
+    // fetch and print
+    let objects = vec![ReadPropertyMultipleObject::new(
+        ObjectId::new(ObjectType::ObjectAnalogInput, 1),
+        vec![
+            PropertyId::PropObjectName,
+            PropertyId::PropPresentValue,
+            PropertyId::PropUnits,
+            PropertyId::PropStatusFlags,
+        ],
+    )];
+    let request = ReadPropertyMultiple::new(objects);
     let result = bacnet.read_property_multiple(&mut buf, request).await?;
-
-    // inspect results - loop though objects
-    for values in &result {
-        // print property values of object
-        for x in &values?.property_results {
-            println!("{:?}", x?);
-        }
-    }
-
+    println!("{:?}", result);
     Ok(())
 }
 ```
@@ -54,6 +47,10 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
 Both async and blocking modes are supported. First of all, you can completely ignore the async vs blocking war if you just use this crate as a raw codec. However, if you use the `simple` convenience module then you will have to choose sides. 
 This crate is a runtime agnostic async first implementation which means that async is enabled and turned on by default. There is support for non-blocking usage by setting the appropriate feature flag `is_sync`. See `read_property_multiple_blocking` example for how to do this. 
 The `maybe-async` crate will then do some naughty things (because cargo features should always be additive) to remove the async stuff but the end result will indeed be native non-blocking.
+
+## Alloc vs No Alloc
+
+This library can be used with or without a global allocator. To enable the use of owned types (e.g. Vec) the `alloc` feature should be enabled (it is currently enabled by default). The `alloc` feature allows the return type of decoded bacnet packets to be owned and not tied to the buffer used to decode them. This is often more ergonomic to use than the alternative. However, if you do not enable the `alloc` feature the return type will be linked to the input buffer's lifetime and the data will be decoded on the fly using iterators.
 
 ## How it works
 
@@ -72,7 +69,7 @@ UdpPacket
 
 Where Pdu stands for protocol data unit.
 
-This is what a typical bacnet client would do with this library: Send an old-school broadcast UDP packet out to the standard bacnet port and listen for replies on the same port. 
+This is what a typical bacnet client would do with this library: Send a broadcast UDP packet out to the standard bacnet port and listen for replies. 
 This is done using an unconfirmed `who_is` pdu (protocol data unit). When a controller is found by decoding the inevitable `i_am` unconfirmed response the client can then send udp packets directly to that controller.
 A typical request would be a confirmed `property_read` pdu to get a list of objects from the controller. Confirmed requests are tagged with an identifier so the controller can respond to the exact request sent.
 
@@ -102,7 +99,7 @@ Unit tests will come when I have more time. Please use the examples for the time
 
 ## Understanding the internals
 
-At its heart this library is a bacnet codec (encoder / decoder). Because it does not allocate memory AND we have to deal with varying numbers of things (for example a bacnet packet may have any number
+At its heart this library is a bacnet codec (encoder / decoder). The library was primarily designed to run without a global allocator (although this feature can be enabled). Because it does not allocate memory AND we have to deal with varying numbers of things (for example a bacnet packet may have any number
 of objects in it) the encoding and decoding parts have different representations. 
 For example if you wanted to encode a list of objects you would pass a slice from some container because you know, beforehand, how many objects you want to include in the packet. 
 When decoding lists of things we use an iterator so the user can collect those object into a vector or simply process them on the fly. 
