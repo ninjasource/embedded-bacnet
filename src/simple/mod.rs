@@ -54,8 +54,8 @@ where
 #[maybe_async(AFIT)] // AFIT - Async Function In Trait
 pub trait NetworkIo {
     type Error: Debug + defmt::Format;
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
-    async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error>;
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+    async fn write(&self, buf: &[u8]) -> Result<usize, Self::Error>;
 }
 
 #[cfg(not(feature = "defmt"))]
