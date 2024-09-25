@@ -5,7 +5,10 @@
 /// This is an async-first module but you can run it in a native blocking way if you like.
 ///   The `maybe_async` crate is used to avoid code duplication and completely stips away async code when the `is_sync` feature flag is set.
 /// If you are having trouble with the borrow checker try enabling the `alloc` feature to make BACnet objects fully owned
-use core::fmt::Debug;
+use core::{
+    fmt::Debug,
+    sync::atomic::{AtomicU8, Ordering},
+};
 
 use maybe_async::maybe_async;
 
@@ -43,7 +46,7 @@ where
     T: NetworkIo + Debug,
 {
     pub io: T,
-    invoke_id: u8,
+    invoke_id: AtomicU8,
 }
 
 #[allow(async_fn_in_trait)]
@@ -61,8 +64,8 @@ pub trait NetworkIo {
 pub trait NetworkIo {
     type Error: Debug;
 
-    async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
-    async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error>;
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+    async fn write(&self, buf: &[u8]) -> Result<usize, Self::Error>;
 }
 
 #[derive(Debug)]
@@ -94,7 +97,10 @@ where
     T: NetworkIo + Debug,
 {
     pub fn new(io: T) -> Self {
-        Self { io, invoke_id: 0 }
+        Self {
+            io,
+            invoke_id: AtomicU8::new(0),
+        }
     }
 
     /// Returns the socket back to the caller and consumes self
@@ -103,7 +109,7 @@ where
     }
 
     #[maybe_async()]
-    pub async fn who_is(&mut self, buf: &mut [u8]) -> Result<Option<IAm>, BacnetError<T>> {
+    pub async fn who_is(&self, buf: &mut [u8]) -> Result<Option<IAm>, BacnetError<T>> {
         let apdu = ApplicationPdu::UnconfirmedRequest(UnconfirmedRequest::WhoIs(WhoIs {}));
         let dst = Some(DestinationAddress::new(0xffff, None));
         let message = NetworkMessage::Apdu(apdu);
@@ -141,7 +147,7 @@ where
     #[maybe_async()]
     #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub async fn read_property_multiple<'a>(
-        &mut self,
+        &self,
         buf: &'a mut [u8],
         request: ReadPropertyMultiple<'_>,
     ) -> Result<ReadPropertyMultipleAck<'a>, BacnetError<T>> {
@@ -158,7 +164,7 @@ where
     #[maybe_async()]
     #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub async fn read_property<'a>(
-        &mut self,
+        &self,
         buf: &'a mut [u8],
         request: ReadProperty,
     ) -> Result<ReadPropertyAck<'a>, BacnetError<T>> {
@@ -174,7 +180,7 @@ where
 
     #[maybe_async()]
     pub async fn subscribe_change_of_value(
-        &mut self,
+        &self,
         buf: &mut [u8],
         request: SubscribeCov,
     ) -> Result<(), BacnetError<T>> {
@@ -186,7 +192,7 @@ where
     #[maybe_async()]
     #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub async fn read_change_of_value<'a>(
-        &mut self,
+        &self,
         buf: &'a mut [u8],
     ) -> Result<Option<CovNotification<'a>>, BacnetError<T>> {
         let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
@@ -208,7 +214,7 @@ where
     #[maybe_async()]
     #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub async fn read_range<'a>(
-        &mut self,
+        &self,
         buf: &'a mut [u8],
         request: ReadRange,
     ) -> Result<ReadRangeAck<'a>, BacnetError<T>> {
@@ -224,7 +230,7 @@ where
 
     #[maybe_async()]
     pub async fn write_property<'a>(
-        &mut self,
+        &self,
         buf: &mut [u8],
         request: WriteProperty<'_>,
     ) -> Result<(), BacnetError<T>> {
@@ -235,7 +241,7 @@ where
 
     #[maybe_async()]
     pub async fn time_sync(
-        &mut self,
+        &self,
         buf: &mut [u8],
         request: TimeSynchronization,
     ) -> Result<(), BacnetError<T>> {
@@ -246,7 +252,7 @@ where
     #[maybe_async()]
     #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     async fn send_and_receive_complex_ack<'a>(
-        &mut self,
+        &self,
         buf: &'a mut [u8],
         service: ConfirmedRequestService<'_>,
     ) -> Result<ComplexAck<'a>, BacnetError<T>> {
@@ -272,7 +278,7 @@ where
 
     #[maybe_async()]
     async fn send_and_receive_simple_ack<'a>(
-        &mut self,
+        &self,
         buf: &mut [u8],
         service: ConfirmedRequestService<'_>,
     ) -> Result<SimpleAck, BacnetError<T>> {
@@ -298,7 +304,7 @@ where
 
     #[maybe_async()]
     async fn send_unconfirmed(
-        &mut self,
+        &self,
         buf: &mut [u8],
         service: UnconfirmedRequest<'_>,
     ) -> Result<(), BacnetError<T>> {
@@ -318,7 +324,7 @@ where
 
     #[maybe_async()]
     async fn send_confirmed(
-        &mut self,
+        &self,
         buf: &mut [u8],
         service: ConfirmedRequestService<'_>,
     ) -> Result<u8, BacnetError<T>> {
@@ -346,15 +352,7 @@ where
         }
     }
 
-    fn get_then_inc_invoke_id(&mut self) -> u8 {
-        let invoke_id = self.invoke_id;
-
-        if self.invoke_id == u8::MAX {
-            self.invoke_id = 0;
-        } else {
-            self.invoke_id += 1;
-        }
-
-        invoke_id
+    fn get_then_inc_invoke_id(&self) -> u8 {
+        self.invoke_id.fetch_add(1, Ordering::SeqCst)
     }
 }
