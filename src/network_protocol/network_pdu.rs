@@ -15,8 +15,6 @@ pub struct NetworkPdu<'a> {
     pub expect_reply: bool,
     pub message_priority: MessagePriority,
     pub network_message: NetworkMessage<'a>,
-
-    pub raw_payload: &'a [u8],
 }
 
 // NOTE: this is actually a control flag
@@ -137,7 +135,6 @@ impl<'a> NetworkPdu<'a> {
             expect_reply,
             message_priority,
             network_message: message,
-            raw_payload: &[], // empty unless decoding
         }
     }
 
@@ -243,7 +240,6 @@ impl<'a> NetworkPdu<'a> {
             None
         };
 
-        let payload_start_index = reader.index;
         let network_message = if is_network_message {
             let message_type = reader.read_byte(buf)?;
             match message_type.try_into() {
@@ -261,7 +257,6 @@ impl<'a> NetworkPdu<'a> {
             expect_reply,
             message_priority,
             network_message,
-            raw_payload: &buf[payload_start_index..],
         })
     }
 }

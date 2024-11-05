@@ -13,7 +13,6 @@ use crate::{
 pub struct DataLink<'a> {
     pub function: DataLinkFunction,
     pub npdu: Option<NetworkPdu<'a>>,
-    pub raw_payload: &'a [u8],
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +65,6 @@ impl<'a> DataLink<'a> {
         Self {
             function,
             npdu,
-            raw_payload: &[],
         }
     }
 
@@ -117,7 +115,6 @@ impl<'a> DataLink<'a> {
         }
         reader.set_len(len as usize);
 
-        let npdu_start_index = reader.index;
         let npdu = match function {
             // see h_bbmd.c for all the types (only 2 are supported here)
             DataLinkFunction::OriginalBroadcastNpdu | DataLinkFunction::OriginalUnicastNpdu => {
@@ -129,7 +126,6 @@ impl<'a> DataLink<'a> {
         Ok(Self {
             function,
             npdu,
-            raw_payload: &buf[npdu_start_index..],
         })
     }
 }
