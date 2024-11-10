@@ -282,6 +282,8 @@ impl Addr {
 }
 
 const IPV4_ADDR_LEN: u8 = 6;
+const MAC_ADDR_LEN: u8 = 1;
+const BROADCAST_ADDR_LEN: u8 = 0;
 
 pub type SourceAddress = NetworkAddress;
 
@@ -290,6 +292,20 @@ pub type SourceAddress = NetworkAddress;
 pub struct NetworkAddress {
     pub net: u16,
     pub addr: Option<Addr>,
+}
+
+impl NetworkAddress {
+    pub fn new_global_broadcast() -> Self {
+        Self { net: 0xFFFF, addr: None }
+    }
+
+    pub fn new_remote_broadcast(net: u16) -> Self {
+        Self { net, addr: None }
+    }
+
+    pub fn new_remote_station(net: u16, addr: Addr) -> Self {
+        Self { net, addr: Some(addr) }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -316,7 +332,7 @@ impl NetworkAddress {
                 match addr {
                     Addr::Mac(mac) => {
                         let encoded = &mac.to_be_bytes();
-                        writer.push(encoded.len() as u8);
+                        writer.push(MAC_ADDR_LEN);
                         writer.extend_from_slice(encoded);
                     },
                     Addr::Ipv4(addr) => {
@@ -326,7 +342,7 @@ impl NetworkAddress {
                     }
                 }
             }
-            None => writer.push(0),
+            None => writer.push(BROADCAST_ADDR_LEN), 
         }
     }
 
@@ -343,9 +359,13 @@ impl NetworkAddress {
                     addr: Some(Addr::Ipv4(Ipv4Addr { port, addr: ipv4 })),
                 })
             }
-            0 => Ok(Self { net, addr: None }),
+            MAC_ADDR_LEN => {
+                let addr = u8::from_be_bytes(reader.read_bytes(buf)?);
+                Ok(Self { net, addr: Some(Addr::Mac(addr)) })
+            }
+            BROADCAST_ADDR_LEN => Ok(Self { net, addr: None }),
             x => Err(Error::Length((
-                "NetworkAddress decode ip len can only be 6 or 0",
+                "NetworkAddress decode ip len can only be 6 (IP), 1 (MSTP) or 0",
                 x as u32,
             ))),
         }

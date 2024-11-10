@@ -19,7 +19,7 @@ pub enum ApplicationPdu<'a> {
     ComplexAck(ComplexAck<'a>),
     SimpleAck(SimpleAck),
     Error(ConfirmedBacnetError),
-    Segment(Segment<'a>),
+    Segment(Segment),
     SegmentAck(SegmentAck),
     // add more here (see ApduType)
 }
