@@ -53,8 +53,20 @@ impl IAm {
                 "expected unsigned_int tag type for IAm max_apdu field",
             ));
         }
-        let max_apdu = decode_unsigned(tag.value, reader, buf)?;
-        let max_apdu: MaxAdpu = (max_apdu as u8).into();
+        let raw_max_apdu = decode_unsigned(tag.value, reader, buf)?;
+        let max_apdu: MaxAdpu = match raw_max_apdu {
+            0 => MaxAdpu::_0,
+            128 => MaxAdpu::_128,
+            206 => MaxAdpu::_206,
+            480 => MaxAdpu::_480,
+            1024 => MaxAdpu::_1024,
+            1476 => MaxAdpu::_1476,
+            _ => {
+                return Err(Error::InvalidValueValue(
+                    "unexpected value for maximum apdu size", raw_max_apdu
+                ));
+            }
+        };
 
         // parse a tag then segmentation
         let tag = Tag::decode(reader, buf)?;
