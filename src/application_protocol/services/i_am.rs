@@ -1,5 +1,5 @@
 use crate::{
-    application_protocol::unconfirmed::UnconfirmedServiceChoice,
+    application_protocol::{application_pdu::MaxAdpu, unconfirmed::UnconfirmedServiceChoice},
     common::{
         error::Error,
         helper::{
@@ -17,7 +17,7 @@ use crate::{
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct IAm {
     pub device_id: ObjectId,
-    pub max_apdu: usize,
+    pub max_apdu: MaxAdpu,
     pub segmentation: Segmentation,
     pub vendor_id: u16,
 }
@@ -26,7 +26,7 @@ impl IAm {
     pub fn encode(&self, writer: &mut Writer) {
         writer.push(UnconfirmedServiceChoice::IAm as u8);
         encode_application_object_id(writer, &self.device_id);
-        encode_application_unsigned(writer, self.max_apdu as u64);
+        encode_application_unsigned(writer, self.max_apdu.clone() as u64);
         encode_application_enumerated(writer, self.segmentation.clone() as u32);
         encode_application_unsigned(writer, self.vendor_id as u64);
     }
@@ -54,7 +54,7 @@ impl IAm {
             ));
         }
         let max_apdu = decode_unsigned(tag.value, reader, buf)?;
-        let max_apdu = max_apdu as usize;
+        let max_apdu: MaxAdpu = (max_apdu as u8).into();
 
         // parse a tag then segmentation
         let tag = Tag::decode(reader, buf)?;
