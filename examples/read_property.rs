@@ -44,7 +44,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     {
         println!("Value: {:?}", value);
     } else {
-        println!("Enexpected value type returned: {:?}", result);
+        println!("Unexpected value type returned: {:?}", result);
     }
 
     Ok(())

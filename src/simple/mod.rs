@@ -258,23 +258,75 @@ where
     ) -> Result<ComplexAck<'a>, BacnetError<T>> {
         let invoke_id = self.send_confirmed(buf, service).await?;
 
-        // receive reply
-        let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
-        let buf = &buf[..n];
+        loop {
+            // receive reply
+            let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
+            let buf = &buf[..n];
 
-        // use the DataLink codec to decode the bytes
-        let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+            // use the DataLink codec to decode the bytes
+            let mut reader = Reader::default();
+            let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
 
-        // TODO: return bacnet error if the server returns one
-        // return message is expected to be a ComplexAck
-        let ack: ComplexAck = message.try_into().map_err(BacnetError::Codec)?;
+            match message.npdu {
+                Some(x) => match x.network_message {
+                    NetworkMessage::Apdu(ApplicationPdu::ComplexAck(ack)) => {
+                        // ignore earier messages
+                        if ack.invoke_id < invoke_id {
+                            continue;
+                        }
 
-        // return message is expected to have the same invoke_id as the request
-        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
+                        // return message is expected to have the same invoke_id as the request (return error if later invoke id)
+                        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
+                        return Ok(ack);
+                    }
+                    _ => continue,
+                },
+                _ => continue,
+            }
+        }
+    }
+
+    /*
+
+        #[maybe_async()]
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
+    async fn send_and_receive_complex_ack<'a>(
+        &self,
+        buf: &'a mut [u8],
+        service: ConfirmedRequestService<'_>,
+    ) -> Result<ComplexAck<'a>, BacnetError<T>> {
+        let invoke_id = self.send_confirmed(buf, service).await?;
+
+        for _ in 1..5 {
+            // receive reply
+            let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
+            let buf = &buf[..n];
+
+            // use the DataLink codec to decode the bytes
+            let mut reader = Reader::default();
+            let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+
+            match message.npdu {
+                Some(x) => match x.network_message {
+                    NetworkMessage::Apdu(ApplicationPdu::ComplexAck(ack)) => {
+                        // return message is expected to have the same invoke_id as the request
+                        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
+                        return Ok(ack),
+                    }
+                    NetworkMessage::Apdu(ApplicationPdu::UnconfirmedRequest()) => {
+                        continue;
+                    }
+                    _ => return Err(Error::ConvertDataLink(
+                        "npdu message is not an apdu complex ack",
+                    )),
+                },
+                _ => return Err(Error::ConvertDataLink("no npdu defined in message")),
+            }
+        }
 
         Ok(ack)
     }
+     */
 
     #[maybe_async()]
     async fn send_and_receive_simple_ack<'a>(
