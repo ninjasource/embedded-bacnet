@@ -369,27 +369,27 @@ impl<'a> ReadRangeItem<'a> {
             reader,
             buf,
             TagNumber::ContextSpecificOpening(Self::DATE_TIME_TAG),
-            "ReadRangeItem decode",
+            "ReadRangeItem decode open date time",
         )?;
         Tag::decode_expected(
             reader,
             buf,
             TagNumber::Application(ApplicationTagNumber::Date),
-            "ReadRangeItem decode",
+            "ReadRangeItem decode date",
         )?;
         let date = Date::decode(reader, buf)?;
         Tag::decode_expected(
             reader,
             buf,
             TagNumber::Application(ApplicationTagNumber::Time),
-            "ReadRangeItem decode",
+            "ReadRangeItem decode time",
         )?;
         let time = Time::decode(reader, buf)?;
         Tag::decode_expected(
             reader,
             buf,
             TagNumber::ContextSpecificClosing(Self::DATE_TIME_TAG),
-            "ReadRangeItem decode",
+            "ReadRangeItem decode close date time",
         )?;
 
         // value
@@ -397,7 +397,7 @@ impl<'a> ReadRangeItem<'a> {
             reader,
             buf,
             TagNumber::ContextSpecificOpening(Self::VALUE_TAG),
-            "ReadRangeItem decode",
+            "ReadRangeItem decode open value",
         )?;
         let tag = Tag::decode(reader, buf)?;
         let value_type: ReadRangeValueType = match tag.number {
@@ -410,14 +410,29 @@ impl<'a> ReadRangeItem<'a> {
             ReadRangeValueType::Real => {
                 let value = f32::from_be_bytes(reader.read_bytes(buf)?);
                 ReadRangeValue::Real(value)
-            }
+            },
+            ReadRangeValueType::Bool => {
+                let bytes = reader.read_byte(buf)?;
+                ReadRangeValue::Bool(bytes > 0)
+            },
+            ReadRangeValueType::Unsigned => {
+                let value = u32::from_be_bytes(reader.read_bytes(buf)?);
+                ReadRangeValue::Unsigned(value)
+            },
+            ReadRangeValueType::Signed => {
+                let value = i32::from_be_bytes(reader.read_bytes(buf)?);
+                ReadRangeValue::Signed(value)
+            },
+            ReadRangeValueType::Null => {
+                ReadRangeValue::Null
+            },
             x => return Err(Error::Unimplemented(Unimplemented::ReadRangeValueType(x))),
         };
         Tag::decode_expected(
             reader,
             buf,
             TagNumber::ContextSpecificClosing(Self::VALUE_TAG),
-            "ReadRangeItem decode",
+            "ReadRangeItem decode close value",
         )?;
 
         // status flags
@@ -425,7 +440,7 @@ impl<'a> ReadRangeItem<'a> {
             reader,
             buf,
             TagNumber::ContextSpecific(Self::STATUS_FLAGS_TAG),
-            "ReadRangeItem decode",
+            "ReadRangeItem decode status",
         )?;
         let status_flags = BitString::decode(&PropertyId::PropStatusFlags, tag.value, reader, buf)?;
 

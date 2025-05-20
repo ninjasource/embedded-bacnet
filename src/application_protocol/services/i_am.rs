@@ -1,5 +1,5 @@
 use crate::{
-    application_protocol::unconfirmed::UnconfirmedServiceChoice,
+    application_protocol::{application_pdu::MaxAdpu, unconfirmed::UnconfirmedServiceChoice},
     common::{
         error::Error,
         helper::{
@@ -17,7 +17,7 @@ use crate::{
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct IAm {
     pub device_id: ObjectId,
-    pub max_apdu: usize,
+    pub max_apdu: MaxAdpu,
     pub segmentation: Segmentation,
     pub vendor_id: u16,
 }
@@ -26,7 +26,7 @@ impl IAm {
     pub fn encode(&self, writer: &mut Writer) {
         writer.push(UnconfirmedServiceChoice::IAm as u8);
         encode_application_object_id(writer, &self.device_id);
-        encode_application_unsigned(writer, self.max_apdu as u64);
+        encode_application_unsigned(writer, self.max_apdu.clone() as u64);
         encode_application_enumerated(writer, self.segmentation.clone() as u32);
         encode_application_unsigned(writer, self.vendor_id as u64);
     }
@@ -53,8 +53,20 @@ impl IAm {
                 "expected unsigned_int tag type for IAm max_apdu field",
             ));
         }
-        let max_apdu = decode_unsigned(tag.value, reader, buf)?;
-        let max_apdu = max_apdu as usize;
+        let raw_max_apdu = decode_unsigned(tag.value, reader, buf)?;
+        let max_apdu: MaxAdpu = match raw_max_apdu {
+            0 => MaxAdpu::_0,
+            128 => MaxAdpu::_128,
+            206 => MaxAdpu::_206,
+            480 => MaxAdpu::_480,
+            1024 => MaxAdpu::_1024,
+            1476 => MaxAdpu::_1476,
+            _ => {
+                return Err(Error::InvalidValueValue(
+                    "unexpected value for maximum apdu size", raw_max_apdu
+                ));
+            }
+        };
 
         // parse a tag then segmentation
         let tag = Tag::decode(reader, buf)?;

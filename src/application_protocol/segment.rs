@@ -3,7 +3,6 @@
 
 #[cfg(feature = "alloc")]
 use {
-    crate::common::spooky::Phantom,
     alloc::{vec, vec::Vec},
 };
 
@@ -34,7 +33,7 @@ pub struct Segment<'a> {
 #[cfg(feature = "alloc")]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[derive(Debug, Clone)]
-pub struct Segment<'a> {
+pub struct Segment {
     pub apdu_type: ApduType,
     pub more_follows: bool,
 
@@ -45,10 +44,9 @@ pub struct Segment<'a> {
 
     // apdu data
     pub data: Vec<u8>,
-    _phantom: &'a Phantom,
 }
 
-impl<'a> Segment<'a> {
+impl Segment {
     #[cfg(feature = "alloc")]
     pub fn new(
         apdu_type: ApduType,
@@ -59,7 +57,6 @@ impl<'a> Segment<'a> {
         service_choice: u8,
         data: Vec<u8>,
     ) -> Self {
-        use crate::common::spooky::PHANTOM;
 
         Segment {
             apdu_type,
@@ -68,8 +65,7 @@ impl<'a> Segment<'a> {
             sequence_number,
             window_size,
             service_choice,
-            data,
-            _phantom: &PHANTOM,
+            data
         }
     }
 
