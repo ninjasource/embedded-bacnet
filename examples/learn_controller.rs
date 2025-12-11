@@ -68,7 +68,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
                 | ObjectType::ObjectAnalogValue
                 | ObjectType::ObjectSchedule
                 | ObjectType::ObjectTrendlog => {
-                    let list = map.entry(item.object_type.clone() as u32).or_insert(vec![]);
+                    let list = map.entry(item.object_type.as_u32()).or_insert(vec![]);
                     list.push(item);
                 }
                 _ => {}

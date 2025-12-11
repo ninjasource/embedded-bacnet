@@ -231,7 +231,7 @@ impl<'a> PropertyResultList<'a> {
     pub fn new(property_results: &'a [PropertyResult<'a>]) -> Self {
         Self {
             property_results,
-            object_id: ObjectId::new(ObjectType::Invalid, 0),
+            object_id: ObjectId::new(ObjectType::ObjectVendorSpecific(0), 0),
             buf: &[],
         }
     }
@@ -256,7 +256,7 @@ impl<'a> PropertyResult<'a> {
     const PROPERTY_VALUE_ERROR_TAG: u8 = 5;
 
     pub fn encode(&self, writer: &mut Writer) {
-        encode_context_unsigned(writer, Self::PROPERTY_ID_TAG, self.id as u32);
+        encode_context_unsigned(writer, Self::PROPERTY_ID_TAG, self.id.as_u32());
         match &self.value {
             PropertyValue::PropValue(val) => {
                 encode_opening_tag(writer, Self::PROPERTY_VALUE_TAG);
