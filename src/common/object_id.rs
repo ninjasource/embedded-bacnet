@@ -22,7 +22,7 @@ impl ObjectId {
     }
 
     pub fn encode(&self, writer: &mut Writer) {
-        let value = ((self.object_type as u32 & BACNET_MAX_OBJECT) << BACNET_INSTANCE_BITS)
+        let value = ((self.object_type.as_u32() & BACNET_MAX_OBJECT) << BACNET_INSTANCE_BITS)
             | (self.id & BACNET_MAX_INSTANCE);
         writer.extend_from_slice(&value.to_be_bytes());
     }
@@ -42,80 +42,137 @@ impl ObjectId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[repr(u32)]
 pub enum ObjectType {
-    ObjectAnalogInput = 0,
-    ObjectAnalogOutput = 1,
-    ObjectAnalogValue = 2,
-    ObjectBinaryInput = 3,
-    ObjectBinaryOutput = 4,
-    ObjectBinaryValue = 5,
-    ObjectCalendar = 6,
-    ObjectCommand = 7,
-    ObjectDevice = 8,
-    ObjectEventEnrollment = 9,
-    ObjectFile = 10,
-    ObjectGroup = 11,
-    ObjectLoop = 12,
-    ObjectMultiStateInput = 13,
-    ObjectMultiStateOutput = 14,
-    ObjectNotificationClass = 15,
-    ObjectProgram = 16,
-    ObjectSchedule = 17,
-    ObjectAveraging = 18,
-    ObjectMultiStateValue = 19,
-    ObjectTrendlog = 20,
-    ObjectLifeSafetyPoint = 21,
-    ObjectLifeSafetyZone = 22,
-    ObjectAccumulator = 23,
-    ObjectPulseConverter = 24,
-    ObjectEventLog = 25,
-    ObjectGlobalGroup = 26,
-    ObjectTrendLogMultiple = 27,
-    ObjectLoadControl = 28,
-    ObjectStructuredView = 29,
-    ObjectAccessDoor = 30,
-    ObjectTimer = 31,
-    ObjectAccessCredential = 32, // addendum 2008-j
-    ObjectAccessPoint = 33,
-    ObjectAccessRights = 34,
-    ObjectAccessUser = 35,
-    ObjectAccessZone = 36,
-    ObjectCredentialDataInput = 37,   // authentication-factor-input
-    ObjectNetworkSecurity = 38,       // Addendum 2008-g
-    ObjectBitstringValue = 39,        // Addendum 2008-w
-    ObjectCharacterstringValue = 40,  // Addendum 2008-w
-    ObjectDatePatternValue = 41,      // Addendum 2008-w
-    ObjectDateValue = 42,             // Addendum 2008-w
-    ObjectDatetimePatternValue = 43,  // Addendum 2008-w
-    ObjectDatetimeValue = 44,         // Addendum 2008-w
-    ObjectIntegerValue = 45,          // Addendum 2008-w
-    ObjectLargeAnalogValue = 46,      // Addendum 2008-w
-    ObjectOctetstringValue = 47,      // Addendum 2008-w
-    ObjectPositiveIntegerValue = 48,  // Addendum 2008-w
-    ObjectTimePatternValue = 49,      // Addendum 2008-w
-    ObjectTimeValue = 50,             // Addendum 2008-w
-    ObjectNotificationForwarder = 51, // Addendum 2010-af
-    ObjectAlertEnrollment = 52,       // Addendum 2010-af
-    ObjectChannel = 53,               // Addendum 2010-aa
-    ObjectLightingOutput = 54,        // Addendum 2010-i
-    ObjectBinaryLightingOutput = 55,  // Addendum 135-2012az
-    ObjectNetworkPort = 56,           // Addendum 135-2012az
+    ObjectAnalogInput,
+    ObjectAnalogOutput,
+    ObjectAnalogValue,
+    ObjectBinaryInput,
+    ObjectBinaryOutput,
+    ObjectBinaryValue,
+    ObjectCalendar,
+    ObjectCommand,
+    ObjectDevice,
+    ObjectEventEnrollment,
+    ObjectFile,
+    ObjectGroup,
+    ObjectLoop,
+    ObjectMultiStateInput,
+    ObjectMultiStateOutput,
+    ObjectNotificationClass,
+    ObjectProgram,
+    ObjectSchedule,
+    ObjectAveraging,
+    ObjectMultiStateValue,
+    ObjectTrendlog,
+    ObjectLifeSafetyPoint,
+    ObjectLifeSafetyZone,
+    ObjectAccumulator,
+    ObjectPulseConverter,
+    ObjectEventLog,
+    ObjectGlobalGroup,
+    ObjectTrendLogMultiple,
+    ObjectLoadControl,
+    ObjectStructuredView,
+    ObjectAccessDoor,
+    ObjectTimer,
+    ObjectAccessCredential,    // addendum 2008-j
+    ObjectAccessPoint,
+    ObjectAccessRights,
+    ObjectAccessUser,
+    ObjectAccessZone,
+    ObjectCredentialDataInput, // authentication-factor-input
+    ObjectNetworkSecurity,     // Addendum 2008-g
+    ObjectBitstringValue,      // Addendum 2008-w
+    ObjectCharacterstringValue,  // Addendum 2008-w
+    ObjectDatePatternValue,      // Addendum 2008-w
+    ObjectDateValue,             // Addendum 2008-w
+    ObjectDatetimePatternValue,  // Addendum 2008-w
+    ObjectDatetimeValue,         // Addendum 2008-w
+    ObjectIntegerValue,          // Addendum 2008-w
+    ObjectLargeAnalogValue,      // Addendum 2008-w
+    ObjectOctetstringValue,      // Addendum 2008-w
+    ObjectPositiveIntegerValue,  // Addendum 2008-w
+    ObjectTimePatternValue,      // Addendum 2008-w
+    ObjectTimeValue,             // Addendum 2008-w
+    ObjectNotificationForwarder, // Addendum 2010-af
+    ObjectAlertEnrollment,       // Addendum 2010-af
+    ObjectChannel,               // Addendum 2010-aa
+    ObjectLightingOutput,        // Addendum 2010-i
+    ObjectBinaryLightingOutput,  // Addendum 135-2012az
+    ObjectNetworkPort,           // Addendum 135-2012az
     // Enumerated values 0-127 are reserved for definition by ASHRAE.
     // Enumerated values 128-1023 may be used by others subject to
     // the procedures and constraints described in Clause 23.
-    // do the max range inside of enum so that
-    // compilers will allocate adequate sized datatype for enum
-    // which is used to store decoding
-    Reserved = 57,
-    Proprietary = 128,
-    Invalid = 1024,
+    ObjectReserved(u32),       // 57..=127
+    ObjectVendorSpecific(u32),    // 128..=1023
 }
 
-impl TryFrom<u32> for ObjectType {
-    type Error = u32;
+impl ObjectType {
+    pub fn as_u32(&self) -> u32 {
+        match self {
+            Self::ObjectAnalogInput => 0,
+            Self::ObjectAnalogOutput => 1,
+            Self::ObjectAnalogValue => 2,
+            Self::ObjectBinaryInput => 3,
+            Self::ObjectBinaryOutput => 4,
+            Self::ObjectBinaryValue => 5,
+            Self::ObjectCalendar => 6,
+            Self::ObjectCommand => 7,
+            Self::ObjectDevice => 8,
+            Self::ObjectEventEnrollment => 9,
+            Self::ObjectFile => 10,
+            Self::ObjectGroup => 11,
+            Self::ObjectLoop => 12,
+            Self::ObjectMultiStateInput => 13,
+            Self::ObjectMultiStateOutput => 14,
+            Self::ObjectNotificationClass => 15,
+            Self::ObjectProgram => 16,
+            Self::ObjectSchedule => 17,
+            Self::ObjectAveraging => 18,
+            Self::ObjectMultiStateValue => 19,
+            Self::ObjectTrendlog => 20,
+            Self::ObjectLifeSafetyPoint => 21,
+            Self::ObjectLifeSafetyZone => 22,
+            Self::ObjectAccumulator => 23,
+            Self::ObjectPulseConverter => 24,
+            Self::ObjectEventLog => 25,
+            Self::ObjectGlobalGroup => 26,
+            Self::ObjectTrendLogMultiple => 27,
+            Self::ObjectLoadControl => 28,
+            Self::ObjectStructuredView => 29,
+            Self::ObjectAccessDoor => 30,
+            Self::ObjectTimer => 31,
+            Self::ObjectAccessCredential => 32,
+            Self::ObjectAccessPoint => 33,
+            Self::ObjectAccessRights => 34,
+            Self::ObjectAccessUser => 35,
+            Self::ObjectAccessZone => 36,
+            Self::ObjectCredentialDataInput => 37,
+            Self::ObjectNetworkSecurity => 38,
+            Self::ObjectBitstringValue => 39,
+            Self::ObjectCharacterstringValue => 40,
+            Self::ObjectDatePatternValue => 41,
+            Self::ObjectDateValue => 42,
+            Self::ObjectDatetimePatternValue => 43,
+            Self::ObjectDatetimeValue => 44,
+            Self::ObjectIntegerValue => 45,
+            Self::ObjectLargeAnalogValue => 46,
+            Self::ObjectOctetstringValue => 47,
+            Self::ObjectPositiveIntegerValue => 48,
+            Self::ObjectTimePatternValue => 49,
+            Self::ObjectTimeValue => 50,
+            Self::ObjectNotificationForwarder => 51,
+            Self::ObjectAlertEnrollment => 52,
+            Self::ObjectChannel => 53,
+            Self::ObjectLightingOutput => 54,
+            Self::ObjectBinaryLightingOutput => 55,
+            Self::ObjectNetworkPort => 56,
+            Self::ObjectReserved(v) => *v,
+            Self::ObjectVendorSpecific(v) => *v,
+        }
+    }
 
-    fn try_from(value: u32) -> Result<Self, u32> {
+    pub fn try_from(value: u32) -> Result<Self, u32> {
         match value {
             0 => Ok(Self::ObjectAnalogInput),
             1 => Ok(Self::ObjectAnalogOutput),
@@ -174,8 +231,8 @@ impl TryFrom<u32> for ObjectType {
             54 => Ok(Self::ObjectLightingOutput),
             55 => Ok(Self::ObjectBinaryLightingOutput),
             56 => Ok(Self::ObjectNetworkPort),
-            57..=127 => Ok(Self::Reserved),
-            128..=1023 => Ok(Self::Proprietary),
+            57..=127 => Ok(Self::ObjectReserved(value)),
+            128..=1023 => Ok(Self::ObjectVendorSpecific(value)),
             x => Err(x),
         }
     }
