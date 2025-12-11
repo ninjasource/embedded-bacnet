@@ -79,7 +79,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     }
 
     for (object_type, ids) in map.iter() {
-        let object_type = ObjectType::try_from(*object_type).unwrap();
+        let object_type = ObjectType::Objecttry_from(*object_type).unwrap();
         match object_type {
             ObjectType::ObjectBinaryInput
             | ObjectType::ObjectBinaryOutput

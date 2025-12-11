@@ -68,7 +68,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
                 | ObjectType::ObjectAnalogValue
                 | ObjectType::ObjectSchedule
                 | ObjectType::ObjectTrendlog => {
-                    let list = map.entry(item.object_type.clone() as u32).or_insert(vec![]);
+                    let list = map.entry(item.object_type.as_u32()).or_insert(vec![]);
                     list.push(item);
                 }
                 _ => {}
@@ -77,7 +77,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
     }
 
     for (object_type, ids) in map.iter() {
-        let object_type = ObjectType::try_from(*object_type).unwrap();
+        let object_type = ObjectType::from_u32(*object_type);
         match object_type {
             ObjectType::ObjectBinaryInput
             | ObjectType::ObjectBinaryOutput
