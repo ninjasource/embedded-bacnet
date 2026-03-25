@@ -39,6 +39,8 @@ pub enum ApplicationDataValue<'a> {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationDataValueWrite<'a> {
     Boolean(bool),
+    SignedInt(i32),
+    UnsignedInt(u32),
     Enumerated(Enumerated),
     Real(f32),
     WeeklySchedule(WeeklySchedule<'a>),
@@ -372,6 +374,28 @@ impl<'a> ApplicationDataValueWrite<'a> {
                         let value = decode_enumerated(object_id, property_id, &tag, reader, buf)?;
                         Ok(Self::Enumerated(value))
                     }
+                    TagNumber::Application(ApplicationTagNumber::UnsignedInt) => {
+                        let len = tag.value as usize;
+                        if len > 4 {
+                            return Err(Error::Length(("integers longer than 4 bytes are not supported", tag.value)));
+                        }
+                        let mut bytes = [0; 4];
+                        bytes[..len].copy_from_slice(reader.read_slice(len, buf)?);
+                        let value = u32::from_be_bytes(bytes) >> (8 * (4 - len));
+                        Ok(Self::UnsignedInt(value))
+
+                    }
+                    TagNumber::Application(ApplicationTagNumber::SignedInt) => {
+                        let len = tag.value as usize;
+                        if len > 4 {
+                            return Err(Error::Length(("integers longer than 4 bytes are not supported", tag.value)));
+                        }
+                        let mut bytes = [0; 4];
+                        bytes[..len].copy_from_slice(reader.read_slice(len, buf)?);
+                        let value = i32::from_be_bytes(bytes) >> (8 * (4 - len));
+                        Ok(Self::SignedInt(value))
+
+                    }
                     tag_number => Err(Error::TagNotSupported((
                         "ApplicationDataValueWrite decode",
                         tag_number,
@@ -395,6 +419,24 @@ impl<'a> ApplicationDataValueWrite<'a> {
                 let tag = Tag::new(TagNumber::Application(ApplicationTagNumber::Real), len);
                 tag.encode(writer);
                 writer.extend_from_slice(&f32::to_be_bytes(*x))
+            }
+            Self::UnsignedInt(x) => {
+                let data = x.to_be_bytes();
+                let skip = data.into_iter().take_while(|&x| x == 0).count();
+                let data = &data[skip..];
+                Tag::new(TagNumber::Application(ApplicationTagNumber::UnsignedInt), data.len() as u32)
+                    .encode(writer);
+                writer.extend_from_slice(data);
+            }
+            Self::SignedInt(x) => {
+                let data = x.to_be_bytes();
+                let leading_zeros = data.into_iter().take_while(|&x| x == 0).count();
+                let leading_ones = data.into_iter().take_while(|&x| x == 0xFF).count();
+                let skip = usize::max(leading_zeros, leading_ones);
+                let data = &data[skip..];
+                Tag::new(TagNumber::Application(ApplicationTagNumber::SignedInt), data.len() as u32)
+                    .encode(writer);
+                writer.extend_from_slice(data);
             }
             Self::Enumerated(x) => {
                 x.encode(writer);
