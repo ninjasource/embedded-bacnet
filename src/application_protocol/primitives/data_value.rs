@@ -3,7 +3,7 @@ use core::{fmt::Display, str::from_utf8};
 use crate::common::{
     daily_schedule::WeeklySchedule,
     error::Error,
-    helper::{decode_unsigned, encode_application_enumerated},
+    helper::{decode_signed, decode_unsigned, encode_application_enumerated, encode_application_signed, encode_application_unsigned},
     io::{Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
@@ -31,7 +31,8 @@ pub enum ApplicationDataValue<'a> {
     CharacterString(CharacterString<'a>),
     Enumerated(Enumerated),
     BitString(BitString<'a>),
-    UnsignedInt(u32),
+    UnsignedInt(u64),
+    SignedInt(i64),
     WeeklySchedule(WeeklySchedule<'a>),
 }
 
@@ -39,8 +40,8 @@ pub enum ApplicationDataValue<'a> {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationDataValueWrite<'a> {
     Boolean(bool),
-    SignedInt(i32),
-    UnsignedInt(u32),
+    UnsignedInt(u64),
+    SignedInt(i64),
     Enumerated(Enumerated),
     Real(f32),
     WeeklySchedule(WeeklySchedule<'a>),
@@ -375,24 +376,18 @@ impl<'a> ApplicationDataValueWrite<'a> {
                         Ok(Self::Enumerated(value))
                     }
                     TagNumber::Application(ApplicationTagNumber::UnsignedInt) => {
-                        let len = tag.value as usize;
-                        if len > 4 {
-                            return Err(Error::Length(("integers longer than 4 bytes are not supported", tag.value)));
-                        }
-                        let mut bytes = [0; 4];
-                        bytes[..len].copy_from_slice(reader.read_slice(len, buf)?);
-                        let value = u32::from_be_bytes(bytes) >> (8 * (4 - len));
-                        Ok(Self::UnsignedInt(value))
+                        Ok(Self::UnsignedInt(decode_unsigned(tag.value, reader, buf)?))
 
                     }
                     TagNumber::Application(ApplicationTagNumber::SignedInt) => {
                         let len = tag.value as usize;
-                        if len > 4 {
-                            return Err(Error::Length(("integers longer than 4 bytes are not supported", tag.value)));
+                        if len > 8 {
+                            return Err(Error::Length(("integers bigger than 64 bits are not supported", tag.value)));
                         }
-                        let mut bytes = [0; 4];
+                        // Read into the most significant bits, then do a right shift to get sign extension for negative integers.
+                        let mut bytes = [0; 8];
                         bytes[..len].copy_from_slice(reader.read_slice(len, buf)?);
-                        let value = i32::from_be_bytes(bytes) >> (8 * (4 - len));
+                        let value = i64::from_be_bytes(bytes) >> (8 * (8 - len));
                         Ok(Self::SignedInt(value))
 
                     }
@@ -421,22 +416,10 @@ impl<'a> ApplicationDataValueWrite<'a> {
                 writer.extend_from_slice(&f32::to_be_bytes(*x))
             }
             Self::UnsignedInt(x) => {
-                let data = x.to_be_bytes();
-                let skip = data.into_iter().take_while(|&x| x == 0).count();
-                let data = &data[skip..];
-                Tag::new(TagNumber::Application(ApplicationTagNumber::UnsignedInt), data.len() as u32)
-                    .encode(writer);
-                writer.extend_from_slice(data);
+                encode_application_unsigned(writer, *x);
             }
             Self::SignedInt(x) => {
-                let data = x.to_be_bytes();
-                let leading_zeros = data.into_iter().take_while(|&x| x == 0).count();
-                let leading_ones = data.into_iter().take_while(|&x| x == 0xFF).count();
-                let skip = usize::max(leading_zeros, leading_ones);
-                let data = &data[skip..];
-                Tag::new(TagNumber::Application(ApplicationTagNumber::SignedInt), data.len() as u32)
-                    .encode(writer);
-                writer.extend_from_slice(data);
+                encode_application_signed(writer, *x);
             }
             Self::Enumerated(x) => {
                 x.encode(writer);
@@ -499,9 +482,10 @@ impl<'a> ApplicationDataValue<'a> {
                 x.encode_application(writer);
             }
             ApplicationDataValue::UnsignedInt(x) => {
-                Tag::new(TagNumber::Application(ApplicationTagNumber::UnsignedInt), 4)
-                    .encode(writer);
-                writer.extend_from_slice(&x.to_be_bytes());
+                encode_application_unsigned(writer, *x)
+            }
+            ApplicationDataValue::SignedInt(x) => {
+                encode_application_signed(writer, *x)
             }
             ApplicationDataValue::WeeklySchedule(x) => {
                 // no application tag required for weekly schedule
@@ -563,8 +547,12 @@ impl<'a> ApplicationDataValue<'a> {
                 Ok(ApplicationDataValue::Boolean(value))
             }
             ApplicationTagNumber::UnsignedInt => {
-                let value = decode_unsigned(tag.value, reader, buf)? as u32;
+                let value = decode_unsigned(tag.value, reader, buf)?;
                 Ok(ApplicationDataValue::UnsignedInt(value))
+            }
+            ApplicationTagNumber::SignedInt => {
+                let value = decode_signed(tag.value, reader, buf)?;
+                Ok(ApplicationDataValue::SignedInt(value))
             }
             ApplicationTagNumber::Time => {
                 if tag.value != 4 {

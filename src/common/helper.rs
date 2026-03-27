@@ -68,31 +68,6 @@ fn get_tagged_body_internal<'a>(
     }
 }
 
-pub fn encode_i16(writer: &mut Writer, value: i16) {
-    writer.extend_from_slice(&value.to_be_bytes());
-}
-
-pub fn encode_i32(writer: &mut Writer, value: i32) {
-    writer.extend_from_slice(&value.to_be_bytes());
-}
-
-pub fn encode_u16(writer: &mut Writer, value: u16) {
-    writer.extend_from_slice(&value.to_be_bytes());
-}
-
-pub fn encode_u24(writer: &mut Writer, value: u32) {
-    let slice = &value.to_be_bytes();
-    writer.extend_from_slice(&slice[..3]);
-}
-
-pub fn encode_u32(writer: &mut Writer, value: u32) {
-    writer.extend_from_slice(&value.to_be_bytes());
-}
-
-pub fn encode_u64(writer: &mut Writer, value: u64) {
-    writer.extend_from_slice(&value.to_be_bytes());
-}
-
 pub fn encode_context_object_id(writer: &mut Writer, tag_number: u8, object_id: &ObjectId) {
     let tag = Tag::new(TagNumber::ContextSpecific(tag_number), ObjectId::LEN);
     tag.encode(writer);
@@ -145,14 +120,6 @@ pub fn encode_closing_tag(writer: &mut Writer, tag_number: u8) {
     }
 }
 
-pub fn encode_context_unsigned(writer: &mut Writer, tag_number: u8, value: u32) {
-    let len = get_len_u64(value as u64);
-
-    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
-    tag.encode(writer);
-    encode_unsigned(writer, len, value as u64);
-}
-
 pub fn decode_context_property_id(
     reader: &mut Reader,
     buf: &[u8],
@@ -170,33 +137,63 @@ pub fn decode_context_property_id(
     Ok(property_id)
 }
 
-pub fn encode_context_enumerated(writer: &mut Writer, tag_number: u8, property_id: &PropertyId) {
-    let value = *property_id as u32;
-    let len = get_len_u64(value as u64);
-
-    let tag = Tag::new(TagNumber::ContextSpecific(tag_number), len);
-    tag.encode(writer);
-    encode_unsigned(writer, len, value as u64);
+fn encode_unsigned_impl(writer: &mut Writer, tag_number: TagNumber, value: impl Into<u64>) {
+    let data = value.into().to_be_bytes();
+    let skip = data.into_iter().take_while(|&x| x == 0).count();
+    let data = &data[skip..];
+    Tag::new(tag_number, data.len() as u32)
+        .encode(writer);
+    writer.extend_from_slice(data);
 }
 
-pub fn encode_application_unsigned(writer: &mut Writer, value: u64) {
-    let len = get_len_u64(value);
-    Tag::new(
-        TagNumber::Application(ApplicationTagNumber::UnsignedInt),
-        len,
-    )
-    .encode(writer);
-    encode_unsigned(writer, len, value);
+pub fn encode_unsigned(writer: &mut Writer, context_tag: Option<u8>, value: impl Into<u64>) {
+    let tag_number = context_tag.map(TagNumber::ContextSpecific)
+        .unwrap_or(TagNumber::Application(ApplicationTagNumber::UnsignedInt));
+    encode_unsigned_impl(writer, tag_number, value);
+}
+
+pub fn encode_signed(writer: &mut Writer, context_tag: Option<u8>, value: impl Into<i64>) {
+    let data = value.into().to_be_bytes();
+    let leading_zeros = data.into_iter().take_while(|&x| x == 0).count();
+    let leading_signs = data.into_iter().take_while(|&x| x == 0xFF).count();
+    let skip = usize::max(leading_zeros, leading_signs);
+    let data = &data[skip..];
+
+    let tag_number = context_tag.map(TagNumber::ContextSpecific)
+        .unwrap_or(TagNumber::Application(ApplicationTagNumber::SignedInt));
+    Tag::new(tag_number, data.len() as u32)
+        .encode(writer);
+    writer.extend_from_slice(data);
+}
+
+pub fn encode_enumerated(writer: &mut Writer, value: impl Into<u64>, context_tag: Option<u8>) {
+    let tag_number = context_tag.map(TagNumber::ContextSpecific)
+        .unwrap_or(TagNumber::Application(ApplicationTagNumber::Enumerated));
+    encode_unsigned_impl(writer, tag_number, value);
+}
+
+pub fn encode_application_unsigned(writer: &mut Writer, value: impl Into<u64>) {
+    encode_unsigned(writer, None, value);
+}
+
+pub fn encode_context_unsigned(writer: &mut Writer, tag_number: u8, value: impl Into<u64>) {
+    encode_unsigned(writer, Some(tag_number), value);
+}
+
+pub fn encode_application_signed(writer: &mut Writer, value: impl Into<i64>) {
+    encode_signed(writer, None, value);
+}
+
+pub fn encode_context_signed(writer: &mut Writer, tag_number: u8, value: impl Into<i64>) {
+    encode_signed(writer, Some(tag_number), value);
 }
 
 pub fn encode_application_enumerated(writer: &mut Writer, value: u32) {
-    let len = get_len_u32(value);
-    let tag = Tag::new(
-        TagNumber::Application(ApplicationTagNumber::Enumerated),
-        len,
-    );
-    tag.encode(writer);
-    encode_unsigned(writer, len, value as u64);
+    encode_enumerated(writer, value, None);
+}
+
+pub fn encode_context_enumerated(writer: &mut Writer, tag_number: u8, property_id: &PropertyId) {
+    encode_enumerated(writer, *property_id as u32, Some(tag_number))
 }
 
 pub fn encode_application_object_id(writer: &mut Writer, object_id: &ObjectId) {
@@ -208,119 +205,25 @@ pub fn encode_application_object_id(writer: &mut Writer, object_id: &ObjectId) {
     object_id.encode(writer);
 }
 
-pub fn encode_application_signed(writer: &mut Writer, value: i32) {
-    let mut len = get_len_i32(value);
-    len = if len == 3 { 4 } else { len }; // we don't bother with 3 byte integers (just save it as a 4 byte integer)
-    Tag::new(TagNumber::Application(ApplicationTagNumber::SignedInt), len).encode(writer);
-    encode_signed(writer, len, value);
-}
-
-pub fn get_len_u32(value: u32) -> u32 {
-    if value < 0x100 {
-        1
-    } else if value < 0x10000 {
-        2
-    } else if value < 0x1000000 {
-        3
-    } else {
-        4
-    }
-}
-
-fn get_len_u64(value: u64) -> u32 {
-    if value < 0x100 {
-        1
-    } else if value < 0x10000 {
-        2
-    } else if value < 0x1000000 {
-        3
-    } else if value < 0x100000000 {
-        4
-    } else {
-        8
-    }
-}
-
-fn get_len_i32(value: i32) -> u32 {
-    if (-128..128).contains(&value) {
-        1
-    } else if (-32768..32768).contains(&value) {
-        2
-    } else if (-8388608..8388608).contains(&value) {
-        3
-    } else {
-        4
-    }
-}
-
 pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> Result<u64, Error> {
-    let value = match len {
-        1 => reader.read_byte(buf)? as u64,
-        2 => u16::from_be_bytes(reader.read_bytes(buf)?) as u64,
-        3 => {
-            let bytes: [u8; 3] = reader.read_bytes(buf)?;
-            let mut tmp: [u8; 4] = [0; 4];
-            tmp[1..].copy_from_slice(&bytes);
-            u32::from_be_bytes(tmp) as u64
-        }
-        4 => u32::from_be_bytes(reader.read_bytes(buf)?) as u64,
-        8 => u64::from_be_bytes(reader.read_bytes(buf)?),
-        x => return Err(Error::Length(("unsigned len must be between 1 and 8", x))),
-    };
-
-    Ok(value)
-}
-
-pub fn _decode_u32(len: u32, reader: &mut Reader, buf: &[u8]) -> Result<u32, Error> {
-    let value = match len {
-        1 => reader.read_byte(buf)? as u32,
-        2 => u16::from_be_bytes(reader.read_bytes(buf)?) as u32,
-        3 => {
-            let bytes: [u8; 3] = reader.read_bytes(buf)?;
-            let mut tmp: [u8; 4] = [0; 4];
-            tmp[1..].copy_from_slice(&bytes);
-            u32::from_be_bytes(tmp)
-        }
-        4 => u32::from_be_bytes(reader.read_bytes(buf)?),
-        x => return Err(Error::Length(("u32 len must be between 1 and 4", x))),
-    };
-
-    Ok(value)
-}
-
-pub fn decode_signed(len: u32, reader: &mut Reader, buf: &[u8]) -> Result<i32, Error> {
-    let value = match len {
-        1 => reader.read_byte(buf)? as i32,
-        2 => u16::from_be_bytes(reader.read_bytes(buf)?) as i32,
-        3 => {
-            let bytes: [u8; 3] = reader.read_bytes(buf)?;
-            let mut tmp: [u8; 4] = [0; 4];
-            tmp[1..].copy_from_slice(&bytes);
-            i32::from_be_bytes(tmp)
-        }
-        4 => i32::from_be_bytes(reader.read_bytes(buf)?),
-        x => return Err(Error::Length(("signed len must be between 1 and 4", x))),
-    };
-
-    Ok(value)
-}
-
-pub fn encode_unsigned(writer: &mut Writer, len: u32, value: u64) {
-    match len {
-        1 => writer.push(value as u8),
-        2 => encode_u16(writer, value as u16),
-        3 => encode_u24(writer, value as u32),
-        4 => encode_u32(writer, value as u32),
-        8 => encode_u64(writer, value),
-        _ => unreachable!(),
+    if len > 8 {
+        return Err(Error::Length(("integers bigger than 64 bits bytes are not supported", len)));
     }
+    let len = len as usize;
+    let mut bytes = [0; 8];
+    bytes[..len].copy_from_slice(reader.read_slice(len, buf)?);
+    let value = u64::from_be_bytes(bytes) >> (8 * (8 - len));
+    Ok(value)
 }
 
-pub fn encode_signed(writer: &mut Writer, len: u32, value: i32) {
-    match len {
-        1 => writer.push(value as u8),
-        2 => encode_i16(writer, value as i16),
-        4 => encode_i32(writer, value),
-        _ => unreachable!(),
+pub fn decode_signed(len: u32, reader: &mut Reader, buf: &[u8]) -> Result<i64, Error> {
+    if len > 8 {
+        return Err(Error::Length(("integers bigger than 64 bits are not supported", len)));
     }
+    // Read into the most significant bits, then do a right shift to get sign extension for negative integers.
+    let len = len as usize;
+    let mut bytes = [0; 8];
+    bytes[..len].copy_from_slice(reader.read_slice(len, buf)?);
+    let value = i64::from_be_bytes(bytes) >> (8 * (8 - len));
+    Ok(value)
 }

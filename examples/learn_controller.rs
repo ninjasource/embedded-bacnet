@@ -149,7 +149,7 @@ pub struct ScheduleValue {
 pub struct TrendLogValue {
     pub id: ObjectId,
     pub name: String,
-    pub record_count: u32,
+    pub record_count: u64,
 }
 
 #[cfg(feature = "alloc")]
