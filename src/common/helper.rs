@@ -138,8 +138,9 @@ pub fn decode_context_property_id(
 }
 
 fn encode_unsigned_impl(writer: &mut Writer, tag_number: TagNumber, value: impl Into<u64>) {
-    let data = value.into().to_be_bytes();
-    let skip = data.into_iter().take_while(|&x| x == 0).count();
+    let value = value.into();
+    let skip = count_skippable_zero_bytes(value);
+    let data = value.to_be_bytes();
     let data = &data[skip..];
     Tag::new(tag_number, data.len() as u32)
         .encode(writer);
@@ -153,10 +154,12 @@ pub fn encode_unsigned(writer: &mut Writer, context_tag: Option<u8>, value: impl
 }
 
 pub fn encode_signed(writer: &mut Writer, context_tag: Option<u8>, value: impl Into<i64>) {
-    let data = value.into().to_be_bytes();
-    let leading_zeros = data.into_iter().take_while(|&x| x == 0).count();
-    let leading_signs = data.into_iter().take_while(|&x| x == 0xFF).count();
-    let skip = usize::max(leading_zeros, leading_signs);
+    let value = value.into();
+    let skip = match u64::try_from(value) {
+        Ok(non_negative) => count_skippable_zero_bytes(non_negative),
+        Err(_) => count_skippable_sign_bytes(value),
+    };
+    let data = value.to_be_bytes();
     let data = &data[skip..];
 
     let tag_number = context_tag.map(TagNumber::ContextSpecific)
@@ -182,10 +185,6 @@ pub fn encode_context_unsigned(writer: &mut Writer, tag_number: u8, value: impl 
 
 pub fn encode_application_signed(writer: &mut Writer, value: impl Into<i64>) {
     encode_signed(writer, None, value);
-}
-
-pub fn encode_context_signed(writer: &mut Writer, tag_number: u8, value: impl Into<i64>) {
-    encode_signed(writer, Some(tag_number), value);
 }
 
 pub fn encode_application_enumerated(writer: &mut Writer, value: u32) {
@@ -226,4 +225,76 @@ pub fn decode_signed(len: u32, reader: &mut Reader, buf: &[u8]) -> Result<i64, E
     bytes[..len].copy_from_slice(reader.read_slice(len, buf)?);
     let value = i64::from_be_bytes(bytes) >> (8 * (8 - len));
     Ok(value)
+}
+fn count_skippable_zero_bytes(data: u64) -> usize {
+    if data == 0 {
+        7
+    } else {
+        let skippable_bits = data.leading_zeros();
+        let skippable_bytes = skippable_bits / 8;
+        skippable_bytes as usize
+    }
+}
+
+fn count_skippable_sign_bytes(data: i64) -> usize {
+    if data >= 0 {
+        0
+    } else {
+        // We must leave at-least 1 sign bit.
+        let skippable_bits = data.leading_ones() - 1;
+        let skippable_bytes = skippable_bits / 8;
+        skippable_bytes as usize
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_count_skippable_zero_bytes() {
+        assert_eq!(count_skippable_zero_bytes(0x00), 7);
+
+        assert_eq!(count_skippable_zero_bytes(0x0000_0000_0000_0001), 7);
+        assert_eq!(count_skippable_zero_bytes(0x0000_0000_0000_00FF), 7);
+        assert_eq!(count_skippable_zero_bytes(0x0000_0000_0000_01FF), 6);
+        assert_eq!(count_skippable_zero_bytes(0x0000_0000_0000_FFFF), 6);
+        assert_eq!(count_skippable_zero_bytes(0x0000_0000_0001_FFFF), 5);
+        assert_eq!(count_skippable_zero_bytes(0x0000_0000_00FF_FFFF), 5);
+        assert_eq!(count_skippable_zero_bytes(0x0000_0000_01FF_FFFF), 4);
+        assert_eq!(count_skippable_zero_bytes(0x0000_0000_FFFF_FFFF), 4);
+        assert_eq!(count_skippable_zero_bytes(0x0000_0001_FFFF_FFFF), 3);
+        assert_eq!(count_skippable_zero_bytes(0x0000_00FF_FFFF_FFFF), 3);
+        assert_eq!(count_skippable_zero_bytes(0x0000_01FF_FFFF_FFFF), 2);
+        assert_eq!(count_skippable_zero_bytes(0x0000_FFFF_FFFF_FFFF), 2);
+        assert_eq!(count_skippable_zero_bytes(0x0001_FFFF_FFFF_FFFF), 1);
+        assert_eq!(count_skippable_zero_bytes(0x00FF_FFFF_FFFF_FFFF), 1);
+        assert_eq!(count_skippable_zero_bytes(0x01FF_FFFF_FFFF_FFFF), 0);
+        assert_eq!(count_skippable_zero_bytes(0xFFFF_FFFF_FFFF_FFFF), 0);
+    }
+
+    #[test]
+    fn test_count_skippable_sign_bytes() {
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_FFFF_FFFF_u64 as i64), 7);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_FFFF_FF80_u64 as i64), 7);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_FFFF_FF7F_u64 as i64), 6);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_FFFF_8000_u64 as i64), 6);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_FFFF_7FFF_u64 as i64), 5);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_FF80_0000_u64 as i64), 5);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_FF7F_FFFF_u64 as i64), 4);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_8000_0000_u64 as i64), 4);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_7FFF_FFFF_u64 as i64), 3);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FF80_0000_0000_u64 as i64), 3);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_FF7F_FFFF_FFFF_u64 as i64), 2);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_8000_0000_0000_u64 as i64), 2);
+        assert_eq!(count_skippable_sign_bytes(0xFFFF_7FFF_FFFF_FFFF_u64 as i64), 1);
+        assert_eq!(count_skippable_sign_bytes(0xFF80_0000_0000_0000_u64 as i64), 1);
+        assert_eq!(count_skippable_sign_bytes(0xFF7F_FFFF_FFFF_FFFF_u64 as i64), 0);
+        assert_eq!(count_skippable_sign_bytes(0x8000_0000_0000_0000_u64 as i64), 0);
+
+        // Also test some random non-negative values, even though those should not be passed to count_skippable_sign_bytes().
+        assert_eq!(count_skippable_sign_bytes(0x0000_0000_0000_0000_u64 as i64), 0);
+        assert_eq!(count_skippable_sign_bytes(0x7FFF_FFFF_FFFF_FFFF_u64 as i64), 0);
+        assert_eq!(count_skippable_sign_bytes(0x0000_FFFF_FFFF_FFFF_u64 as i64), 0);
+    }
 }
