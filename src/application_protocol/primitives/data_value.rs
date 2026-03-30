@@ -3,7 +3,7 @@ use core::{fmt::Display, str::from_utf8};
 use crate::common::{
     daily_schedule::WeeklySchedule,
     error::Error,
-    helper::{decode_unsigned, encode_application_enumerated},
+    helper::{decode_signed, decode_unsigned, encode_application_enumerated, encode_application_signed, encode_application_unsigned},
     io::{Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
@@ -31,7 +31,8 @@ pub enum ApplicationDataValue<'a> {
     CharacterString(CharacterString<'a>),
     Enumerated(Enumerated),
     BitString(BitString<'a>),
-    UnsignedInt(u32),
+    UnsignedInt(u64),
+    SignedInt(i64),
     WeeklySchedule(WeeklySchedule<'a>),
 }
 
@@ -39,6 +40,8 @@ pub enum ApplicationDataValue<'a> {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ApplicationDataValueWrite<'a> {
     Boolean(bool),
+    UnsignedInt(u64),
+    SignedInt(i64),
     Enumerated(Enumerated),
     Real(f32),
     WeeklySchedule(WeeklySchedule<'a>),
@@ -372,6 +375,22 @@ impl<'a> ApplicationDataValueWrite<'a> {
                         let value = decode_enumerated(object_id, property_id, &tag, reader, buf)?;
                         Ok(Self::Enumerated(value))
                     }
+                    TagNumber::Application(ApplicationTagNumber::UnsignedInt) => {
+                        Ok(Self::UnsignedInt(decode_unsigned(tag.value, reader, buf)?))
+
+                    }
+                    TagNumber::Application(ApplicationTagNumber::SignedInt) => {
+                        let len = tag.value as usize;
+                        if len > 8 {
+                            return Err(Error::Length(("integers bigger than 64 bits are not supported", tag.value)));
+                        }
+                        // Read into the most significant bits, then do a right shift to get sign extension for negative integers.
+                        let mut bytes = [0; 8];
+                        bytes[..len].copy_from_slice(reader.read_slice(len, buf)?);
+                        let value = i64::from_be_bytes(bytes) >> (8 * (8 - len));
+                        Ok(Self::SignedInt(value))
+
+                    }
                     tag_number => Err(Error::TagNotSupported((
                         "ApplicationDataValueWrite decode",
                         tag_number,
@@ -395,6 +414,12 @@ impl<'a> ApplicationDataValueWrite<'a> {
                 let tag = Tag::new(TagNumber::Application(ApplicationTagNumber::Real), len);
                 tag.encode(writer);
                 writer.extend_from_slice(&f32::to_be_bytes(*x))
+            }
+            Self::UnsignedInt(x) => {
+                encode_application_unsigned(writer, *x);
+            }
+            Self::SignedInt(x) => {
+                encode_application_signed(writer, *x);
             }
             Self::Enumerated(x) => {
                 x.encode(writer);
@@ -457,9 +482,10 @@ impl<'a> ApplicationDataValue<'a> {
                 x.encode_application(writer);
             }
             ApplicationDataValue::UnsignedInt(x) => {
-                Tag::new(TagNumber::Application(ApplicationTagNumber::UnsignedInt), 4)
-                    .encode(writer);
-                writer.extend_from_slice(&x.to_be_bytes());
+                encode_application_unsigned(writer, *x)
+            }
+            ApplicationDataValue::SignedInt(x) => {
+                encode_application_signed(writer, *x)
             }
             ApplicationDataValue::WeeklySchedule(x) => {
                 // no application tag required for weekly schedule
@@ -521,8 +547,12 @@ impl<'a> ApplicationDataValue<'a> {
                 Ok(ApplicationDataValue::Boolean(value))
             }
             ApplicationTagNumber::UnsignedInt => {
-                let value = decode_unsigned(tag.value, reader, buf)? as u32;
+                let value = decode_unsigned(tag.value, reader, buf)?;
                 Ok(ApplicationDataValue::UnsignedInt(value))
+            }
+            ApplicationTagNumber::SignedInt => {
+                let value = decode_signed(tag.value, reader, buf)?;
+                Ok(ApplicationDataValue::SignedInt(value))
             }
             ApplicationTagNumber::Time => {
                 if tag.value != 4 {

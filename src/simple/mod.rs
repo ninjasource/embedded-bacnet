@@ -1,3 +1,5 @@
+#![cfg(feature = "alloc")]
+
 /// This module is meant to be a very basic way to interact with a BACnet IP network in a simple request / response manner
 /// It automatically links up requests with responses using an invoke_id which only really works when you send one request at a time.
 /// If you intend to fire off many simultaneous requests then you should keep track of invoke_ids and handle congestion and packet ordering yourself.
