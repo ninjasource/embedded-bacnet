@@ -10,7 +10,7 @@ use crate::common::{get_bacnet_socket, MySocket};
 use clap::{command, Parser};
 use embedded_bacnet::{
     application_protocol::{
-        primitives::data_value::{ApplicationDataValue, ApplicationDataValueWrite},
+        primitives::data_value::ApplicationDataValue,
         services::{
             read_property_multiple::{
                 PropertyValue, ReadPropertyMultiple, ReadPropertyMultipleObject,
@@ -124,11 +124,11 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
         PropertyId::PropWeeklySchedule,
         None,
         None,
-        ApplicationDataValueWrite::WeeklySchedule(weekly_schedule),
+        ApplicationDataValue::WeeklySchedule(weekly_schedule),
     );
 
-    let ack = bacnet.write_property(&mut buf, request).await?;
-    println!("Write ack: {:?}", ack);
+    let () = bacnet.write_property(&mut buf, request).await?;
+    println!("Write ack: OK");
 
     Ok(())
 }
