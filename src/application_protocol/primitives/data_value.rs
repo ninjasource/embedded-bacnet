@@ -29,6 +29,7 @@ pub enum ApplicationDataValue<'a> {
     Time(Time),
     ObjectId(ObjectId),
     CharacterString(CharacterString<'a>),
+    OctetString(OctetString<'a>),
     Enumerated(Enumerated),
     BitString(BitString<'a>),
     UnsignedInt(u64),
@@ -174,6 +175,24 @@ pub struct CharacterString<'a> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CharacterString<'a> {
     pub inner: String,
+    #[cfg_attr(feature = "serde", serde(skip_serializing))]
+    _phantom: &'a Phantom,
+}
+
+#[cfg(not(feature = "alloc"))]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct OctetString<'a> {
+    pub inner: &'a [u8],
+}
+
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct OctetString<'a> {
+    pub inner: Vec<u8>,
     #[cfg_attr(feature = "serde", serde(skip_serializing))]
     _phantom: &'a Phantom,
 }
@@ -338,7 +357,30 @@ impl<'a> CharacterString<'a> {
             Error::InvalidValue("CharacterString bytes are not a valid utf8 string")
         })?;
 
-        Ok(CharacterString::new(inner))
+        Ok(Self::new(inner))
+    }
+}
+
+impl<'a> OctetString<'a> {
+    #[cfg(not(feature = "alloc"))]
+    pub fn new(inner: &'a [u8]) -> Self {
+        Self { inner }
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn new(inner: &[u8]) -> Self {
+        use crate::common::spooky::PHANTOM;
+
+        Self {
+            inner: inner.into(),
+            _phantom: &PHANTOM,
+        }
+    }
+
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
+    pub fn decode(len: u32, reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let slice = reader.read_slice(len as usize, buf)?;
+        Ok(Self::new(slice))
     }
 }
 
@@ -475,6 +517,14 @@ impl<'a> ApplicationDataValue<'a> {
                 writer.push(0); // utf8 encoding
                 writer.extend_from_slice(utf8_encoded);
             }
+            ApplicationDataValue::OctetString(x) => {
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::OctetString),
+                    x.inner.len() as u32,
+                )
+                .encode(writer);
+                writer.extend_from_slice(&x.inner);
+            }
             ApplicationDataValue::Enumerated(x) => {
                 x.encode(writer);
             }
@@ -533,6 +583,10 @@ impl<'a> ApplicationDataValue<'a> {
             ApplicationTagNumber::CharacterString => {
                 let text = CharacterString::decode(tag.value, reader, buf)?;
                 Ok(ApplicationDataValue::CharacterString(text))
+            }
+            ApplicationTagNumber::OctetString => {
+                let date = OctetString::decode(tag.value, reader, buf)?;
+                Ok(ApplicationDataValue::OctetString(date))
             }
             ApplicationTagNumber::Enumerated => {
                 let value = decode_enumerated(object_id, property_id, tag, reader, buf)?;
