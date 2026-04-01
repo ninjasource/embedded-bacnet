@@ -480,8 +480,14 @@ impl<'a> ApplicationDataValue<'a> {
             )
             .encode(writer),
             ApplicationDataValue::Real(x) => {
-                Tag::new(TagNumber::Application(ApplicationTagNumber::Real), 4).encode(writer);
-                writer.extend_from_slice(&x.to_be_bytes());
+                let bytes = x.to_be_bytes();
+                Tag::new(TagNumber::Application(ApplicationTagNumber::Real), bytes.len() as u32).encode(writer);
+                writer.extend_from_slice(&bytes);
+            }
+            ApplicationDataValue::Double(x) => {
+                let bytes = x.to_be_bytes();
+                Tag::new(TagNumber::Application(ApplicationTagNumber::Real), bytes.len() as u32).encode(writer);
+                writer.extend_from_slice(&bytes);
             }
             ApplicationDataValue::Date(x) => {
                 Tag::new(
@@ -541,8 +547,6 @@ impl<'a> ApplicationDataValue<'a> {
                 // no application tag required for weekly schedule
                 x.encode(writer);
             }
-
-            x => todo!("{:?}", x),
         };
     }
 
@@ -566,15 +570,14 @@ impl<'a> ApplicationDataValue<'a> {
 
         match tag_num {
             ApplicationTagNumber::Real => {
-                if tag.value != 4 {
-                    return Err(Error::Length((
-                        "real tag should have length of 4",
+                match tag.value {
+                    4 => Ok(ApplicationDataValue::Real(f32::from_be_bytes(reader.read_bytes(buf)?))),
+                    8 => Ok(ApplicationDataValue::Double(f64::from_be_bytes(reader.read_bytes(buf)?))),
+                    _ => Err(Error::Length((
+                        "real tag should have length of 4 or 8",
                         tag.value,
-                    )));
+                    ))),
                 }
-                Ok(ApplicationDataValue::Real(f32::from_be_bytes(
-                    reader.read_bytes(buf)?,
-                )))
             }
             ApplicationTagNumber::ObjectId => {
                 let object_id = ObjectId::decode(tag.value, reader, buf)?;
