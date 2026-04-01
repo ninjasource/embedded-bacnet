@@ -1,5 +1,5 @@
 use crate::{
-    application_protocol::primitives::data_value::ApplicationDataValueWrite,
+    application_protocol::primitives::data_value::ApplicationDataValue,
     common::{
         error::Error,
         helper::{
@@ -22,7 +22,7 @@ pub struct WriteProperty<'a> {
     pub property_id: PropertyId,
     pub priority: Option<u8>,
     pub array_index: Option<u32>,
-    pub value: ApplicationDataValueWrite<'a>,
+    pub value: ApplicationDataValue<'a>,
 }
 
 impl<'a> WriteProperty<'a> {
@@ -38,7 +38,7 @@ impl<'a> WriteProperty<'a> {
         property_id: PropertyId,
         priority: Option<u8>,
         array_index: Option<u32>,
-        value: ApplicationDataValueWrite<'a>,
+        value: ApplicationDataValue<'a>,
     ) -> Self {
         Self {
             object_id,
@@ -82,7 +82,7 @@ impl<'a> WriteProperty<'a> {
             "WriteProperty decode value",
             TagNumber::ContextSpecificOpening(Self::TAG_VALUE),
         )?;
-        let value = ApplicationDataValueWrite::decode(&object_id, &property_id, reader, buf)?;
+        let value = ApplicationDataValue::decode(&object_id, &property_id, reader, buf)?;
         Tag::decode_expected(
             reader,
             buf,
