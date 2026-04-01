@@ -321,8 +321,7 @@ impl<'a> PropertyResult<'a> {
                     ))
                 }
                 property_id => {
-                    let value =
-                        ApplicationDataValue::decode(object_id, property_id, reader, buf)?;
+                    let value = ApplicationDataValue::decode(object_id, property_id, reader, buf)?;
                     Ok(PropertyValue::PropValue(value))
                 }
             }

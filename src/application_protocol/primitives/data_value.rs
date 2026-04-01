@@ -3,7 +3,10 @@ use core::{fmt::Display, str::from_utf8};
 use crate::common::{
     daily_schedule::WeeklySchedule,
     error::Error,
-    helper::{decode_signed, decode_unsigned, encode_application_enumerated, encode_application_signed, encode_application_unsigned},
+    helper::{
+        decode_signed, decode_unsigned, encode_application_enumerated, encode_application_signed,
+        encode_application_unsigned,
+    },
     io::{Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
@@ -39,7 +42,6 @@ pub enum ApplicationDataValue<'a> {
 
 #[deprecated(note = "use ApplicationDataValue")]
 pub type ApplicationDataValueWrite<'a> = ApplicationDataValue<'a>;
-
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -387,12 +389,20 @@ impl<'a> ApplicationDataValue<'a> {
             .encode(writer),
             ApplicationDataValue::Real(x) => {
                 let bytes = x.to_be_bytes();
-                Tag::new(TagNumber::Application(ApplicationTagNumber::Real), bytes.len() as u32).encode(writer);
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::Real),
+                    bytes.len() as u32,
+                )
+                .encode(writer);
                 writer.extend_from_slice(&bytes);
             }
             ApplicationDataValue::Double(x) => {
                 let bytes = x.to_be_bytes();
-                Tag::new(TagNumber::Application(ApplicationTagNumber::Real), bytes.len() as u32).encode(writer);
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::Real),
+                    bytes.len() as u32,
+                )
+                .encode(writer);
                 writer.extend_from_slice(&bytes);
             }
             ApplicationDataValue::Date(x) => {
@@ -443,12 +453,8 @@ impl<'a> ApplicationDataValue<'a> {
             ApplicationDataValue::BitString(x) => {
                 x.encode_application(writer);
             }
-            ApplicationDataValue::UnsignedInt(x) => {
-                encode_application_unsigned(writer, *x)
-            }
-            ApplicationDataValue::SignedInt(x) => {
-                encode_application_signed(writer, *x)
-            }
+            ApplicationDataValue::UnsignedInt(x) => encode_application_unsigned(writer, *x),
+            ApplicationDataValue::SignedInt(x) => encode_application_signed(writer, *x),
             ApplicationDataValue::WeeklySchedule(x) => {
                 // no application tag required for weekly schedule
                 x.encode(writer);
@@ -481,16 +487,18 @@ impl<'a> ApplicationDataValue<'a> {
         };
 
         match tag_num {
-            ApplicationTagNumber::Real => {
-                match tag.value {
-                    4 => Ok(ApplicationDataValue::Real(f32::from_be_bytes(reader.read_bytes(buf)?))),
-                    8 => Ok(ApplicationDataValue::Double(f64::from_be_bytes(reader.read_bytes(buf)?))),
-                    _ => Err(Error::Length((
-                        "real tag should have length of 4 or 8",
-                        tag.value,
-                    ))),
-                }
-            }
+            ApplicationTagNumber::Real => match tag.value {
+                4 => Ok(ApplicationDataValue::Real(f32::from_be_bytes(
+                    reader.read_bytes(buf)?,
+                ))),
+                8 => Ok(ApplicationDataValue::Double(f64::from_be_bytes(
+                    reader.read_bytes(buf)?,
+                ))),
+                _ => Err(Error::Length((
+                    "real tag should have length of 4 or 8",
+                    tag.value,
+                ))),
+            },
             ApplicationTagNumber::ObjectId => {
                 let object_id = ObjectId::decode(tag.value, reader, buf)?;
                 Ok(ApplicationDataValue::ObjectId(object_id))
