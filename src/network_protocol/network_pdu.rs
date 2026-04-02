@@ -43,7 +43,7 @@ impl From<u8> for MessagePriority {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 enum ControlFlags {
@@ -261,25 +261,29 @@ impl<'a> NetworkPdu<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+/// Opaque device address.
+///
+/// The format of the address depends on the network for which the address is valid.
+#[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Addr {
-    pub ipv4: [u8; 4],
-    pub port: u16,
+pub struct DeviceAddress {
+    len: u8,
+    data: [u8; Self::MAX_LEN],
 }
 
-const IPV4_ADDR_LEN: u8 = 6;
+#[deprecated(note = "use DeviceAddress")]
+pub type Addr = DeviceAddress;
 
 pub type SourceAddress = NetworkAddress;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NetworkAddress {
     pub net: u16,
-    pub addr: Option<Addr>,
+    pub addr: DeviceAddress,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct DestinationAddress {
     pub network_address: NetworkAddress,
@@ -287,7 +291,8 @@ pub struct DestinationAddress {
 }
 
 impl DestinationAddress {
-    pub fn new(net: u16, addr: Option<Addr>) -> Self {
+    pub fn new(net: u16, addr: Option<DeviceAddress>) -> Self {
+        let addr = addr.unwrap_or(DeviceAddress::BROADCAST);
         Self {
             network_address: NetworkAddress { net, addr },
             hop_count: 255,
@@ -298,34 +303,195 @@ impl DestinationAddress {
 impl NetworkAddress {
     pub fn encode(&self, writer: &mut Writer) {
         writer.extend_from_slice(&self.net.to_be_bytes());
-        match self.addr.as_ref() {
-            Some(addr) => {
-                writer.push(IPV4_ADDR_LEN);
-                writer.extend_from_slice(&addr.ipv4);
-                writer.extend_from_slice(&addr.port.to_be_bytes());
-            }
-            None => writer.push(0),
-        }
+        self.addr.encode(writer);
     }
 
     pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
         let net = u16::from_be_bytes(reader.read_bytes(buf)?);
-        let len = reader.read_byte(buf)?;
-        match len {
-            IPV4_ADDR_LEN => {
-                let ipv4: [u8; 4] = reader.read_bytes(buf)?;
-                let port = u16::from_be_bytes(reader.read_bytes(buf)?);
+        let addr = DeviceAddress::decode(reader, buf)?;
+        Ok(Self { net, addr })
+    }
+}
 
-                Ok(Self {
-                    net,
-                    addr: Some(Addr { ipv4, port }),
-                })
+impl DeviceAddress {
+    /// The maximum length of an address.
+    const MAX_LEN: usize = 18; // IPv6 address + port number
+
+    /// The broadcast address.
+    ///
+    /// Used to broadcast a message to all devices on a remote network.
+    pub const BROADCAST: Self = Self {
+        len: 0,
+        data: [0; Self::MAX_LEN],
+    };
+
+    /// Make a new address from a byte slice.
+    pub fn new(value: &[u8]) -> Result<Self, Error> {
+        if value.len() > Self::MAX_LEN {
+            Err(Error::Length((
+                "network address too long: maximum length is 18 bytes",
+                value.len() as u32,
+            )))
+        } else {
+            let mut data = [0; Self::MAX_LEN];
+            data[..value.len()].copy_from_slice(value);
+            Ok(Self {
+                len: value.len() as u8,
+                data,
+            })
+        }
+    }
+
+    /// Make an address from a byte array.
+    ///
+    /// Fails to compile if N > Self::MAX_LEN.
+    pub const fn from_array<const N: usize>(input: [u8; N]) -> Self {
+        const {
+            assert!(N <= Self::MAX_LEN);
+        }
+        let mut data = [0u8; Self::MAX_LEN];
+        let mut i = 0;
+        while i < N {
+            data[i] = input[i];
+            i += 1;
+        }
+        Self { len: N as u8, data }
+    }
+
+    /// Make a new BACnet/IP IPv4 address (4 byte IP address and 2 byte port number).
+    pub const fn new_ipv4(addr: core::net::SocketAddrV4) -> Self {
+        let ip = addr.ip().octets();
+        let port = addr.port().to_be_bytes();
+
+        Self::from_array([ip[0], ip[1], ip[2], ip[3], port[0], port[1]])
+    }
+
+    /// Make a new BACnet/IP IPv6 address (16 byte IP address and 2 byte port number).
+    pub const fn new_ipv6(addr: core::net::SocketAddrV6) -> Self {
+        let ip = addr.ip().octets();
+        let port = addr.port().to_be_bytes();
+
+        Self::from_array([
+            ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7], ip[8], ip[9], ip[10], ip[11],
+            ip[12], ip[13], ip[14], ip[15], port[0], port[1],
+        ])
+    }
+
+    /// Make a new MS/TP address (a single byte).
+    pub const fn new_mstp(addr: u8) -> Self {
+        Self::from_array([addr])
+    }
+
+    pub fn len(&self) -> u8 {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn is_broadcast(&self) -> bool {
+        self.is_empty()
+    }
+
+    pub fn data(&self) -> &[u8] {
+        let len = self.len as usize;
+        &self.data[..len]
+    }
+
+    pub fn encode(&self, writer: &mut Writer) {
+        writer.push(self.len);
+        writer.extend_from_slice(self.data());
+    }
+
+    pub fn decode(reader: &mut Reader, buf: &[u8]) -> Result<Self, Error> {
+        let len = reader.read_byte(buf)?;
+        let data = reader.read_slice(len.into(), buf)?;
+        Self::new(data)
+    }
+}
+
+impl TryFrom<&[u8]> for DeviceAddress {
+    type Error = Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<core::net::SocketAddrV4> for DeviceAddress {
+    fn from(value: core::net::SocketAddrV4) -> Self {
+        Self::new_ipv4(value)
+    }
+}
+
+impl From<core::net::SocketAddrV6> for DeviceAddress {
+    fn from(value: core::net::SocketAddrV6) -> Self {
+        Self::new_ipv6(value)
+    }
+}
+
+impl From<core::net::SocketAddr> for DeviceAddress {
+    fn from(value: core::net::SocketAddr) -> Self {
+        match value {
+            core::net::SocketAddr::V4(x) => x.into(),
+            core::net::SocketAddr::V6(x) => x.into(),
+        }
+    }
+}
+
+impl TryFrom<DeviceAddress> for core::net::SocketAddrV4 {
+    type Error = Error;
+
+    fn try_from(value: DeviceAddress) -> Result<Self, Self::Error> {
+        match value.data() {
+            &[a, b, c, d, port_high, port_low] => {
+                let ip = core::net::Ipv4Addr::from_octets([a, b, c, d]);
+                let port = u16::from_be_bytes([port_high, port_low]);
+                Ok(Self::new(ip, port))
             }
-            0 => Ok(Self { net, addr: None }),
-            x => Err(Error::Length((
-                "NetworkAddress decode ip len can only be 6 or 0",
-                x as u32,
+            _ => Err(Error::Length((
+                "BACnet/IPv4 addresses must be 6 byes long",
+                value.len().into(),
             ))),
+        }
+    }
+}
+
+impl TryFrom<DeviceAddress> for core::net::SocketAddrV6 {
+    type Error = Error;
+
+    fn try_from(value: DeviceAddress) -> Result<Self, Self::Error> {
+        match value.data() {
+            &[b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, port_high, port_low] =>
+            {
+                let ip = core::net::Ipv6Addr::from_octets([
+                    b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15,
+                ]);
+                let port = u16::from_be_bytes([port_high, port_low]);
+                Ok(Self::new(ip, port, 0, 0))
+            }
+            _ => Err(Error::Length((
+                "BACnet/IPv6 addresses must be 18 byes long",
+                value.len().into(),
+            ))),
+        }
+    }
+}
+
+impl TryFrom<DeviceAddress> for core::net::SocketAddr {
+    type Error = Error;
+
+    fn try_from(value: DeviceAddress) -> Result<Self, Self::Error> {
+        if let Ok(v4) = value.try_into() {
+            Ok(Self::V4(v4))
+        } else if let Ok(v6) = value.try_into() {
+            Ok(Self::V6(v6))
+        } else {
+            Err(Error::Length((
+                "BACnet/IP addresses must be 6 or 18 byes long",
+                value.len().into(),
+            )))
         }
     }
 }
