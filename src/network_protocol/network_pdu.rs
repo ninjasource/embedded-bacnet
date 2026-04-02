@@ -207,7 +207,10 @@ impl<'a> NetworkPdu<'a> {
     #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
         // ignore version
-        let _version = reader.read_byte(buf)?;
+        let version = reader.read_byte(buf)?;
+        if version != Self::VERSION {
+            return Err(Error::InvalidProtocolVersion(version));
+        }
 
         // read and decode control byte
         let control = reader.read_byte(buf)?;
