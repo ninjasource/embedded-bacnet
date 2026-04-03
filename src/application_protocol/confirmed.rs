@@ -16,7 +16,7 @@ use crate::{
         spec::{ErrorClass, ErrorCode},
         tag::{ApplicationTagNumber, Tag, TagNumber},
     },
-    network_protocol::{ip::IpFrame, network_pdu::NetworkMessage},
+    network_protocol::{ip::IpFrame, mstp::MstpFrame, network_pdu::NetworkMessage},
 };
 
 #[derive(Debug, Clone)]
@@ -237,6 +237,22 @@ impl<'a> TryFrom<IpFrame<'a>> for SimpleAck {
     }
 }
 
+impl<'a> TryFrom<MstpFrame<'a>> for SimpleAck {
+    type Error = Error;
+
+    fn try_from(value: MstpFrame<'a>) -> Result<Self, Self::Error> {
+        match value.npdu {
+            Some(x) => match x.network_message {
+                NetworkMessage::Apdu(ApplicationPdu::SimpleAck(ack)) => Ok(ack),
+                _ => Err(Error::ConvertDataLink(
+                    "npdu message is not an apdu simple ack",
+                )),
+            },
+            _ => Err(Error::ConvertDataLink("no npdu defined in message")),
+        }
+    }
+}
+
 impl SimpleAck {
     pub fn encode(&self, writer: &mut Writer) {
         let control = (ApduType::SimpleAck as u8) << 4;
@@ -319,6 +335,22 @@ impl<'a> TryFrom<IpFrame<'a>> for ComplexAck<'a> {
     type Error = Error;
 
     fn try_from(value: IpFrame<'a>) -> Result<Self, Self::Error> {
+        match value.npdu {
+            Some(x) => match x.network_message {
+                NetworkMessage::Apdu(ApplicationPdu::ComplexAck(ack)) => Ok(ack),
+                _ => Err(Error::ConvertDataLink(
+                    "npdu message is not an apdu complex ack",
+                )),
+            },
+            _ => Err(Error::ConvertDataLink("no npdu defined in message")),
+        }
+    }
+}
+
+impl<'a> TryFrom<MstpFrame<'a>> for ComplexAck<'a> {
+    type Error = Error;
+
+    fn try_from(value: MstpFrame<'a>) -> Result<Self, Self::Error> {
         match value.npdu {
             Some(x) => match x.network_message {
                 NetworkMessage::Apdu(ApplicationPdu::ComplexAck(ack)) => Ok(ack),
@@ -446,6 +478,22 @@ impl<'a> TryFrom<IpFrame<'a>> for SegmentAck {
     type Error = Error;
 
     fn try_from(value: IpFrame<'a>) -> Result<Self, Self::Error> {
+        match value.npdu {
+            Some(x) => match x.network_message {
+                NetworkMessage::Apdu(ApplicationPdu::SegmentAck(ack)) => Ok(ack),
+                _ => Err(Error::ConvertDataLink(
+                    "npdu message is not an apdu simple ack",
+                )),
+            },
+            _ => Err(Error::ConvertDataLink("no npdu defined in message")),
+        }
+    }
+}
+
+impl<'a> TryFrom<MstpFrame<'a>> for SegmentAck {
+    type Error = Error;
+
+    fn try_from(value: MstpFrame<'a>) -> Result<Self, Self::Error> {
         match value.npdu {
             Some(x) => match x.network_message {
                 NetworkMessage::Apdu(ApplicationPdu::SegmentAck(ack)) => Ok(ack),
