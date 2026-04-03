@@ -61,6 +61,25 @@ impl TryFrom<u8> for MstpFrameType {
 
 const PREAMBLE: [u8; 2] = [0x55, 0xFF];
 
+#[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ScanError {
+    Garbage(usize),
+    InvalidHeader,
+    IncompleteFrame,
+}
+
+impl ScanError {
+    /// Number of bytes to discard from the front of the input stream.
+    pub fn discard_len(&self) -> usize {
+        match self {
+            Self::Garbage(x) => *x,
+            Self::InvalidHeader => 2,
+            Self::IncompleteFrame => 0,
+        }
+    }
+}
+
 impl<'a> MstpFrame<'a> {
     pub fn new(
         frame_type: MstpFrameType,
@@ -118,14 +137,42 @@ impl<'a> MstpFrame<'a> {
         writer.buf[header_start + 7] = header_crc;
     }
 
+    /// Scan the reader for an incoming frame.
+    ///
+    /// If a valid frame header is found in the buffer, this returns the length of the whole frame.
+    /// Otherwise, a [`ScanError`] is returned which can tell you how much data to discard from the buffer.
+    ///
+    /// Does not modify the position of the reader.
+    pub fn scan(reader: &mut Reader, buf: &'a [u8]) -> Result<usize, ScanError> {
+        let buf = &buf[reader.index..reader.end];
+        let garbage = buf
+            .array_windows::<2>()
+            .take_while(|&&data| data != PREAMBLE)
+            .count();
+        if garbage > 0 {
+            return Err(ScanError::Garbage(garbage));
+        }
+
+        if buf.len() < 8 {
+            return Err(ScanError::IncompleteFrame);
+        }
+
+        // Check the header CRC (before checking length, it's a better error for corrupt transmissions).
+        if header_crc(&buf[2..8]) != 0x55 {
+            return Err(ScanError::InvalidHeader);
+        }
+
+        let data_len = u16::from_be_bytes([buf[5], buf[6]]) as usize;
+        Ok(data_len + 8)
+    }
+
     #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
-        let header_start = reader.index;
-
         let preamble: [u8; 2] = reader.read_bytes(buf)?;
         if preamble != PREAMBLE {
             return Err(Error::InvalidValue("invalid MS/TP frame preamble"));
         }
+        let header_start = reader.index;
 
         let frame_type = MstpFrameType::try_from(reader.read_byte(buf)?)
             .map_err(|_| Error::InvalidValue("invalid or unrecognized MS/TP frame type"))?;
