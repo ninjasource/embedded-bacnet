@@ -10,7 +10,7 @@ use embedded_bacnet::{
     },
     common::io::{Reader, Writer},
     network_protocol::{
-        data_link::{DataLink, DataLinkFunction},
+        ip::{BvllFunction, IpFrame},
         network_pdu::{DestinationAddress, MessagePriority, NetworkMessage, NetworkPdu},
     },
 };
@@ -58,7 +58,7 @@ fn main() -> Result<(), Error> {
     let dst = Some(DestinationAddress::new(0xffff, None));
     let message = NetworkMessage::Apdu(apdu);
     let npdu = NetworkPdu::new(None, dst, false, MessagePriority::Normal, message);
-    let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu, Some(npdu));
+    let data_link = IpFrame::new(BvllFunction::OriginalBroadcastNpdu, Some(npdu));
 
     let mut buffer = vec![0; 1500];
 
@@ -75,7 +75,7 @@ fn main() -> Result<(), Error> {
         let payload = &buffer[..n];
         println!("Received: {:02x?} from {:?}", payload, peer);
         let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, payload);
+        let message = IpFrame::decode(&mut reader, payload);
         println!("Decoded:  {:?}\n", message);
     }
 }

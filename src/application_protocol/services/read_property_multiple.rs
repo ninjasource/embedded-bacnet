@@ -19,7 +19,7 @@ use crate::{
         spec::{ErrorClass, ErrorCode, BACNET_ARRAY_ALL},
         tag::{ApplicationTagNumber, Tag, TagNumber},
     },
-    network_protocol::data_link::DataLink,
+    network_protocol::ip::IpFrame,
 };
 
 #[cfg(feature = "alloc")]
@@ -57,10 +57,10 @@ impl<'a> IntoIterator for &'_ ReadPropertyMultipleAck<'a> {
     }
 }
 
-impl<'a> TryFrom<DataLink<'a>> for ReadPropertyMultipleAck<'a> {
+impl<'a> TryFrom<IpFrame<'a>> for ReadPropertyMultipleAck<'a> {
     type Error = Error;
 
-    fn try_from(value: DataLink<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: IpFrame<'a>) -> Result<Self, Self::Error> {
         let ack: ComplexAck = value.try_into()?;
         match ack.service {
             ComplexAckService::ReadPropertyMultiple(ack) => Ok(ack),
