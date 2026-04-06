@@ -33,6 +33,16 @@ pub enum MstpFrameType {
     BacnetExtendedDataNotExpectingReply = 33,
 }
 
+impl MstpFrameType {
+    pub fn is_cobs_encoded(self) -> bool {
+        match self as u8 {
+            0..=31 => false,
+            32..=127 => true,
+            128..=255 => false,
+        }
+    }
+}
+
 impl From<MstpFrameType> for u8 {
     fn from(value: MstpFrameType) -> Self {
         value as Self
@@ -60,6 +70,18 @@ impl TryFrom<u8> for MstpFrameType {
 }
 
 const PREAMBLE: [u8; 2] = [0x55, 0xFF];
+
+/// Length of the CRC for non COBS-encoded data.
+const DATA_CRC_LEN: usize = 2;
+
+/// Length of the CRC32K after COBS encoding.
+const COBS_ENCODED_CRC_LEN: usize = 5;
+
+/// Offset of the length field in the MS/TP frame header.
+const HEADER_LEN_OFFSET: usize = 5;
+
+/// Offset of the header CRC field in the MS/TP frame header.
+const HEADER_CRC_OFFSET: usize = 7;
 
 #[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -111,7 +133,7 @@ impl<'a> MstpFrame<'a> {
         )
     }
 
-    pub fn encode(&self, writer: &mut Writer) {
+    pub fn encode(&self, writer: &mut Writer) -> Result<(), Error> {
         let header_start = writer.index;
         writer.extend_from_slice(&PREAMBLE);
         writer.extend_from_slice(&[
@@ -126,15 +148,38 @@ impl<'a> MstpFrame<'a> {
         if let Some(npdu) = &self.npdu {
             npdu.encode(writer);
         }
-        let len = u16::try_from(writer.index - data_start).unwrap(); // TODO: encoding should probably be fallible too.
-        if len > 0 {
-            writer.buf[header_start + 5..][..2].copy_from_slice(&len.to_be_bytes());
-            let data_crc = !data_crc(&writer.to_bytes()[data_start..]); // NOTE: flip the bits of the CRC
-            writer.extend_from_slice(&data_crc.to_le_bytes()); // little endian!
+
+        // For COBS-encoded frames, encode the payload.
+        if self.frame_type.is_cobs_encoded() {
+            // Perform COBS encoding on the message, including the CRC.
+            let message_buffer = &mut writer.buf[data_start..];
+            let message_len = writer.index - data_start;
+            let encoded_len = encode_cobs(message_buffer, message_len)?;
+            // Update the position of the writer.
+            writer.index = data_start + encoded_len;
+
+            // Add the CRC32K checksum (5 bytes...)
+            let crc_value = encoded_crc32k(&writer.buf[data_start..writer.index]);
+            writer.extend_from_slice(&crc_value); // little endian!
+
+        // For old style frames with data, just add the CRC.
+        } else if writer.index != data_start {
+            let crc_value = !data_crc(&writer.to_bytes()[data_start..]); // flip the bits of the CRC value
+            writer.extend_from_slice(&crc_value.to_le_bytes()); // little endian!
+        }
+
+        // If there is a payload, update the length field in the header.
+        if writer.index != data_start {
+            // Exclude the 2 byte checksum from the length, even for COBS encoded frames (for backwards compatibility).
+            let len = writer.index - data_start - DATA_CRC_LEN;
+            let len = u16::try_from(len)
+                .map_err(|_| Error::Length(("message payload too long", len as u32)))?;
+            writer.buf[header_start + HEADER_LEN_OFFSET..][..2].copy_from_slice(&len.to_be_bytes());
         }
 
         let header_crc = !header_crc(&writer.to_bytes()[header_start..data_start]); // NOTE: flip the bits of the CRC
-        writer.buf[header_start + 7] = header_crc;
+        writer.buf[header_start + HEADER_CRC_OFFSET] = header_crc;
+        Ok(())
     }
 
     /// Scan the reader for an incoming frame.
@@ -166,8 +211,11 @@ impl<'a> MstpFrame<'a> {
         Ok(data_len + 8)
     }
 
+    /// Decode a BACnet MS/TP frame.
+    ///
+    /// NOTE: This will modify the buffer in-place to decode COBS-encoded payloads.
     #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
-    pub fn decode(reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+    pub fn decode(reader: &mut Reader, buf: &'a mut [u8]) -> Result<Self, Error> {
         let preamble: [u8; 2] = reader.read_bytes(buf)?;
         if preamble != PREAMBLE {
             return Err(Error::InvalidValue("invalid MS/TP frame preamble"));
@@ -196,17 +244,51 @@ impl<'a> MstpFrame<'a> {
             });
         }
 
-        // Read the data and check the CRC.
-        let data_with_crc = reader.read_slice(data_len + 2, buf)?; // Plus 2 bytes for the CRC (even correct extended data frames).
-        if data_crc(data_with_crc) != 0xF0B8 {
-            return Err(Error::InvalidValue("invalid MS/TP data CRC"));
-        }
+        // Get a mutable slice for the payload data with (encoded) CRC.
+        let data_start = reader.index;
+        reader.read_slice(data_len + DATA_CRC_LEN, buf)?;
+        let data = &mut buf[data_start..][..data_len + DATA_CRC_LEN];
+
+        // For "simple" frames, just check the data CRC and then remove it.
+        let data = if !frame_type.is_cobs_encoded() {
+            if data_crc(data) != 0xF0B8 {
+                return Err(Error::InvalidValue("invalid MS/TP data CRC"));
+            }
+            &data[..data_len]
+
+        // For COBS encoded frames, things are a bit more complicated.
+        } else {
+            if data.len() < COBS_ENCODED_CRC_LEN {
+                return Err(Error::Length((
+                    "COBS encoded payload is too short",
+                    data.len() as u32,
+                )));
+            }
+
+            // First decode the CRC.
+            // This leaves the decoded CRC in the 4 bytes after the COBS encoded data.
+            let crc_start = data.len() - COBS_ENCODED_CRC_LEN;
+            decode_cobs(&mut data[crc_start..])
+                .map_err(|()| Error::ConvertDataLink("invalid COBS encoded CRC"))?;
+
+            // Now verify the CRC.
+            if crc32k(&data[..crc_start + 4]) != 0x0843323B {
+                return Err(Error::ConvertDataLink(
+                    "Invalid MS/TP COBS-encoded data CRC",
+                ));
+            }
+
+            // Now decode the COBS data itself.
+            let decoded_len = decode_cobs(&mut data[..crc_start])
+                .map_err(|()| Error::ConvertDataLink("invalid COBS encoded data payload"))?;
+            &data[..decoded_len]
+        };
 
         let npdu = match frame_type {
             MstpFrameType::BacnetDataExpectingReply
             | MstpFrameType::BacnetExtendedDataNotExpectingReply => Some(NetworkPdu::decode(
-                &mut Reader::new_with_len(data_len),
-                data_with_crc,
+                &mut Reader::new_with_len(data.len()),
+                data,
             )?),
             _ => None,
         };
@@ -244,6 +326,58 @@ fn data_crc(data: &[u8]) -> u16 {
     // NOTE: When encoded in the frame, the bits must be flipped, but the CRC value itself is not bit-flipped.
     // This matters because the specification also tells you the CRC value to check for, and when they do it is *without* flipped bits.
     crc
+}
+
+fn crc32k(data: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFF;
+
+    for &byte in data {
+        // NOTE: This CRC works the opposite way from normal because ASHRAE decided that bit 7 represents x^0 and bit 0 represents x^7.
+        // For this reason, we XOR each data byte with the least significant byte of the CRC accumulator instead of the most significant byte.
+        let index = (crc & 0xFF) as usize ^ usize::from(byte);
+        crc = crc >> 8 ^ CRC32K_TABLE[index]
+    }
+
+    // NOTE: When encoded in the frame, the bits must be flipped, but the CRC value itself is not bit-flipped.
+    // This matters because the specification also tells you the CRC value to check for, and when they do it is *without* flipped bits.
+    crc
+}
+
+fn encoded_crc32k(data: &[u8]) -> [u8; 5] {
+    let crc = crc32k(data);
+    let crc = !crc; // flip bits
+    let crc = crc.to_le_bytes(); // little endian
+    let mut encoded = [0u8; 6];
+    let len = corncobs::encode_buf(&crc, &mut encoded);
+    debug_assert_eq!(len, 6);
+    [encoded[0], encoded[1], encoded[2], encoded[3], encoded[4]]
+}
+
+fn decode_cobs(data: &mut [u8]) -> Result<usize, ()> {
+    // XOR all bytes with 0x55 before decoding.
+    for byte in data.iter_mut() {
+        *byte ^= 0x55;
+    }
+    corncobs::decode_in_place(data).map_err(|_| ())
+}
+
+fn encode_cobs(buffer: &mut [u8], message_len: usize) -> Result<usize, Error> {
+    if buffer.len() < corncobs::max_encoded_len(message_len) {
+        return Err(Error::Length((
+            "buffer not large enough to encode COBS payload",
+            buffer.len() as u32,
+        )));
+    }
+
+    let encoded_len = corncobs::encode_in_place(buffer, message_len);
+    let encoded_len = encoded_len - 1; // COBS adds a trailing 0 byte, BACnet does not
+
+    // XOR all bytes with 0x55 after endecoding.
+    for byte in &mut buffer[..encoded_len] {
+        *byte ^= 0x55;
+    }
+
+    Ok(encoded_len)
 }
 
 /// CRC table for the header checksum.
@@ -320,6 +454,43 @@ const DATA_CRC_TABLE: [u16; 256] = [
     0x7BC7, 0x6A4E, 0x58D5, 0x495C, 0x3DE3, 0x2C6A, 0x1EF1, 0x0F78,
 ];
 
+/// CRC table for CRC32K (with most significant bit representing x^0)
+#[rustfmt::skip]
+const CRC32K_TABLE: [u32; 256] =  [
+    0x00000000, 0x9695C4CA, 0xFB4839C9, 0x6DDDFD03, 0x20F3C3CF, 0xB6660705, 0xDBBBFA06, 0x4D2E3ECC,
+    0x41E7879E, 0xD7724354, 0xBAAFBE57, 0x2C3A7A9D, 0x61144451, 0xF781809B, 0x9A5C7D98, 0x0CC9B952,
+    0x83CF0F3C, 0x155ACBF6, 0x788736F5, 0xEE12F23F, 0xA33CCCF3, 0x35A90839, 0x5874F53A, 0xCEE131F0,
+    0xC22888A2, 0x54BD4C68, 0x3960B16B, 0xAFF575A1, 0xE2DB4B6D, 0x744E8FA7, 0x199372A4, 0x8F06B66E,
+    0xD1FDAE25, 0x47686AEF, 0x2AB597EC, 0xBC205326, 0xF10E6DEA, 0x679BA920, 0x0A465423, 0x9CD390E9,
+    0x901A29BB, 0x068FED71, 0x6B521072, 0xFDC7D4B8, 0xB0E9EA74, 0x267C2EBE, 0x4BA1D3BD, 0xDD341777,
+    0x5232A119, 0xC4A765D3, 0xA97A98D0, 0x3FEF5C1A, 0x72C162D6, 0xE454A61C, 0x89895B1F, 0x1F1C9FD5,
+    0x13D52687, 0x8540E24D, 0xE89D1F4E, 0x7E08DB84, 0x3326E548, 0xA5B32182, 0xC86EDC81, 0x5EFB184B,
+    0x7598EC17, 0xE30D28DD, 0x8ED0D5DE, 0x18451114, 0x556B2FD8, 0xC3FEEB12, 0xAE231611, 0x38B6D2DB,
+    0x347F6B89, 0xA2EAAF43, 0xCF375240, 0x59A2968A, 0x148CA846, 0x82196C8C, 0xEFC4918F, 0x79515545,
+    0xF657E32B, 0x60C227E1, 0x0D1FDAE2, 0x9B8A1E28, 0xD6A420E4, 0x4031E42E, 0x2DEC192D, 0xBB79DDE7,
+    0xB7B064B5, 0x2125A07F, 0x4CF85D7C, 0xDA6D99B6, 0x9743A77A, 0x01D663B0, 0x6C0B9EB3, 0xFA9E5A79,
+    0xA4654232, 0x32F086F8, 0x5F2D7BFB, 0xC9B8BF31, 0x849681FD, 0x12034537, 0x7FDEB834, 0xE94B7CFE,
+    0xE582C5AC, 0x73170166, 0x1ECAFC65, 0x885F38AF, 0xC5710663, 0x53E4C2A9, 0x3E393FAA, 0xA8ACFB60,
+    0x27AA4D0E, 0xB13F89C4, 0xDCE274C7, 0x4A77B00D, 0x07598EC1, 0x91CC4A0B, 0xFC11B708, 0x6A8473C2,
+    0x664DCA90, 0xF0D80E5A, 0x9D05F359, 0x0B903793, 0x46BE095F, 0xD02BCD95, 0xBDF63096, 0x2B63F45C,
+    0xEB31D82E, 0x7DA41CE4, 0x1079E1E7, 0x86EC252D, 0xCBC21BE1, 0x5D57DF2B, 0x308A2228, 0xA61FE6E2,
+    0xAAD65FB0, 0x3C439B7A, 0x519E6679, 0xC70BA2B3, 0x8A259C7F, 0x1CB058B5, 0x716DA5B6, 0xE7F8617C,
+    0x68FED712, 0xFE6B13D8, 0x93B6EEDB, 0x05232A11, 0x480D14DD, 0xDE98D017, 0xB3452D14, 0x25D0E9DE,
+    0x2919508C, 0xBF8C9446, 0xD2516945, 0x44C4AD8F, 0x09EA9343, 0x9F7F5789, 0xF2A2AA8A, 0x64376E40,
+    0x3ACC760B, 0xAC59B2C1, 0xC1844FC2, 0x57118B08, 0x1A3FB5C4, 0x8CAA710E, 0xE1778C0D, 0x77E248C7,
+    0x7B2BF195, 0xEDBE355F, 0x8063C85C, 0x16F60C96, 0x5BD8325A, 0xCD4DF690, 0xA0900B93, 0x3605CF59,
+    0xB9037937, 0x2F96BDFD, 0x424B40FE, 0xD4DE8434, 0x99F0BAF8, 0x0F657E32, 0x62B88331, 0xF42D47FB,
+    0xF8E4FEA9, 0x6E713A63, 0x03ACC760, 0x953903AA, 0xD8173D66, 0x4E82F9AC, 0x235F04AF, 0xB5CAC065,
+    0x9EA93439, 0x083CF0F3, 0x65E10DF0, 0xF374C93A, 0xBE5AF7F6, 0x28CF333C, 0x4512CE3F, 0xD3870AF5,
+    0xDF4EB3A7, 0x49DB776D, 0x24068A6E, 0xB2934EA4, 0xFFBD7068, 0x6928B4A2, 0x04F549A1, 0x92608D6B,
+    0x1D663B05, 0x8BF3FFCF, 0xE62E02CC, 0x70BBC606, 0x3D95F8CA, 0xAB003C00, 0xC6DDC103, 0x504805C9,
+    0x5C81BC9B, 0xCA147851, 0xA7C98552, 0x315C4198, 0x7C727F54, 0xEAE7BB9E, 0x873A469D, 0x11AF8257,
+    0x4F549A1C, 0xD9C15ED6, 0xB41CA3D5, 0x2289671F, 0x6FA759D3, 0xF9329D19, 0x94EF601A, 0x027AA4D0,
+    0x0EB31D82, 0x9826D948, 0xF5FB244B, 0x636EE081, 0x2E40DE4D, 0xB8D51A87, 0xD508E784, 0x439D234E,
+    0xCC9B9520, 0x5A0E51EA, 0x37D3ACE9, 0xA1466823, 0xEC6856EF, 0x7AFD9225, 0x17206F26, 0x81B5ABEC,
+    0x8D7C12BE, 0x1BE9D674, 0x76342B77, 0xE0A1EFBD, 0xAD8FD171, 0x3B1A15BB, 0x56C7E8B8, 0xC0522C72,
+];
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -342,6 +513,15 @@ mod test {
             }
             data
         }
+        extern crate std;
+        std::eprint!("const HEADER_CRC_TABLE: [u8; 256] =  [");
+        for i in 0..=255 {
+            if i % 16 == 0 {
+                std::eprint!("\n   ");
+            }
+            std::eprint!(" 0x{:02X},", crc_remainder(i));
+        }
+        std::eprintln!("\n];");
 
         for i in 0..=255 {
             assert!(HEADER_CRC_TABLE[usize::from(i)] == crc_remainder(i));
@@ -365,8 +545,50 @@ mod test {
             crc
         }
 
+        extern crate std;
+        std::eprint!("const DATA_CRC_TABLE: [u16; 256] =  [");
+        for i in 0..=255 {
+            if i % 16 == 0 {
+                std::eprint!("\n   ");
+            }
+            std::eprint!(" 0x{:04X},", crc_remainder(i));
+        }
+        std::eprintln!("\n];");
+
         for i in 0..=255 {
             assert!(DATA_CRC_TABLE[usize::from(i)] == crc_remainder(i));
+        }
+    }
+
+    #[test]
+    fn crc32k_table() {
+        const fn crc_remainder(data: u8) -> u32 {
+            const POLYNOMIAL: u32 = 0xEB31D82E;
+            let mut data = data as u32;
+            let mut i = 0;
+            while i < 8 {
+                i += 1;
+                if data & 0x01 != 0 {
+                    data = (data >> 1) ^ POLYNOMIAL;
+                } else {
+                    data >>= 1;
+                }
+            }
+            data
+        }
+
+        extern crate std;
+        std::eprint!("const CRC32K_TABLE: [u32; 256] =  [");
+        for i in 0..=255 {
+            if i % 8 == 0 {
+                std::eprint!("\n   ");
+            }
+            std::eprint!(" 0x{:08X},", crc_remainder(i));
+        }
+        std::eprintln!("\n];");
+
+        for i in 0..=255 {
+            assert!(CRC32K_TABLE[usize::from(i)] == crc_remainder(i));
         }
     }
 
@@ -382,5 +604,68 @@ mod test {
         // Example from the specification.
         assert_eq!(data_crc(&[0x01, 0x22, 0x30]), 0x42EF);
         assert_eq!(data_crc(&[0x01, 0x22, 0x30, 0x10, 0xBD]), 0xF0B8);
+    }
+
+    #[test]
+    fn test_crc32k() {
+        // Example from the specification.
+        assert_eq!(crc32k(&[0x01, 0x22, 0x30]), 0x83DD5A41);
+        assert_eq!(
+            crc32k(&[0x01, 0x22, 0x30, 0xBE, 0xA5, 0x22, 0x7C]),
+            0x0843323B
+        );
+    }
+
+    #[test]
+    fn test_mstp_who_has_decode() {
+        use crate::application_protocol::unconfirmed::UnconfirmedServiceChoice::WhoHas;
+        use crate::common::error::Unimplemented::UnconfirmedServiceChoice;
+
+        // Example from the specification.
+        #[rustfmt::skip]
+        let mut data = [
+            0x55, 0xFF, 0x21, 0xFF, 0x01, 0x02, 0x00, 0x4E, 0x50, 0x54, 0x75, 0xAA, 0xAA, 0x5D, 0xAA, 0x45,
+            0x52, 0x68, 0xAB, 0x54, 0xBA, 0xAA, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
+            0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17,
+            0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x16, 0x16, 0x16, 0x16,
+            0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x11,
+            0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+            0x11, 0x11, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
+            0x10, 0x10, 0x10, 0x10, 0x10, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13,
+            0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12,
+            0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D,
+            0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1D, 0x1C, 0x1C,
+            0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C,
+            0x1C, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
+            0x1F, 0x1F, 0x1F, 0x1F, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E,
+            0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19,
+            0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18,
+            0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x1B, 0x1B, 0x1B,
+            0x1B, 0x1B, 0x1B, 0x1B, 0xA4, 0x1B, 0x1B, 0x1B, 0x1B, 0x1B, 0x1B, 0x1B, 0x1B, 0x1B, 0x1B, 0x1B,
+            0x1B, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
+            0x1A, 0x1A, 0x1A, 0x1A, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05,
+            0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+            0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
+            0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x06, 0x06, 0x06,
+            0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06,
+            0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+            0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03,
+            0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+            0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x0D, 0x0D, 0x0D, 0x0D,
+            0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C,
+            0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
+            0x0C, 0x0C, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F,
+            0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x50, 0xF9, 0xA1, 0xD6, 0xE8,
+        ];
+
+        let mut reader = crate::common::io::Reader::new_with_len(data.len());
+
+        // Sadly,this is a WhoHas service, which is not supported, so for now we test that we get the correct `Unimplemented` error.
+        let result = MstpFrame::decode(&mut reader, &mut data);
+        assert!(matches!(
+            result,
+            Err(Error::Unimplemented(UnconfirmedServiceChoice(WhoHas)))
+        ));
     }
 }
