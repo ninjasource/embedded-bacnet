@@ -34,12 +34,18 @@ pub enum MstpFrameType {
 }
 
 impl MstpFrameType {
+    #[rustfmt::skip]
+    pub fn has_npdu(self) -> bool {
+        matches!(self,
+           | Self::BacnetDataExpectingReply
+           | Self::BacnetDataNotExpectingReply
+           | Self::BacnetExtendedDataExpectingReply
+           | Self::BacnetExtendedDataNotExpectingReply
+        )
+    }
+
     pub fn is_cobs_encoded(self) -> bool {
-        match self as u8 {
-            0..=31 => false,
-            32..=127 => true,
-            128..=255 => false,
-        }
+        matches!(self as u8, 32..=127)
     }
 }
 
@@ -69,7 +75,11 @@ impl TryFrom<u8> for MstpFrameType {
     }
 }
 
+/// Preamble at the start of a frame.
 const PREAMBLE: [u8; 2] = [0x55, 0xFF];
+
+/// Length of the total header.
+const HEADER_LEN: usize = 8;
 
 /// Length of the CRC for non COBS-encoded data.
 const DATA_CRC_LEN: usize = 2;
@@ -88,7 +98,7 @@ const HEADER_CRC_OFFSET: usize = 7;
 pub enum ScanError {
     Garbage(usize),
     InvalidHeader,
-    IncompleteFrame,
+    IncompleteHeader,
 }
 
 impl ScanError {
@@ -96,8 +106,8 @@ impl ScanError {
     pub fn discard_len(&self) -> usize {
         match self {
             Self::Garbage(x) => *x,
-            Self::InvalidHeader => 2,
-            Self::IncompleteFrame => 0,
+            Self::InvalidHeader => PREAMBLE.len(),
+            Self::IncompleteHeader => 0,
         }
     }
 }
@@ -149,23 +159,27 @@ impl<'a> MstpFrame<'a> {
             npdu.encode(writer);
         }
 
-        // For COBS-encoded frames, encode the payload.
-        if self.frame_type.is_cobs_encoded() {
-            // Perform COBS encoding on the message, including the CRC.
-            let message_buffer = &mut writer.buf[data_start..];
-            let message_len = writer.index - data_start;
-            let encoded_len = encode_cobs(message_buffer, message_len)?;
-            // Update the position of the writer.
-            writer.index = data_start + encoded_len;
+        match self.frame_type.is_cobs_encoded() {
+            // For old style frames with data, just add the CRC.
+            false => {
+                if writer.index != data_start {
+                    let crc_value = !data_crc(&writer.to_bytes()[data_start..]); // flip the bits of the CRC value
+                    writer.extend_from_slice(&crc_value.to_le_bytes()); // little endian!
+                }
+            }
+            // For COBS-encoded frames, encode the payload.
+            true => {
+                // Perform COBS encoding on the message, including the CRC.
+                let message_buffer = &mut writer.buf[data_start..];
+                let message_len = writer.index - data_start;
+                let encoded_len = encode_cobs(message_buffer, message_len)?;
+                // Update the position of the writer.
+                writer.index = data_start + encoded_len;
 
-            // Add the CRC32K checksum (5 bytes...)
-            let crc_value = encoded_crc32k(&writer.buf[data_start..writer.index]);
-            writer.extend_from_slice(&crc_value); // little endian!
-
-        // For old style frames with data, just add the CRC.
-        } else if writer.index != data_start {
-            let crc_value = !data_crc(&writer.to_bytes()[data_start..]); // flip the bits of the CRC value
-            writer.extend_from_slice(&crc_value.to_le_bytes()); // little endian!
+                // Add the CRC32K checksum (5 bytes...)
+                let crc_value = encoded_crc32k(&writer.buf[data_start..writer.index]);
+                writer.extend_from_slice(&crc_value); // little endian!
+            }
         }
 
         // If there is a payload, update the length field in the header.
@@ -184,12 +198,18 @@ impl<'a> MstpFrame<'a> {
 
     /// Scan the reader for an incoming frame.
     ///
-    /// If a valid frame header is found in the buffer, this returns the length of the whole frame.
-    /// Otherwise, a [`ScanError`] is returned which can tell you how much data to discard from the buffer.
+    /// If a valid frame header is found at the start of the buffer,
+    /// this function returns the length of the whole frame.
+    /// Note that this does not guarantee that the complete data payload is also already in the buffer.
+    ///
+    /// If no valid frame header is present at the start of the buffer,
+    /// a [`ScanError`] is returned which will tell you how much data to discard from the buffer.
     ///
     /// Does not modify the position of the reader.
     pub fn scan(reader: &mut Reader, buf: &'a [u8]) -> Result<usize, ScanError> {
         let buf = &buf[reader.index..reader.end];
+
+        // Count bytes before the first valid pre-amble.
         let garbage = buf
             .array_windows::<2>()
             .take_while(|&&data| data != PREAMBLE)
@@ -198,17 +218,19 @@ impl<'a> MstpFrame<'a> {
             return Err(ScanError::Garbage(garbage));
         }
 
-        if buf.len() < 8 {
-            return Err(ScanError::IncompleteFrame);
+        // Make sure the buffer contains a complete header.
+        if buf.len() < HEADER_LEN {
+            return Err(ScanError::IncompleteHeader);
         }
 
-        // Check the header CRC (before checking length, it's a better error for corrupt transmissions).
+        // Check the header CRC.
         if header_crc(&buf[2..8]) != 0x55 {
             return Err(ScanError::InvalidHeader);
         }
 
+        // Report the total frame size.
         let data_len = u16::from_be_bytes([buf[5], buf[6]]) as usize;
-        Ok(data_len + 8)
+        Ok(HEADER_LEN + data_len + DATA_CRC_LEN)
     }
 
     /// Decode a BACnet MS/TP frame.
@@ -250,47 +272,48 @@ impl<'a> MstpFrame<'a> {
         let data = &mut buf[data_start..][..data_len + DATA_CRC_LEN];
 
         // For "simple" frames, just check the data CRC and then remove it.
-        let data = if !frame_type.is_cobs_encoded() {
-            if data_crc(data) != 0xF0B8 {
-                return Err(Error::InvalidValue("invalid MS/TP data CRC"));
+        let data = match frame_type.is_cobs_encoded() {
+            false => {
+                if data_crc(data) != 0xF0B8 {
+                    return Err(Error::InvalidValue("invalid MS/TP data CRC"));
+                }
+                &data[..data_len]
             }
-            &data[..data_len]
+            // For COBS encoded frames, things are a bit more complicated.
+            true => {
+                if data.len() < COBS_ENCODED_CRC_LEN {
+                    return Err(Error::Length((
+                        "COBS encoded payload is too short",
+                        data.len() as u32,
+                    )));
+                }
 
-        // For COBS encoded frames, things are a bit more complicated.
-        } else {
-            if data.len() < COBS_ENCODED_CRC_LEN {
-                return Err(Error::Length((
-                    "COBS encoded payload is too short",
-                    data.len() as u32,
-                )));
+                // First decode the CRC.
+                // This leaves the decoded CRC in the 4 bytes after the COBS encoded data.
+                let crc_start = data.len() - COBS_ENCODED_CRC_LEN;
+                decode_cobs(&mut data[crc_start..])
+                    .map_err(|()| Error::ConvertDataLink("invalid COBS encoded CRC"))?;
+
+                // Now verify the CRC.
+                if crc32k(&data[..crc_start + 4]) != 0x0843323B {
+                    return Err(Error::ConvertDataLink(
+                        "Invalid MS/TP COBS-encoded data CRC",
+                    ));
+                }
+
+                // Now decode the COBS data itself.
+                let decoded_len = decode_cobs(&mut data[..crc_start])
+                    .map_err(|()| Error::ConvertDataLink("invalid COBS encoded data payload"))?;
+                &data[..decoded_len]
             }
-
-            // First decode the CRC.
-            // This leaves the decoded CRC in the 4 bytes after the COBS encoded data.
-            let crc_start = data.len() - COBS_ENCODED_CRC_LEN;
-            decode_cobs(&mut data[crc_start..])
-                .map_err(|()| Error::ConvertDataLink("invalid COBS encoded CRC"))?;
-
-            // Now verify the CRC.
-            if crc32k(&data[..crc_start + 4]) != 0x0843323B {
-                return Err(Error::ConvertDataLink(
-                    "Invalid MS/TP COBS-encoded data CRC",
-                ));
-            }
-
-            // Now decode the COBS data itself.
-            let decoded_len = decode_cobs(&mut data[..crc_start])
-                .map_err(|()| Error::ConvertDataLink("invalid COBS encoded data payload"))?;
-            &data[..decoded_len]
         };
 
-        let npdu = match frame_type {
-            MstpFrameType::BacnetDataExpectingReply
-            | MstpFrameType::BacnetExtendedDataNotExpectingReply => Some(NetworkPdu::decode(
+        let npdu = match frame_type.has_npdu() {
+            false => None,
+            true => Some(NetworkPdu::decode(
                 &mut Reader::new_with_len(data.len()),
                 data,
             )?),
-            _ => None,
         };
 
         Ok(Self {
