@@ -3,7 +3,10 @@ use core::{fmt::Display, str::from_utf8};
 use crate::common::{
     daily_schedule::WeeklySchedule,
     error::Error,
-    helper::{decode_signed, decode_unsigned, encode_application_enumerated, encode_application_signed, encode_application_unsigned},
+    helper::{
+        decode_signed, decode_unsigned, encode_application_enumerated, encode_application_signed,
+        encode_application_unsigned,
+    },
     io::{Reader, Writer},
     object_id::{ObjectId, ObjectType},
     property_id::PropertyId,
@@ -29,6 +32,7 @@ pub enum ApplicationDataValue<'a> {
     Time(Time),
     ObjectId(ObjectId),
     CharacterString(CharacterString<'a>),
+    OctetString(OctetString<'a>),
     Enumerated(Enumerated),
     BitString(BitString<'a>),
     UnsignedInt(u64),
@@ -36,16 +40,8 @@ pub enum ApplicationDataValue<'a> {
     WeeklySchedule(WeeklySchedule<'a>),
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum ApplicationDataValueWrite<'a> {
-    Boolean(bool),
-    UnsignedInt(u64),
-    SignedInt(i64),
-    Enumerated(Enumerated),
-    Real(f32),
-    WeeklySchedule(WeeklySchedule<'a>),
-}
+#[deprecated(note = "use ApplicationDataValue")]
+pub type ApplicationDataValueWrite<'a> = ApplicationDataValue<'a>;
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -174,6 +170,24 @@ pub struct CharacterString<'a> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CharacterString<'a> {
     pub inner: String,
+    #[cfg_attr(feature = "serde", serde(skip_serializing))]
+    _phantom: &'a Phantom,
+}
+
+#[cfg(not(feature = "alloc"))]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct OctetString<'a> {
+    pub inner: &'a [u8],
+}
+
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct OctetString<'a> {
+    pub inner: Vec<u8>,
     #[cfg_attr(feature = "serde", serde(skip_serializing))]
     _phantom: &'a Phantom,
 }
@@ -338,94 +352,30 @@ impl<'a> CharacterString<'a> {
             Error::InvalidValue("CharacterString bytes are not a valid utf8 string")
         })?;
 
-        Ok(CharacterString::new(inner))
+        Ok(Self::new(inner))
     }
 }
 
-impl<'a> ApplicationDataValueWrite<'a> {
-    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
-    pub fn decode(
-        object_id: &ObjectId,
-        property_id: &PropertyId,
-        reader: &mut Reader,
-        buf: &'a [u8],
-    ) -> Result<Self, Error> {
-        match property_id {
-            PropertyId::PropWeeklySchedule => {
-                let weekly_schedule = WeeklySchedule::decode(reader, buf)?;
-                Ok(Self::WeeklySchedule(weekly_schedule))
-            }
-            _ => {
-                let tag = Tag::decode(reader, buf)?;
-                match tag.number {
-                    TagNumber::Application(ApplicationTagNumber::Boolean) => {
-                        Ok(Self::Boolean(tag.value > 0))
-                    }
-                    TagNumber::Application(ApplicationTagNumber::Real) => {
-                        if tag.value != 4 {
-                            return Err(Error::Length((
-                                "real tag should have length of 4",
-                                tag.value,
-                            )));
-                        }
-                        let bytes = reader.read_bytes(buf)?;
-                        Ok(Self::Real(f32::from_be_bytes(bytes)))
-                    }
-                    TagNumber::Application(ApplicationTagNumber::Enumerated) => {
-                        let value = decode_enumerated(object_id, property_id, &tag, reader, buf)?;
-                        Ok(Self::Enumerated(value))
-                    }
-                    TagNumber::Application(ApplicationTagNumber::UnsignedInt) => {
-                        Ok(Self::UnsignedInt(decode_unsigned(tag.value, reader, buf)?))
+impl<'a> OctetString<'a> {
+    #[cfg(not(feature = "alloc"))]
+    pub fn new(inner: &'a [u8]) -> Self {
+        Self { inner }
+    }
 
-                    }
-                    TagNumber::Application(ApplicationTagNumber::SignedInt) => {
-                        let len = tag.value as usize;
-                        if len > 8 {
-                            return Err(Error::Length(("integers bigger than 64 bits are not supported", tag.value)));
-                        }
-                        // Read into the most significant bits, then do a right shift to get sign extension for negative integers.
-                        let mut bytes = [0; 8];
-                        bytes[..len].copy_from_slice(reader.read_slice(len, buf)?);
-                        let value = i64::from_be_bytes(bytes) >> (8 * (8 - len));
-                        Ok(Self::SignedInt(value))
+    #[cfg(feature = "alloc")]
+    pub fn new(inner: &[u8]) -> Self {
+        use crate::common::spooky::PHANTOM;
 
-                    }
-                    tag_number => Err(Error::TagNotSupported((
-                        "ApplicationDataValueWrite decode",
-                        tag_number,
-                    ))),
-                }
-            }
+        Self {
+            inner: inner.into(),
+            _phantom: &PHANTOM,
         }
     }
 
-    pub fn encode(&self, writer: &mut Writer) {
-        match self {
-            Self::Boolean(x) => {
-                let len = 1;
-                let tag = Tag::new(TagNumber::Application(ApplicationTagNumber::Boolean), len);
-                tag.encode(writer);
-                let value = if *x { 1_u8 } else { 0_u8 };
-                writer.push(value)
-            }
-            Self::Real(x) => {
-                let len = 4;
-                let tag = Tag::new(TagNumber::Application(ApplicationTagNumber::Real), len);
-                tag.encode(writer);
-                writer.extend_from_slice(&f32::to_be_bytes(*x))
-            }
-            Self::UnsignedInt(x) => {
-                encode_application_unsigned(writer, *x);
-            }
-            Self::SignedInt(x) => {
-                encode_application_signed(writer, *x);
-            }
-            Self::Enumerated(x) => {
-                x.encode(writer);
-            }
-            Self::WeeklySchedule(x) => x.encode(writer),
-        }
+    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
+    pub fn decode(len: u32, reader: &mut Reader, buf: &'a [u8]) -> Result<Self, Error> {
+        let slice = reader.read_slice(len as usize, buf)?;
+        Ok(Self::new(slice))
     }
 }
 
@@ -438,8 +388,22 @@ impl<'a> ApplicationDataValue<'a> {
             )
             .encode(writer),
             ApplicationDataValue::Real(x) => {
-                Tag::new(TagNumber::Application(ApplicationTagNumber::Real), 4).encode(writer);
-                writer.extend_from_slice(&x.to_be_bytes());
+                let bytes = x.to_be_bytes();
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::Real),
+                    bytes.len() as u32,
+                )
+                .encode(writer);
+                writer.extend_from_slice(&bytes);
+            }
+            ApplicationDataValue::Double(x) => {
+                let bytes = x.to_be_bytes();
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::Real),
+                    bytes.len() as u32,
+                )
+                .encode(writer);
+                writer.extend_from_slice(&bytes);
             }
             ApplicationDataValue::Date(x) => {
                 Tag::new(
@@ -475,35 +439,43 @@ impl<'a> ApplicationDataValue<'a> {
                 writer.push(0); // utf8 encoding
                 writer.extend_from_slice(utf8_encoded);
             }
+            ApplicationDataValue::OctetString(x) => {
+                Tag::new(
+                    TagNumber::Application(ApplicationTagNumber::OctetString),
+                    x.inner.len() as u32,
+                )
+                .encode(writer);
+                writer.extend_from_slice(&x.inner);
+            }
             ApplicationDataValue::Enumerated(x) => {
                 x.encode(writer);
             }
             ApplicationDataValue::BitString(x) => {
                 x.encode_application(writer);
             }
-            ApplicationDataValue::UnsignedInt(x) => {
-                encode_application_unsigned(writer, *x)
-            }
-            ApplicationDataValue::SignedInt(x) => {
-                encode_application_signed(writer, *x)
-            }
+            ApplicationDataValue::UnsignedInt(x) => encode_application_unsigned(writer, *x),
+            ApplicationDataValue::SignedInt(x) => encode_application_signed(writer, *x),
             ApplicationDataValue::WeeklySchedule(x) => {
                 // no application tag required for weekly schedule
                 x.encode(writer);
             }
-
-            x => todo!("{:?}", x),
         };
     }
 
     #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
     pub fn decode(
-        tag: &Tag,
         object_id: &ObjectId,
         property_id: &PropertyId,
         reader: &mut Reader,
         buf: &'a [u8],
     ) -> Result<Self, Error> {
+        // Weekly schedule not tagged.
+        if *property_id == PropertyId::PropWeeklySchedule {
+            return Ok(Self::WeeklySchedule(WeeklySchedule::decode(reader, buf)?));
+        }
+
+        let tag = Tag::decode(reader, buf)?;
+
         let tag_num = match &tag.number {
             TagNumber::Application(x) => x,
             unknown => {
@@ -515,17 +487,18 @@ impl<'a> ApplicationDataValue<'a> {
         };
 
         match tag_num {
-            ApplicationTagNumber::Real => {
-                if tag.value != 4 {
-                    return Err(Error::Length((
-                        "real tag should have length of 4",
-                        tag.value,
-                    )));
-                }
-                Ok(ApplicationDataValue::Real(f32::from_be_bytes(
+            ApplicationTagNumber::Real => match tag.value {
+                4 => Ok(ApplicationDataValue::Real(f32::from_be_bytes(
                     reader.read_bytes(buf)?,
-                )))
-            }
+                ))),
+                8 => Ok(ApplicationDataValue::Double(f64::from_be_bytes(
+                    reader.read_bytes(buf)?,
+                ))),
+                _ => Err(Error::Length((
+                    "real tag should have length of 4 or 8",
+                    tag.value,
+                ))),
+            },
             ApplicationTagNumber::ObjectId => {
                 let object_id = ObjectId::decode(tag.value, reader, buf)?;
                 Ok(ApplicationDataValue::ObjectId(object_id))
@@ -534,8 +507,12 @@ impl<'a> ApplicationDataValue<'a> {
                 let text = CharacterString::decode(tag.value, reader, buf)?;
                 Ok(ApplicationDataValue::CharacterString(text))
             }
+            ApplicationTagNumber::OctetString => {
+                let date = OctetString::decode(tag.value, reader, buf)?;
+                Ok(ApplicationDataValue::OctetString(date))
+            }
             ApplicationTagNumber::Enumerated => {
-                let value = decode_enumerated(object_id, property_id, tag, reader, buf)?;
+                let value = decode_enumerated(object_id, property_id, &tag, reader, buf)?;
                 Ok(ApplicationDataValue::Enumerated(value))
             }
             ApplicationTagNumber::BitString => {

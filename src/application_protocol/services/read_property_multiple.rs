@@ -321,9 +321,7 @@ impl<'a> PropertyResult<'a> {
                     ))
                 }
                 property_id => {
-                    let tag = Tag::decode(reader, buf)?;
-                    let value =
-                        ApplicationDataValue::decode(&tag, object_id, property_id, reader, buf)?;
+                    let value = ApplicationDataValue::decode(object_id, property_id, reader, buf)?;
                     Ok(PropertyValue::PropValue(value))
                 }
             }

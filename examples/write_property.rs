@@ -5,7 +5,7 @@ use clap::{command, Parser};
 use common::MySocket;
 use embedded_bacnet::{
     application_protocol::{
-        primitives::data_value::{ApplicationDataValueWrite, Enumerated},
+        primitives::data_value::{ApplicationDataValue, Enumerated},
         services::write_property::WriteProperty,
     },
     common::{
@@ -40,7 +40,7 @@ async fn main() -> Result<(), BacnetError<MySocket>> {
         PropertyId::PropPresentValue,
         None,
         None,
-        ApplicationDataValueWrite::Enumerated(Enumerated::Binary(Binary::On)),
+        ApplicationDataValue::Enumerated(Enumerated::Binary(Binary::On)),
     );
     bacnet.write_property(&mut buf, request).await?;
     println!("Write ON to BinaryValue no. 3 successful");

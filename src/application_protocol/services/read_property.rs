@@ -208,9 +208,8 @@ impl<'a> ReadPropertyAck<'a> {
                 })
             }
             property_id => {
-                let tag = Tag::decode(&mut reader, buf)?;
                 let value =
-                    ApplicationDataValue::decode(&tag, &object_id, &property_id, &mut reader, buf)?;
+                    ApplicationDataValue::decode(&object_id, &property_id, &mut reader, buf)?;
                 let property_value = ReadPropertyValue::ApplicationDataValue(value);
 
                 Ok(Self {

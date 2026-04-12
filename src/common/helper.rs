@@ -142,13 +142,13 @@ fn encode_unsigned_impl(writer: &mut Writer, tag_number: TagNumber, value: impl 
     let skip = count_skippable_zero_bytes(value);
     let data = value.to_be_bytes();
     let data = &data[skip..];
-    Tag::new(tag_number, data.len() as u32)
-        .encode(writer);
+    Tag::new(tag_number, data.len() as u32).encode(writer);
     writer.extend_from_slice(data);
 }
 
 pub fn encode_unsigned(writer: &mut Writer, context_tag: Option<u8>, value: impl Into<u64>) {
-    let tag_number = context_tag.map(TagNumber::ContextSpecific)
+    let tag_number = context_tag
+        .map(TagNumber::ContextSpecific)
         .unwrap_or(TagNumber::Application(ApplicationTagNumber::UnsignedInt));
     encode_unsigned_impl(writer, tag_number, value);
 }
@@ -162,15 +162,16 @@ pub fn encode_signed(writer: &mut Writer, context_tag: Option<u8>, value: impl I
     let data = value.to_be_bytes();
     let data = &data[skip..];
 
-    let tag_number = context_tag.map(TagNumber::ContextSpecific)
+    let tag_number = context_tag
+        .map(TagNumber::ContextSpecific)
         .unwrap_or(TagNumber::Application(ApplicationTagNumber::SignedInt));
-    Tag::new(tag_number, data.len() as u32)
-        .encode(writer);
+    Tag::new(tag_number, data.len() as u32).encode(writer);
     writer.extend_from_slice(data);
 }
 
 pub fn encode_enumerated(writer: &mut Writer, value: impl Into<u64>, context_tag: Option<u8>) {
-    let tag_number = context_tag.map(TagNumber::ContextSpecific)
+    let tag_number = context_tag
+        .map(TagNumber::ContextSpecific)
         .unwrap_or(TagNumber::Application(ApplicationTagNumber::Enumerated));
     encode_unsigned_impl(writer, tag_number, value);
 }
@@ -206,7 +207,10 @@ pub fn encode_application_object_id(writer: &mut Writer, object_id: &ObjectId) {
 
 pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> Result<u64, Error> {
     if len > 8 {
-        return Err(Error::Length(("integers bigger than 64 bits bytes are not supported", len)));
+        return Err(Error::Length((
+            "integers bigger than 64 bits bytes are not supported",
+            len,
+        )));
     }
     let len = len as usize;
     let mut bytes = [0; 8];
@@ -217,7 +221,10 @@ pub fn decode_unsigned(len: u32, reader: &mut Reader, buf: &[u8]) -> Result<u64,
 
 pub fn decode_signed(len: u32, reader: &mut Reader, buf: &[u8]) -> Result<i64, Error> {
     if len > 8 {
-        return Err(Error::Length(("integers bigger than 64 bits are not supported", len)));
+        return Err(Error::Length((
+            "integers bigger than 64 bits are not supported",
+            len,
+        )));
     }
     // Read into the most significant bits, then do a right shift to get sign extension for negative integers.
     let len = len as usize;
@@ -252,6 +259,7 @@ mod test {
     use super::*;
 
     #[test]
+    #[rustfmt::skip]
     fn test_count_skippable_zero_bytes() {
         assert_eq!(count_skippable_zero_bytes(0x00), 7);
 
@@ -274,6 +282,7 @@ mod test {
     }
 
     #[test]
+    #[rustfmt::skip]
     fn test_count_skippable_sign_bytes() {
         assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_FFFF_FFFF_u64 as i64), 7);
         assert_eq!(count_skippable_sign_bytes(0xFFFF_FFFF_FFFF_FF80_u64 as i64), 7);
