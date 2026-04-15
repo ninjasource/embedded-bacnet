@@ -224,13 +224,19 @@ impl<'a> MstpFrame<'a> {
         }
 
         // Check the header CRC.
-        if header_crc(&buf[2..8]) != 0x55 {
+        if header_crc(&buf[PREAMBLE.len()..HEADER_LEN]) != 0x55 {
             return Err(ScanError::InvalidHeader);
         }
 
         // Report the total frame size.
-        let data_len = u16::from_be_bytes([buf[5], buf[6]]) as usize;
-        Ok(HEADER_LEN + data_len + DATA_CRC_LEN)
+        let len_bytes = &buf[HEADER_LEN_OFFSET..][..2];
+        let data_len = u16::from_be_bytes([len_bytes[0], len_bytes[1]]) as usize;
+        if data_len > 0 {
+            Ok(data_len + HEADER_LEN + DATA_CRC_LEN)
+        } else {
+            // No data, no CRC
+            Ok(HEADER_LEN)
+        }
     }
 
     /// Decode a BACnet MS/TP frame.
