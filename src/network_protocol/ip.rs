@@ -10,15 +10,15 @@ use crate::{
 // Bacnet Virtual Link Control
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct DataLink<'a> {
-    pub function: DataLinkFunction,
+pub struct IpFrame<'a> {
+    pub function: BvllFunction,
     pub npdu: Option<NetworkPdu<'a>>,
 }
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
-pub enum DataLinkFunction {
+pub enum BvllFunction {
     Result = 0,
     WriteBroadcastDistributionTable = 1,
     ReadBroadcastDistTable = 2,
@@ -33,7 +33,7 @@ pub enum DataLinkFunction {
     OriginalBroadcastNpdu = 11,
 }
 
-impl TryFrom<u8> for DataLinkFunction {
+impl TryFrom<u8> for BvllFunction {
     type Error = u8;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
@@ -57,11 +57,11 @@ impl TryFrom<u8> for DataLinkFunction {
 
 const BVLL_TYPE_BACNET_IP: u8 = 0x81;
 
-impl<'a> DataLink<'a> {
+impl<'a> IpFrame<'a> {
     //    const BVLC_ORIGINAL_UNICAST_NPDU: u8 = 10;
     //    const BVLC_ORIGINAL_BROADCAST_NPDU: u8 = 11;
 
-    pub fn new(function: DataLinkFunction, npdu: Option<NetworkPdu<'a>>) -> Self {
+    pub fn new(function: BvllFunction, npdu: Option<NetworkPdu<'a>>) -> Self {
         Self { function, npdu }
     }
 
@@ -69,14 +69,14 @@ impl<'a> DataLink<'a> {
         let apdu = ApplicationPdu::ConfirmedRequest(req);
         let message = NetworkMessage::Apdu(apdu);
         let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
-        DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu))
+        Self::new(BvllFunction::OriginalUnicastNpdu, Some(npdu))
     }
 
     pub fn encode(&self, writer: &mut Writer) {
         writer.push(BVLL_TYPE_BACNET_IP);
         writer.push(self.function.clone() as u8);
         match &self.function {
-            DataLinkFunction::OriginalBroadcastNpdu | DataLinkFunction::OriginalUnicastNpdu => {
+            BvllFunction::OriginalBroadcastNpdu | BvllFunction::OriginalUnicastNpdu => {
                 writer.extend_from_slice(&[0, 0]); // length placeholder
                 self.npdu.as_ref().unwrap().encode(writer); // should be ok to unwrap here since it has already been checked
                 Self::update_len(writer);
@@ -114,7 +114,7 @@ impl<'a> DataLink<'a> {
 
         let npdu = match function {
             // see h_bbmd.c for all the types (only 2 are supported here)
-            DataLinkFunction::OriginalBroadcastNpdu | DataLinkFunction::OriginalUnicastNpdu => {
+            BvllFunction::OriginalBroadcastNpdu | BvllFunction::OriginalUnicastNpdu => {
                 Some(NetworkPdu::decode(reader, buf)?)
             }
             _ => None,

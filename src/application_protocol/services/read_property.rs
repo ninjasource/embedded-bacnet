@@ -16,7 +16,7 @@ use crate::{
         spec::BACNET_ARRAY_ALL,
         tag::{ApplicationTagNumber, Tag, TagNumber},
     },
-    network_protocol::data_link::DataLink,
+    network_protocol::{ip::IpFrame, mstp::MstpFrame},
 };
 
 #[cfg(feature = "alloc")]
@@ -155,10 +155,24 @@ pub struct ReadPropertyAck<'a> {
     pub property_value: ReadPropertyValue<'a>,
 }
 
-impl<'a> TryFrom<DataLink<'a>> for ReadPropertyAck<'a> {
+impl<'a> TryFrom<IpFrame<'a>> for ReadPropertyAck<'a> {
     type Error = Error;
 
-    fn try_from(value: DataLink<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: IpFrame<'a>) -> Result<Self, Self::Error> {
+        let ack: ComplexAck = value.try_into()?;
+        match ack.service {
+            ComplexAckService::ReadProperty(ack) => Ok(ack),
+            _ => Err(Error::ConvertDataLink(
+                "apdu message is not a ComplexAckService ReadPropertyAck",
+            )),
+        }
+    }
+}
+
+impl<'a> TryFrom<MstpFrame<'a>> for ReadPropertyAck<'a> {
+    type Error = Error;
+
+    fn try_from(value: MstpFrame<'a>) -> Result<Self, Self::Error> {
         let ack: ComplexAck = value.try_into()?;
         match ack.service {
             ComplexAckService::ReadProperty(ack) => Ok(ack),

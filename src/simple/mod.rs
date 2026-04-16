@@ -37,7 +37,7 @@ use crate::{
         io::{Reader, Writer},
     },
     network_protocol::{
-        data_link::{DataLink, DataLinkFunction},
+        ip::{BvllFunction, IpFrame},
         network_pdu::{DestinationAddress, MessagePriority, NetworkMessage, NetworkPdu},
     },
 };
@@ -116,7 +116,7 @@ where
         let dst = Some(DestinationAddress::new(0xffff, None));
         let message = NetworkMessage::Apdu(apdu);
         let npdu = NetworkPdu::new(None, dst, false, MessagePriority::Normal, message);
-        let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu, Some(npdu));
+        let data_link = IpFrame::new(BvllFunction::OriginalBroadcastNpdu, Some(npdu));
 
         let mut writer = Writer::new(buf);
         data_link.encode(&mut writer);
@@ -130,9 +130,9 @@ where
         let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
         let buf = &buf[..n];
 
-        // use the DataLink codec to decode the bytes
+        // decode the bytes as BACnet/IP frame
         let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+        let message = IpFrame::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
 
         if let Some(npdu) = message.npdu {
             if let NetworkMessage::Apdu(ApplicationPdu::UnconfirmedRequest(
@@ -199,7 +199,7 @@ where
     ) -> Result<Option<CovNotification<'a>>, BacnetError<T>> {
         let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
         let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, &buf[..n])?;
+        let message = IpFrame::decode(&mut reader, &buf[..n])?;
 
         if let Some(npdu) = message.npdu {
             if let NetworkMessage::Apdu(ApplicationPdu::UnconfirmedRequest(
@@ -231,7 +231,7 @@ where
     }
 
     #[maybe_async()]
-    pub async fn write_property<'a>(
+    pub async fn write_property(
         &self,
         buf: &mut [u8],
         request: WriteProperty<'_>,
@@ -265,9 +265,9 @@ where
             let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
             let buf = &buf[..n];
 
-            // use the DataLink codec to decode the bytes
+            // decode the bytes as BACnet/IP frame
             let mut reader = Reader::default();
-            let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+            let message = IpFrame::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
 
             match message.npdu {
                 Some(x) => match x.network_message {
@@ -304,9 +304,9 @@ where
             let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
             let buf = &buf[..n];
 
-            // use the DataLink codec to decode the bytes
+            // decode the bytes as BACnet/IP frame
             let mut reader = Reader::default();
-            let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+            let message = IpFrame::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
 
             match message.npdu {
                 Some(x) => match x.network_message {
@@ -331,7 +331,7 @@ where
      */
 
     #[maybe_async()]
-    async fn send_and_receive_simple_ack<'a>(
+    async fn send_and_receive_simple_ack(
         &self,
         buf: &mut [u8],
         service: ConfirmedRequestService<'_>,
@@ -342,9 +342,9 @@ where
         let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
         let buf = &buf[..n];
 
-        // use the DataLink codec to decode the bytes
+        // decode the bytes as BACnet/IP frame
         let mut reader = Reader::default();
-        let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+        let message = IpFrame::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
 
         // TODO: return bacnet error if the server returns one
         // return message is expected to be a ComplexAck
@@ -365,7 +365,7 @@ where
         let apdu = ApplicationPdu::UnconfirmedRequest(service);
         let message = NetworkMessage::Apdu(apdu);
         let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
-        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
+        let data_link = IpFrame::new(BvllFunction::OriginalUnicastNpdu, Some(npdu));
 
         let mut writer = Writer::new(buf);
         data_link.encode(&mut writer);
@@ -386,7 +386,7 @@ where
         let apdu = ApplicationPdu::ConfirmedRequest(ConfirmedRequest::new(invoke_id, service));
         let message = NetworkMessage::Apdu(apdu);
         let npdu = NetworkPdu::new(None, None, true, MessagePriority::Normal, message);
-        let data_link = DataLink::new(DataLinkFunction::OriginalUnicastNpdu, Some(npdu));
+        let data_link = IpFrame::new(BvllFunction::OriginalUnicastNpdu, Some(npdu));
 
         let mut writer = Writer::new(buf);
         data_link.encode(&mut writer);

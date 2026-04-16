@@ -20,6 +20,9 @@ serde = { version = "1.0", default-features = false, features = [
 maybe-async = { version = "0.2.10", default-features = false }
 bacnet-macros = { path = "./bacnet-macros", version = "0.1.0" }
 
+# https://github.com/cbiffle/corncobs/pull/5
+corncobs = { git = "https://github.com/de-vri-es/corncobs", rev = "68025686e0547fac483baabb63c8066065023d88" }
+
 # TODO: add this when it reaches 1.0
 # derive_more = { version = "^1.0.0-beta.6", default-features = false, features = [ "try_from"] }
 
