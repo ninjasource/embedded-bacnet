@@ -11,7 +11,7 @@ pub const BACNET_MAX_PRIORITY: u32 = 16;
 
 /*
 TODO: use derive_more when it reaches 1.0 (to automatically impl TryFrom for all enums)
-#[derive(Debug, Clone, derive_more::TryFrom)]
+#[derive(Debug, Clone, derive_more::TryFrom, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[try_from(repr)]
@@ -25,7 +25,7 @@ pub enum Segmentation {
 }
 */
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u32)]

@@ -261,14 +261,29 @@ impl<'a> NetworkPdu<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Addr {
-    pub ipv4: [u8; 4],
+pub struct Ipv4Addr {
+    pub addr: [u8; 4],
     pub port: u16,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum Addr {
+    Ipv4(Ipv4Addr),
+    Mac(u8),
+}
+
+impl Addr {
+    pub fn new_ipv4(addr: [u8; 4], port: u16) -> Self {
+        Self::Ipv4(Ipv4Addr { addr, port })
+    }
+}
+
 const IPV4_ADDR_LEN: u8 = 6;
+const MAC_ADDR_LEN: u8 = 1;
+const BROADCAST_ADDR_LEN: u8 = 0;
 
 pub type SourceAddress = NetworkAddress;
 
@@ -277,6 +292,20 @@ pub type SourceAddress = NetworkAddress;
 pub struct NetworkAddress {
     pub net: u16,
     pub addr: Option<Addr>,
+}
+
+impl NetworkAddress {
+    pub fn new_global_broadcast() -> Self {
+        Self { net: 0xFFFF, addr: None }
+    }
+
+    pub fn new_remote_broadcast(net: u16) -> Self {
+        Self { net, addr: None }
+    }
+
+    pub fn new_remote_station(net: u16, addr: Addr) -> Self {
+        Self { net, addr: Some(addr) }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -300,11 +329,20 @@ impl NetworkAddress {
         writer.extend_from_slice(&self.net.to_be_bytes());
         match self.addr.as_ref() {
             Some(addr) => {
-                writer.push(IPV4_ADDR_LEN);
-                writer.extend_from_slice(&addr.ipv4);
-                writer.extend_from_slice(&addr.port.to_be_bytes());
+                match addr {
+                    Addr::Mac(mac) => {
+                        let encoded = &mac.to_be_bytes();
+                        writer.push(MAC_ADDR_LEN);
+                        writer.extend_from_slice(encoded);
+                    },
+                    Addr::Ipv4(addr) => {
+                        writer.push(IPV4_ADDR_LEN);
+                        writer.extend_from_slice(&addr.addr);
+                        writer.extend_from_slice(&addr.port.to_be_bytes());
+                    }
+                }
             }
-            None => writer.push(0),
+            None => writer.push(BROADCAST_ADDR_LEN), 
         }
     }
 
@@ -318,12 +356,16 @@ impl NetworkAddress {
 
                 Ok(Self {
                     net,
-                    addr: Some(Addr { ipv4, port }),
+                    addr: Some(Addr::Ipv4(Ipv4Addr { port, addr: ipv4 })),
                 })
             }
-            0 => Ok(Self { net, addr: None }),
+            MAC_ADDR_LEN => {
+                let addr = u8::from_be_bytes(reader.read_bytes(buf)?);
+                Ok(Self { net, addr: Some(Addr::Mac(addr)) })
+            }
+            BROADCAST_ADDR_LEN => Ok(Self { net, addr: None }),
             x => Err(Error::Length((
-                "NetworkAddress decode ip len can only be 6 or 0",
+                "NetworkAddress decode ip len can only be 6 (IP), 1 (MSTP) or 0",
                 x as u32,
             ))),
         }

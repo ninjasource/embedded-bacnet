@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![allow(clippy::large_enum_variant)]
 
 // This library supports the IP version of bacnet and this is how the network packet is wrapped:

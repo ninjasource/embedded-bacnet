@@ -12,6 +12,7 @@ use crate::{
 pub enum Error {
     Length((&'static str, u32)),
     InvalidValue(&'static str),
+    InvalidValueValue(&'static str, u64),
     InvalidVariant((&'static str, u32)),
     Unimplemented(Unimplemented),
     SegmentationNotSupported,
