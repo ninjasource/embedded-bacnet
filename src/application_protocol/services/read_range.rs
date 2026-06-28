@@ -523,10 +523,7 @@ impl ReadRange {
                     "ReadRange decode closing position",
                 )?;
 
-                ReadRangeRequestType::ByPosition(ReadRangeByPosition {
-                    count: count as u32,
-                    index,
-                })
+                ReadRangeRequestType::ByPosition(ReadRangeByPosition { count, index })
             }
             number => return Err(Error::TagNotSupported(("ReadRange opening tag", number))),
         };

@@ -174,25 +174,13 @@ impl<'a> NetworkPdu<'a> {
         };
 
         let has_destination = match self.dst.as_ref() {
-            Some(dst) => {
-                if dst.network_address.net > 0 {
-                    ControlFlags::HasDestination as u8
-                } else {
-                    0
-                }
-            }
-            None => 0,
+            Some(dst) if dst.network_address.net > 0 => ControlFlags::HasDestination as u8,
+            _ => 0,
         };
 
         let has_source = match self.src.as_ref() {
-            Some(src) => {
-                if src.net > 0 && src.net != 0xFFFF {
-                    ControlFlags::HasSource as u8
-                } else {
-                    0
-                }
-            }
-            None => 0,
+            Some(src) if src.net > 0 && src.net != 0xFFFF => ControlFlags::HasSource as u8,
+            _ => 0,
         };
         let expecting_reply = if self.expect_reply {
             ControlFlags::ExpectingReply as u8

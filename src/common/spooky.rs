@@ -22,7 +22,7 @@ impl<'a, 'de> serde::Deserialize<'de> for &'a Phantom {
     }
 }
 
-impl<'a> Default for &'a Phantom {
+impl Default for &Phantom {
     fn default() -> Self {
         &PHANTOM
     }

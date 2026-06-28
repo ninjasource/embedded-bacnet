@@ -20,6 +20,7 @@ use crate::{
         confirmed::{
             ComplexAck, ComplexAckService, ConfirmedRequest, ConfirmedRequestService, SimpleAck,
         },
+        segment::Segment,
         services::{
             change_of_value::{CovNotification, SubscribeCov},
             i_am::IAm,
@@ -231,7 +232,7 @@ where
     }
 
     #[maybe_async()]
-    pub async fn write_property<'a>(
+    pub async fn write_property(
         &self,
         buf: &mut [u8],
         request: WriteProperty<'_>,
@@ -252,7 +253,7 @@ where
     }
 
     #[maybe_async()]
-    #[cfg_attr(feature = "alloc", bacnet_macros::remove_lifetimes_from_fn_args)]
+    #[cfg(not(feature = "alloc"))]
     async fn send_and_receive_complex_ack<'a>(
         &self,
         buf: &'a mut [u8],
@@ -281,11 +282,101 @@ where
                         Self::check_invoke_id(invoke_id, ack.invoke_id)?;
                         return Ok(ack);
                     }
+                    NetworkMessage::Apdu(ApplicationPdu::Segment(segment)) => {
+                        return Err(Error::SegmentationNotSupported)?
+                    }
                     _ => continue,
                 },
                 _ => continue,
             }
         }
+    }
+
+    #[maybe_async()]
+    #[cfg(feature = "alloc")]
+    async fn send_and_receive_complex_ack(
+        &self,
+        buf: &mut [u8],
+        service: ConfirmedRequestService<'_>,
+    ) -> Result<ComplexAck<'static>, BacnetError<T>> {
+        use alloc::vec;
+
+        let invoke_id = self.send_confirmed(buf, service).await?;
+        let mut segment_bytes = vec![];
+
+        loop {
+            // receive reply
+
+            let n = self.io.read(buf).await.map_err(BacnetError::Io)?;
+
+            let buf = &buf[..n];
+
+            // use the DataLink codec to decode the bytes
+            let mut reader = Reader::default();
+            let message = DataLink::decode(&mut reader, buf).map_err(BacnetError::Codec)?;
+
+            match message.npdu {
+                Some(x) => match x.network_message {
+                    NetworkMessage::Apdu(ApplicationPdu::ComplexAck(ack)) => {
+                        // ignore earier messages
+                        if ack.invoke_id < invoke_id {
+                            continue;
+                        }
+
+                        // return message is expected to have the same invoke_id as the request (return error if later invoke id)
+                        Self::check_invoke_id(invoke_id, ack.invoke_id)?;
+                        return Ok(ack);
+                    }
+                    NetworkMessage::Apdu(ApplicationPdu::Segment(segment)) => {
+                        self.send_segment_ack(&segment).await?;
+
+                        segment_bytes.extend_from_slice(&segment.data);
+
+                        if !segment.more_follows {
+                            use crate::application_protocol::confirmed::ConfirmedServiceChoice;
+
+                            let invoke_id = segment.invoke_id;
+                            let choice: ConfirmedServiceChoice =
+                                segment.service_choice.try_into().map_err(|e| {
+                                    Error::InvalidVariant(("Segment ServiceChoice", e as u32))
+                                })?;
+                            let mut reader = Reader::default();
+                            let service =
+                                ComplexAckService::decode(choice, &mut reader, &segment_bytes)?;
+                            let ack = ComplexAck { invoke_id, service };
+
+                            return Ok(ack);
+                        }
+                    }
+                    _ => continue,
+                },
+                _ => continue,
+            }
+        }
+    }
+
+    async fn send_segment_ack(&self, segment: &Segment<'_>) -> Result<(), BacnetError<T>> {
+        use crate::application_protocol::confirmed::SegmentAck;
+
+        let ack = SegmentAck {
+            invoke_id: segment.invoke_id,
+            sequence_num: segment.sequence_number,
+            proposed_window_size: segment.window_size,
+        };
+
+        let apdu = ApplicationPdu::SegmentAck(ack);
+        let dst = Some(DestinationAddress::new(0xffff, None));
+        let message = NetworkMessage::Apdu(apdu);
+        let npdu = NetworkPdu::new(None, dst, false, MessagePriority::Normal, message);
+        let data_link = DataLink::new(DataLinkFunction::OriginalBroadcastNpdu, Some(npdu));
+
+        let mut buf_w = [0u8; 14];
+        let mut writer = Writer::new(&mut buf_w);
+        data_link.encode(&mut writer);
+        let buffer = writer.to_bytes();
+        self.io.write(buffer).await.map_err(BacnetError::Io)?;
+
+        Ok(())
     }
 
     /*
@@ -331,7 +422,7 @@ where
      */
 
     #[maybe_async()]
-    async fn send_and_receive_simple_ack<'a>(
+    async fn send_and_receive_simple_ack(
         &self,
         buf: &mut [u8],
         service: ConfirmedRequestService<'_>,

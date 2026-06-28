@@ -1,6 +1,6 @@
 // cargo run --example who_is -- --addr "192.168.1.249:47808"
 
-use clap::{command, Parser};
+use clap::Parser;
 use common::MySocket;
 use embedded_bacnet::simple::BacnetError;
 

@@ -28,14 +28,18 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), BacnetError<MySocket>> {
+    simple_logger::init().unwrap();
+
     // setup
     let args = Args::parse();
     let bacnet = common::get_bacnet_socket(&args.addr).await?;
     let mut buf = vec![0; 1500];
 
     // fetch
-    let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);
-    let request = ReadProperty::new(object_id, PropertyId::PropPresentValue);
+    //let object_id = ObjectId::new(ObjectType::ObjectAnalogInput, 1);
+    //let request = ReadProperty::new(object_id, PropertyId::PropPresentValue);
+    let object_id = ObjectId::new(ObjectType::ObjectDevice, 1011);
+    let request = ReadProperty::new(object_id, PropertyId::PropObjectList);
     let result = bacnet.read_property(&mut buf, request).await?;
 
     // print

@@ -1,7 +1,7 @@
 // cargo run --example change_of_value -- --addr "192.168.1.249:47808"
 // cargo run --example change_of_value --no-default-features -- --addr "192.168.1.249:47808"
 
-use clap::{command, Parser};
+use clap::Parser;
 use common::MySocket;
 use embedded_bacnet::{
     application_protocol::services::change_of_value::{CovNotification, SubscribeCov},

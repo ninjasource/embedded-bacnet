@@ -1,7 +1,7 @@
 // cargo run --example read_property_list -- --addr "192.168.1.249:47808" --device-id 79079
 // cargo run --example read_property_list --no-default-features -- --addr "192.168.1.249:47808" --device-id 79079
 
-use clap::{command, Parser};
+use clap::Parser;
 use common::MySocket;
 use embedded_bacnet::{
     application_protocol::services::read_property::{

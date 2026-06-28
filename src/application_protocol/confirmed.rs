@@ -34,7 +34,8 @@ impl<'a> ConfirmedRequest<'a> {
     pub fn new(invoke_id: u8, service: ConfirmedRequestService<'a>) -> Self {
         Self {
             max_segments: MaxSegments::_65,
-            max_adpu: MaxAdpu::_1476,
+            // max_adpu: MaxAdpu::_1476,
+            max_adpu: MaxAdpu::_1024, // this plays nicely with wiznet udp packets
             invoke_id,
             sequence_num: 0,
             proposed_window_size: 0,

@@ -27,3 +27,9 @@ pub mod simple;
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
+
+#[cfg(feature = "defmt")]
+pub use defmt::info;
+
+#[cfg(not(feature = "defmt"))]
+pub use log::info;
