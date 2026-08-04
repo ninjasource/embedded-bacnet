@@ -19,7 +19,7 @@ pub enum ApplicationPdu<'a> {
     ComplexAck(ComplexAck<'a>),
     SimpleAck(SimpleAck),
     Error(ConfirmedBacnetError),
-    Segment(Segment<'a>),
+    Segment(Segment),
     SegmentAck(SegmentAck),
     // add more here (see ApduType)
 }
@@ -88,7 +88,7 @@ impl From<u8> for MaxSegments {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum MaxAdpu {

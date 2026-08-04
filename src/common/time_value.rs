@@ -20,6 +20,7 @@ pub enum SimpleApplicationDataValue {
     Real(f32),
     Double(f64),
     Enumerated(Enumerated),
+    Null,
 }
 
 impl SimpleApplicationDataValue {
@@ -36,6 +37,9 @@ impl SimpleApplicationDataValue {
             Self::Double(_) => Tag::new(TagNumber::Application(ApplicationTagNumber::Double), 8),
             Self::Enumerated(_) => {
                 Tag::new(TagNumber::Application(ApplicationTagNumber::Enumerated), 1)
+            }
+            Self::Null => {
+                Tag::new(TagNumber::Application(ApplicationTagNumber::Null), 0)
             }
         }
     }
@@ -74,6 +78,9 @@ impl SimpleApplicationDataValue {
                 let value = if value > 0 { Binary::On } else { Binary::Off };
                 let value = Enumerated::Binary(value);
                 Ok(SimpleApplicationDataValue::Enumerated(value))
+            }
+            ApplicationTagNumber::Null => {
+                Ok(SimpleApplicationDataValue::Null)
             }
 
             x => Err(Error::Unimplemented(Unimplemented::ApplicationTagNumber(

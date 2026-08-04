@@ -62,7 +62,10 @@ impl<'a> DataLink<'a> {
     //    const BVLC_ORIGINAL_BROADCAST_NPDU: u8 = 11;
 
     pub fn new(function: DataLinkFunction, npdu: Option<NetworkPdu<'a>>) -> Self {
-        Self { function, npdu }
+        Self {
+            function,
+            npdu,
+        }
     }
 
     pub fn new_confirmed_req(req: ConfirmedRequest<'a>) -> Self {
@@ -120,6 +123,38 @@ impl<'a> DataLink<'a> {
             _ => None,
         };
 
-        Ok(Self { function, npdu })
+        Ok(Self {
+            function,
+            npdu,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::Path};
+
+    use crate::{common::io::Reader, network_protocol::network_pdu::Addr};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use super::DataLink;
+
+    fn load_fixture(name: &str) -> std::io::Result<Vec<u8>> {
+        let path = Path::new("fixtures").join(name);
+        let base64_string = fs::read_to_string(path)?;
+        Ok(STANDARD.decode(base64_string.strip_suffix("\n").unwrap())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?)
+    }
+
+    #[test]
+    fn decode_no_segment() -> std::io::Result<()> {
+        let buf = load_fixture("datalink_no_segment")?;
+        let mut reader = Reader::new_with_len(buf.len());
+        let datalink = DataLink::decode(&mut reader, &buf).unwrap();
+        let npdu = datalink.npdu.unwrap();
+        let source = npdu.src.unwrap();
+        assert_eq!(source.net, 65056);
+        assert_eq!(source.addr.unwrap(), Addr::Mac(9));
+        assert!(npdu.dst.is_none());
+        Ok(())
     }
 }
