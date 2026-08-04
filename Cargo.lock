@@ -214,6 +214,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
+name = "corncobs"
+version = "0.1.3"
+source = "git+https://github.com/de-vri-es/corncobs?rev=68025686e0547fac483baabb63c8066065023d88#68025686e0547fac483baabb63c8066065023d88"
+
+[[package]]
 name = "defmt"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -261,6 +266,7 @@ dependencies = [
  "bacnet-macros",
  "chrono",
  "clap",
+ "corncobs",
  "defmt",
  "log",
  "maybe-async",

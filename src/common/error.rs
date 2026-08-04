@@ -10,6 +10,7 @@ use crate::{
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Error {
+    InvalidProtocolVersion(u8),
     Length((&'static str, u32)),
     InvalidValue(&'static str),
     InvalidVariant((&'static str, u32)),
